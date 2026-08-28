@@ -238,6 +238,7 @@
 <script>
 /* ============================= STATE ============================= */
 const LS_KEY = 'stockroom_tracker_v3';
+const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbxub0ELWlTtl-_6WWQLMd_wJDTD3_WbBs6XGdxuKErgDsaRuC_p2cF7mRKC7Lv-5jOyPg/exec';
 const LOCS = [{code:'T',name:'Tangle'},{code:'P',name:'Parkway'},{code:'B',name:'Bears'}];
 const SIZES = ['S','M','L','XL','XXL'];
 const STAGE_COL = { display:'Display', storage:'Storage', resupply:'Resupply' }; // maps tab -> sheet column
@@ -254,8 +255,8 @@ let editingGroupKey = null;
 let undoStack = [];
 
 function loadState(){
-  try{ const raw = localStorage.getItem(LS_KEY); if(raw) return JSON.parse(raw); }catch(e){}
-  return { apiUrl:'', gridCols:4 };
+  try{ const raw = localStorage.getItem(LS_KEY); if(raw){ const s = JSON.parse(raw); if(s.apiUrl) return s; } }catch(e){}
+  return { apiUrl: DEFAULT_API_URL, gridCols:4 }; // falls back to the baked-in URL if nothing saved (or it got cleared)
 }
 function saveState(){ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
 
