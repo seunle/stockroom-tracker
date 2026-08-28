@@ -106,6 +106,7 @@
     position:absolute; top:6px; right:6px; width:12px;height:12px;border-radius:50%;
     border:2px solid var(--paper-raised);
   }
+  .card.inactive-card{opacity:0.5;}
   .status-dot.ok{background:var(--ok);} .status-dot.low{background:var(--low);} .status-dot.restock{background:var(--restock);}
   .card .loc-tag{
     position:absolute; top:6px; left:6px; background:rgba(37,36,31,0.65); color:#fff;
@@ -251,6 +252,7 @@ let currentTab = 'display';
 let locationFilter = 'All'; // 'All' | 'T' | 'P' | 'B'
 let categoryFilter = 'All';
 let sidebarEditMode = false;
+let editFilter = 'all'; // 'all' | 'active' | 'inactive' — Edit tab only
 let pendingPhotoBase64 = null;
 let filePickerTarget = null; // 'add' | 'edit'
 let editingGroupKey = null;
@@ -298,6 +300,7 @@ function toast(msg, isError){
   setTimeout(()=>t.classList.remove('show'), isError?4200:1700);
 }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function sameId(a,b){ return String(a)===String(b); } // IDs from onclick attrs arrive as strings; sheet IDs are numbers
 
 /* ============================= GROUPING ============================= */
 // One "item" on screen = all rows sharing Name + Type + Location.
@@ -312,9 +315,16 @@ function buildGroups(list){
   });
   return Object.values(map);
 }
-function activeRows(){ return rows.filter(r=>Number(r.Active)!==0); }
+function activeRows(){ return rows.filter(r=>Number(r.Active)===1); }
+function allGroups(){ return buildGroups(rows); } // for Edit tab lookups — includes inactive items
+function editFilteredRows(){
+  if(editFilter==='active') return rows.filter(r=>Number(r.Active)===1);
+  if(editFilter==='inactive') return rows.filter(r=>Number(r.Active)!==1);
+  return rows.slice();
+}
 function categoriesList(){
-  const set = new Set(activeRows().map(r=>r.Type).filter(Boolean));
+  const source = currentTab==='edit' ? rows : activeRows();
+  const set = new Set(source.map(r=>r.Type).filter(Boolean));
   return Array.from(set).sort();
 }
 function matchesFilters(g){
@@ -332,6 +342,12 @@ function groupStatus(g){
   if(vals.some(v=>v<=1)) return 'low';
   return 'ok';
 }
+function groupNeedsRestock(g){
+  return Object.values(g.rows).some(r=>Number(r.Restock||0)!==0);
+}
+function groupIsActive(g){
+  return Object.values(g.rows).some(r=>Number(r.Active)===1);
+}
 
 /* ============================= RENDER ============================= */
 function render(){
@@ -348,23 +364,24 @@ function render(){
     return;
   }
 
-  let list = activeRows();
+  let list = currentTab==='edit' ? editFilteredRows() : activeRows();
   let groups = buildGroups(list).filter(matchesFilters);
 
   main.innerHTML = `
     <div class="grid-toolbar">
       <div class="grid-title">${tabTitle()} <span style="color:var(--ink);font-weight:800;">${groups.length}</span></div>
       <div class="scale-ctrl">
-        <button class="scale-btn" onclick="adjustScale(-1)">−</button>
-        <button class="scale-btn" onclick="adjustScale(1)">+</button>
+        <button class="scale-btn" onclick="adjustScale(1)">−</button>
+        <button class="scale-btn" onclick="adjustScale(-1)">+</button>
       </div>
     </div>
+    ${currentTab==='edit' ? editFilterToolbarHtml() : ''}
     <div class="photo-grid" id="photoGrid" style="--cols:${state.gridCols};"></div>
   `;
   const grid = document.getElementById('photoGrid');
 
   if(currentTab==='resupply'){
-    groups = groups.filter(g => groupStatus(g)!=='ok');
+    groups = groups.filter(groupNeedsRestock);
   }
 
   if(groups.length===0){
@@ -374,6 +391,13 @@ function render(){
 
   grid.innerHTML = groups.map(g=>cardHtml(g)).join('');
 }
+function editFilterToolbarHtml(){
+  const opts = [['all','All'],['active','Active'],['inactive','Inactive']];
+  return `<div class="chiprow" style="margin:0 4px 12px;">
+    ${opts.map(([v,label])=>`<div class="chip ${editFilter===v?'on':''}" onclick="setEditFilter('${v}')">${label}</div>`).join('')}
+  </div>`;
+}
+function setEditFilter(v){ editFilter=v; render(); }
 
 function tabTitle(){
   return currentTab==='display' ? 'On Display' : currentTab==='storage' ? 'In Storage'
@@ -381,17 +405,19 @@ function tabTitle(){
 }
 function emptyState(){
   return `<div class="empty-state"><div class="ic">🏷️</div><div class="big">Nothing here yet</div>
-    <p>${currentTab==='resupply' ? 'Nothing is flagged right now — all sizes look OK.' : 'Tap "+ New" up top to add your first item.'}</p></div>`;
+    <p>${currentTab==='resupply' ? 'No items currently have a Restock number set in the sheet.' : currentTab==='edit' ? 'No items match this filter.' : 'Tap "+ New" up top to add your first item.'}</p></div>`;
 }
 function cardHtml(g){
   const status = groupStatus(g);
+  const inactive = !groupIsActive(g);
   const locBadge = locationFilter==='All' ? `<div class="loc-tag">${esc(g.location)}</div>` : '';
   const photo = g.photo ? `<img src="${esc(g.photo)}" loading="lazy">` : '👕';
   return `
-    <div class="card" onclick="openGroup('${esc(g.key)}')">
+    <div class="card${inactive?' inactive-card':''}" onclick="openGroup('${esc(g.key)}')">
       <div class="photo">${photo}</div>
       <div class="status-dot ${status}"></div>
       ${locBadge}
+      ${inactive?'<div class="loc-tag" style="left:auto;right:6px;top:auto;bottom:34px;background:rgba(174,66,57,0.85);">OFF</div>':''}
       <div class="cap">${esc(g.name)}</div>
     </div>`;
 }
@@ -450,7 +476,7 @@ function pickLocationFilter(code){ locationFilter=code; closeSheet(); render(); 
 // (undo = delete). Local to this device only.
 function pushUndoSnapshot(ids){
   const snap = ids.map(id=>{
-    const existing = rows.find(r=>r.ID===id);
+    const existing = rows.find(r=>sameId(r.ID,id));
     return existing ? {...existing} : {ID:id, __wasNew:true};
   });
   undoStack.push(snap);
@@ -514,7 +540,7 @@ function openGroup(key){
   `);
 }
 async function stepSize(id, delta, stageCol){
-  const row = rows.find(r=>r.ID===id);
+  const row = rows.find(r=>sameId(r.ID,id));
   if(!row) return;
   const newVal = Math.max(0, Number(row[stageCol]||0)+delta);
   pushUndoSnapshot([id]);
@@ -598,13 +624,15 @@ async function submitNewItem(){
 
 /* ============================= EDIT TAB ============================= */
 function openEditGroup(key){
-  const groups = buildGroups(activeRows());
+  const groups = allGroups();
   const g = groups.find(x=>x.key===key);
   if(!g) return;
   editingGroupKey = key;
+  const isActive = groupIsActive(g);
   const locCodesOn = LOCS.filter(l=>g.location.indexOf(l.code)!==-1).map(l=>l.code);
   openSheetHtml(`
     <h2>Edit item</h2>
+    ${isActive?'':'<div class="desc" style="color:var(--restock);font-weight:600;">This item is currently deactivated — hidden from Display/Storage/Resupply.</div>'}
     <div class="field">
       <label>Photo</label>
       <div class="upload-box" id="uploadBox" onclick="triggerFilePick('edit')">
@@ -624,13 +652,15 @@ function openEditGroup(key){
       </div>
     </div>
     <div class="sheet-actions">
-      <button class="btn btn-danger" onclick="confirmDeleteGroup('${esc(key)}')">Delete</button>
+      ${isActive
+        ? `<button class="btn btn-danger" onclick="confirmSetActive('${esc(key)}',false)">Deactivate</button>`
+        : `<button class="btn btn-ok" onclick="confirmSetActive('${esc(key)}',true)">Reactivate</button>`}
       <button class="btn btn-primary" onclick="submitEditGroup()">Save</button>
     </div>
   `);
 }
 async function submitEditGroup(){
-  const groups = buildGroups(activeRows());
+  const groups = allGroups();
   const g = groups.find(x=>x.key===editingGroupKey);
   if(!g) return;
   const matchIds = Object.values(g.rows).map(r=>r.ID);
@@ -648,28 +678,36 @@ async function submitEditGroup(){
   if(res.ok) toast('Saved'); else toast('Save failed: ' + (res.error||'unknown error'), true);
   refresh(false);
 }
-function confirmDeleteGroup(key){
-  const groups = buildGroups(activeRows());
+// Deactivating/reactivating only ever flips the Active column — the sheet
+// data for that item's rows is never removed by the web app.
+function confirmSetActive(key, makeActive){
+  const groups = allGroups();
   const g = groups.find(x=>x.key===key);
   if(!g) return;
-  openSheetHtml(`
-    <h2>Delete "${esc(g.name)}"?</h2>
-    <div class="desc">This removes all ${Object.keys(g.rows).length} size row(s) for this item. This can't be undone once you leave the app (local Undo will still work right after).</div>
+  openSheetHtml(makeActive ? `
+    <h2>Reactivate "${esc(g.name)}"?</h2>
+    <div class="desc">This brings it back into Display/Storage/Resupply.</div>
     <div class="sheet-actions">
       <button class="btn btn-ghost" onclick="closeSheet()">Cancel</button>
-      <button class="btn btn-danger" onclick="submitDeleteGroup('${esc(key)}')">Delete</button>
+      <button class="btn btn-ok" onclick="submitSetActive('${esc(key)}',true)">Reactivate</button>
+    </div>` : `
+    <h2>Deactivate "${esc(g.name)}"?</h2>
+    <div class="desc">Hides it from Display/Storage/Resupply. Nothing is deleted from the sheet — you can reactivate it here anytime, or flip the Active column back to 1 directly in Sheets.</div>
+    <div class="sheet-actions">
+      <button class="btn btn-ghost" onclick="closeSheet()">Cancel</button>
+      <button class="btn btn-danger" onclick="submitSetActive('${esc(key)}',false)">Deactivate</button>
     </div>`);
 }
-async function submitDeleteGroup(key){
-  const groups = buildGroups(activeRows());
+async function submitSetActive(key, makeActive){
+  const groups = allGroups();
   const g = groups.find(x=>x.key===key);
   if(!g) return;
   const ids = Object.values(g.rows).map(r=>r.ID);
   pushUndoSnapshot(ids);
   closeSheet();
-  toast('Deleting…');
-  for(const id of ids){ await apiPost({action:'deleteRow', id}); }
-  toast('Deleted');
+  toast(makeActive ? 'Reactivating…' : 'Deactivating…');
+  for(const id of ids){ await apiPost({action:'setActive', id, active:makeActive}); }
+  toast(makeActive ? 'Reactivated' : 'Deactivated');
   refresh(false);
 }
 
