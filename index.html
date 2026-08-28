@@ -681,24 +681,37 @@ function triggerFilePick(target){
 document.getElementById('fileInput').addEventListener('change', async (e)=>{
   const file = e.target.files[0];
   if(!file) return;
-  const dataUrl = await compressImage(file, 900, 0.72);
-  pendingPhotoBase64 = dataUrl;
-  const box = document.getElementById('uploadBox');
-  if(box) box.innerHTML = `<img src="${dataUrl}">`;
+  toast('Processing photo…');
+  try{
+    const dataUrl = await compressImage(file, 900, 0.72);
+    pendingPhotoBase64 = dataUrl;
+    const box = document.getElementById('uploadBox');
+    if(box) box.innerHTML = `<img src="${dataUrl}">`;
+    toast('Photo ready — tap Save/Add to finish');
+  }catch(err){
+    pendingPhotoBase64 = null;
+    toast('Could not read that photo (' + err + '). Try a JPG or PNG, not HEIC.', true);
+  }
   e.target.value = '';
 });
 function compressImage(file, maxW, quality){
-  return new Promise((resolve)=>{
+  return new Promise((resolve, reject)=>{
+    const timeout = setTimeout(()=>reject('timed out — unsupported format'), 8000);
     const reader = new FileReader();
+    reader.onerror = ()=>{ clearTimeout(timeout); reject('could not read file'); };
     reader.onload = (ev)=>{
       const img = new Image();
+      img.onerror = ()=>{ clearTimeout(timeout); reject('unsupported image format'); };
       img.onload = ()=>{
-        const scale = Math.min(1, maxW/img.width);
-        const w = Math.round(img.width*scale), h = Math.round(img.height*scale);
-        const canvas = document.createElement('canvas');
-        canvas.width=w; canvas.height=h;
-        canvas.getContext('2d').drawImage(img,0,0,w,h);
-        resolve(canvas.toDataURL('image/jpeg', quality));
+        clearTimeout(timeout);
+        try{
+          const scale = Math.min(1, maxW/img.width);
+          const w = Math.round(img.width*scale), h = Math.round(img.height*scale);
+          const canvas = document.createElement('canvas');
+          canvas.width=w; canvas.height=h;
+          canvas.getContext('2d').drawImage(img,0,0,w,h);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        }catch(err){ reject('could not process image: '+err); }
       };
       img.src = ev.target.result;
     };
