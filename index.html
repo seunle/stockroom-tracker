@@ -295,8 +295,9 @@
   .restock-request-stepper.lg input{flex:0 0 160px;width:160px;font-size:28px;padding:9px 0;}
   .restock-request-stepper.xl button{width:72px;height:72px;border-radius:18px;font-size:38px;}
   .restock-request-stepper.xl input{flex:0 0 170px;width:170px;font-size:44px;padding:14px 0;border-radius:14px;}
-  .on-hold-box{margin-top:14px; padding:10px; border:2px solid var(--restock); border-radius:11px; text-align:center; background:var(--restock-bg);}
-  .on-hold-num{font-family:'Oswald'; font-size:26px; font-weight:800; color:var(--restock);}
+  .on-hold-box{margin-top:10px; padding:0; text-align:center; background:none; border:none;}
+  .on-hold-box .restock-section-label{margin-bottom:5px;}
+  .on-hold-num{display:inline-block; min-width:72px; box-sizing:border-box; padding:5px 14px; border:2px solid var(--restock); border-radius:10px; background:var(--restock-bg); font-family:'Oswald'; font-size:26px; font-weight:800; line-height:1.05; color:var(--restock);}
   .restock-need-block{padding-bottom:16px; border-bottom:1.5px solid var(--line); margin-bottom:16px; text-align:center;}
   .restock-need-numbers{display:flex; align-items:center; justify-content:center; gap:8px;}
   .restock-need-num,.restock-need-size{
@@ -317,8 +318,8 @@
   }
   .restock-request-stepper input::-webkit-outer-spin-button,.restock-request-stepper input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
   .btn-resupply{
-    width:100%; background:#43A047; color:#fff; border:2px solid #2E7D32;
-    font-family:'Oswald'; font-weight:700; font-size:14px; letter-spacing:0.5px; text-transform:uppercase;
+    width:100%; background:#B7D9C2; color:#fff; border:2px solid #2E7D32;
+    font-family:'Oswald'; font-weight:700; font-size:28px; letter-spacing:0.5px; text-transform:uppercase;
     padding:13px 0; border-radius:11px; margin-top:14px;
   }
   .btn-resupply:active{opacity:0.8;}
