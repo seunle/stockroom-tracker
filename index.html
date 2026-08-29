@@ -1079,9 +1079,13 @@ function openResupplyItem(id, code){
   const displayField = DISPLAY_FIELD_BY_CODE[code];
   const onHoldField = ON_HOLD_FIELD_BY_CODE[code];
   const current = Number(row[field]||0);
-  // NEED is location-specific: Min Count - Display - existing On Hold.
-  // The stepper is the location-specific Resupply quantity; any shortfall becomes On Hold.
-  const need = Math.max(0, Number(row.MinCount||0) - Number(row[displayField]||0) - Number(row[onHoldField]||0));
+  // NEED is the location-specific required resupply amount after accounting
+  // for the location's existing On Hold quantity. The stepper is the
+  // location-specific Resupply quantity; any shortfall becomes On Hold.
+  const minCount = Number(row.MinCount||0);
+  const displayCount = Number(row[displayField]||0);
+  const existingOnHold = Number(row[onHoldField]||0);
+  const need = Math.max(0, minCount - displayCount - existingOnHold);
   resupplyEditContext = { id, code, need };
   const onHoldPreview = Math.min(5, Math.max(0, need - current));
   const photo = row.Photo ? `<img src="${esc(row.Photo)}">` : '';
