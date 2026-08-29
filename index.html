@@ -1077,6 +1077,7 @@ function openResupplyItem(id, code){
   const displayField = DISPLAY_FIELD_BY_CODE[code];
   const current = Number(row[field]||0);
   const need = Math.max(0, Number(row.MinCount||0) - Number(row[displayField]||0));
+  const resupplyNeed = Number(row[field]||0);
   resupplyEditContext = { id, code, need };
   const onHoldPreview = Math.max(0, need - current);
   const photo = row.Photo ? `<img src="${esc(row.Photo)}">` : '';
@@ -1096,7 +1097,7 @@ function openResupplyItem(id, code){
           <div class="restock-section-label need-label">Need</div>
           <div class="restock-need-numbers">
             <span class="restock-need-size">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</span>
-            <span class="restock-need-num">${need}</span>
+            <span class="restock-need-num">${resupplyNeed}</span>
           </div>
         </div>
         <div class="restock-request-section">
