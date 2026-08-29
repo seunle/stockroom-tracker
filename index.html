@@ -585,7 +585,7 @@ function render(){
     const resupplyField = RESUPPLY_FIELD_BY_CODE[locationFilter];
     let storageRows = list.filter(r=>matchesFilters({type:r.Type, location:r.Location}))
                            .filter(r=>{
-                             const effectiveNeed = Math.max(0, Number(r.MinCount||0) - Number(r[displayField]||0) - Number(r.OnHold||0));
+                             const effectiveNeed = Math.max(0, Number(r.MinCount||0) - Number(r[displayField]||0) - Number(r[ON_HOLD_FIELD_BY_CODE[locationFilter]]||0));
                              if(effectiveNeed <= 0) return false;
                              return Number(r[resupplyField]||0)===0;
                            })
@@ -695,7 +695,7 @@ function storageCardHtml(row){
   const color = SIZE_COLORS[row.Size] || '#DDD';
   const photo = row.Photo ? `<img src="${esc(row.Photo)}" loading="lazy">` : '👕';
   const displayField = DISPLAY_FIELD_BY_CODE[locationFilter];
-  const need = Math.max(0, Number(row.MinCount||0) - Number(row[displayField]||0) - Number(row.OnHold||0));
+  const need = Math.max(0, Number(row.MinCount||0) - Number(row[displayField]||0) - Number(row[ON_HOLD_FIELD_BY_CODE[locationFilter]]||0));
   return `
     <div class="card storage-card" style="border-color:${color}; box-shadow:0 0 0 3px ${color}55;" onclick="openStorageItem('${esc(row.ID)}')">
       <div class="photo" style="background:${color}33;">${photo}</div>
@@ -894,6 +894,7 @@ async function commitDisplayCheck(forceChecked){
 /* ============================= RESUPPLY TAB: PER-LOCATION ROWS ============================= */
 const RESUPPLY_FIELD_BY_CODE = { T:'ResupplyTangle', P:'ResupplyParkway', B:'ResupplyBears' };
 const DISPLAY_FIELD_BY_CODE = { T:'DisplayTangle', P:'DisplayParkway', B:'DisplayBears' };
+const ON_HOLD_FIELD_BY_CODE = { T:'OnHoldTangle', P:'OnHoldParkway', B:'OnHoldBears' };
 const LOC_NAME_BY_CODE = { T:'Tangle', P:'Parkway', B:'Bears' };
 const ON_HOLD_CODE = 'H'; // not a real location — a pseudo-row/filter pinned to the end
 let resupplyRowOrder = ['T','P','B']; // rotated by the rotate button (On Hold never joins this array)
@@ -907,8 +908,8 @@ function resupplyItemsForCode(code){
   return catFiltered.filter(r=>Number(r[field]||0)>0 && r.Location.indexOf(code)!==-1);
 }
 function onHoldItems(){
-  // On Hold isn't per-location, so this just checks the one shared column.
-  return activeRows().filter(r=>(categoryFilter==='All' || r.Type===categoryFilter) && Number(r.OnHold||0)>0);
+  // Show items that have On Hold units at any location.
+  return activeRows().filter(r=>(categoryFilter==='All' || r.Type===categoryFilter) && ['T','P','B'].some(c=>Number(r[ON_HOLD_FIELD_BY_CODE[c]]||0)>0));
 }
 function renderResupplyTab(main, list){
   const catFiltered = list.filter(r=>categoryFilter==='All' || r.Type===categoryFilter);
@@ -971,11 +972,11 @@ function onHoldCardHtml(row){
   // On Hold count instead of a per-location resupply quantity. Clicking
   // opens the edit popup for the first location this item actually
   // belongs to, since On Hold itself isn't tied to one location.
-  const onHold = Number(row.OnHold||0);
+  const onHold = ['T','P','B'].reduce((sum,c)=>sum+Number(row[ON_HOLD_FIELD_BY_CODE[c]]||0),0);
   const photo = row.Photo ? `<img src="${esc(row.Photo)}" loading="lazy">` : '👕';
   const color = SIZE_COLORS[row.Size] || '#DDD';
   const w = Math.max(90, Math.round(900/(state.gridColsByTab.resupply||4)));
-  const primaryCode = (row.Location||'').split('').find(c=>LOC_NAME_BY_CODE[c]) || 'T';
+  const primaryCode = ['T','P','B'].find(c=>Number(row[ON_HOLD_FIELD_BY_CODE[c]]||0)>0 && (row.Location||'').indexOf(c)!==-1) || ['T','P','B'].find(c=>Number(row[ON_HOLD_FIELD_BY_CODE[c]]||0)>0) || (row.Location||'').split('').find(c=>LOC_NAME_BY_CODE[c]) || 'T';
   return `
     <div class="card resupply-card" style="width:${w}px; border-color:${color}; box-shadow:0 0 0 3px ${color}55;" onclick="openResupplyItem('${esc(row.ID)}','${primaryCode}')">
       <div class="photo">${photo}</div>
@@ -1075,10 +1076,12 @@ function openResupplyItem(id, code){
   const row = rows.find(r=>sameId(r.ID,id));
   if(!row) return;
   const field = RESUPPLY_FIELD_BY_CODE[code];
+  const displayField = DISPLAY_FIELD_BY_CODE[code];
+  const onHoldField = ON_HOLD_FIELD_BY_CODE[code];
   const current = Number(row[field]||0);
-  // NEED is the required quantity stored in the location's Resupply column.
-  // The stepper is the quantity actually fulfilled; the shortfall becomes On Hold.
-  const need = current;
+  // NEED is location-specific: Min Count - Display - existing On Hold.
+  // The stepper is the location-specific Resupply quantity; any shortfall becomes On Hold.
+  const need = Math.max(0, Number(row.MinCount||0) - Number(row[displayField]||0) - Number(row[onHoldField]||0));
   resupplyEditContext = { id, code, need };
   const onHoldPreview = Math.min(5, Math.max(0, need - current));
   const photo = row.Photo ? `<img src="${esc(row.Photo)}">` : '';
@@ -1138,7 +1141,7 @@ async function submitResupplyEdit(){
   closeSheet();
   toast('Saving…');
   row[RESUPPLY_FIELD_BY_CODE[code]] = 0;
-  row.OnHold = onHold;
+  row[ON_HOLD_FIELD_BY_CODE[code]] = onHold;
   const res = await apiPost({action:'setResupplyForLocation', id, location:code, value:0, onHold});
   toast(res.ok ? 'Saved' : 'Save failed: ' + (res.error||'unknown error'), !res.ok);
   refresh(false);
