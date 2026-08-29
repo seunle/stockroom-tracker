@@ -968,10 +968,9 @@ function resupplyCardHtml(row, code, field){
     </div>`;
 }
 function onHoldCardHtml(row){
-  // Same look as a regular resupply card, but the badge shows the shared
-  // On Hold count instead of a per-location resupply quantity. Clicking
-  // opens the edit popup for the first location this item actually
-  // belongs to, since On Hold itself isn't tied to one location.
+  // Same look as a regular resupply card, but the badge shows the total
+  // On Hold count across locations. Clicking opens the popup for a location
+  // that actually has On Hold units, preserving location-specific storage.
   const onHold = ['T','P','B'].reduce((sum,c)=>sum+Number(row[ON_HOLD_FIELD_BY_CODE[c]]||0),0);
   const photo = row.Photo ? `<img src="${esc(row.Photo)}" loading="lazy">` : '👕';
   const color = SIZE_COLORS[row.Size] || '#DDD';
@@ -1071,23 +1070,24 @@ function rotateResupplyOrder(){
 // Holds the context for whichever Resupply-tab edit popup is currently
 // open, so the stepper can live-update the On Hold preview and Done can
 // compute the same shortfall it just showed. Cleared on close/submit.
-let resupplyEditContext = null; // { id, code, need }
+let resupplyEditContext = null; // { id, code, requiredQty }
+
 function openResupplyItem(id, code){
   const row = rows.find(r=>sameId(r.ID,id));
   if(!row) return;
+
+  // IMPORTANT: Popup NEED is ONLY the selected location's Resupply field.
+  // Tangle -> ResupplyTangle, Parkway -> ResupplyParkway, Bears -> ResupplyBears.
+  // It must never be calculated from Min Count, Display, or On Hold.
   const field = RESUPPLY_FIELD_BY_CODE[code];
-  const displayField = DISPLAY_FIELD_BY_CODE[code];
-  const onHoldField = ON_HOLD_FIELD_BY_CODE[code];
-  const current = Number(row[field]||0);
-  // NEED is the location-specific required resupply amount after accounting
-  // for the location's existing On Hold quantity. The stepper is the
-  // location-specific Resupply quantity; any shortfall becomes On Hold.
-  const minCount = Number(row.MinCount||0);
-  const displayCount = Number(row[displayField]||0);
-  const existingOnHold = Number(row[onHoldField]||0);
-  const need = Math.max(0, minCount - displayCount - existingOnHold);
-  resupplyEditContext = { id, code, need };
-  const onHoldPreview = Math.min(5, Math.max(0, need - current));
+  const requiredQty = Number(row[field] || 0);
+  const current = requiredQty;
+
+  // On Hold is the shortfall between the original location-specific
+  // Resupply requirement and the quantity currently shown in the stepper.
+  const onHoldPreview = Math.min(5, Math.max(0, requiredQty - current));
+  resupplyEditContext = { id, code, requiredQty };
+
   const photo = row.Photo ? `<img src="${esc(row.Photo)}">` : '';
   openSheetHtml(`
     <div class="restock-popup">
@@ -1105,7 +1105,7 @@ function openResupplyItem(id, code){
           <div class="restock-section-label need-label">Need</div>
           <div class="restock-need-numbers">
             <span class="restock-need-size">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</span>
-            <span class="restock-need-num">${need}</span>
+            <span class="restock-need-num">${requiredQty}</span>
           </div>
         </div>
         <div class="restock-request-section">
@@ -1121,32 +1121,48 @@ function openResupplyItem(id, code){
     </div>
   `, 'restock');
 }
+
 function stepResupplyEdit(delta){
   const el = document.getElementById('resupplyEditQty');
   el.value = Math.max(0, Number(el.value||0)+delta);
   updateOnHoldPreview();
 }
+
 function updateOnHoldPreview(){
   if(!resupplyEditContext) return;
   const value = Number(document.getElementById('resupplyEditQty').value||0);
-  const onHold = Math.min(5, Math.max(0, resupplyEditContext.need - value));
+  // ON HOLD = location's original Resupply quantity - on-screen quantity.
+  // Never allow a negative value and cap the stored/displayed amount at 5.
+  const onHold = Math.min(5, Math.max(0, resupplyEditContext.requiredQty - value));
   const el = document.getElementById('onHoldNum');
   if(el) el.textContent = onHold;
 }
+
 async function submitResupplyEdit(){
   if(!resupplyEditContext) return;
-  const { id, code, need } = resupplyEditContext;
+  const { id, code, requiredQty } = resupplyEditContext;
   const value = Number(document.getElementById('resupplyEditQty').value||0);
-  const onHold = Math.min(5, Math.max(0, need - value));
+  const onHold = Math.min(5, Math.max(0, requiredQty - value));
   const row = rows.find(r=>sameId(r.ID,id));
   resupplyEditContext = null;
   if(!row){ closeSheet(); return; }
+
   pushUndoSnapshot([id]);
   closeSheet();
   toast('Saving…');
+
+  // Update the local row immediately using the same location-specific fields
+  // that the backend writes.
   row[RESUPPLY_FIELD_BY_CODE[code]] = 0;
   row[ON_HOLD_FIELD_BY_CODE[code]] = onHold;
-  const res = await apiPost({action:'setResupplyForLocation', id, location:code, value:0, onHold});
+
+  const res = await apiPost({
+    action:'setResupplyForLocation',
+    id,
+    location:code,
+    value:0,
+    onHold
+  });
   toast(res.ok ? 'Saved' : 'Save failed: ' + (res.error||'unknown error'), !res.ok);
   refresh(false);
 }
