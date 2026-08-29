@@ -54,12 +54,11 @@
   #btnUndo svg{display:block;}
   .top-btn:active{opacity:0.75;}
   .session-refresh-btn{
-    justify-self:center; height:48px; box-sizing:border-box; background:var(--ok); color:#fff; border:none;
-    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    justify-self:center; background:var(--ok); color:#fff; border:none; display:inline-flex; align-items:center; gap:8px;
     font-family:'Oswald'; font-weight:700; font-size:15px; letter-spacing:0.6px; text-transform:uppercase;
-    padding:0 26px; border-radius:11px; white-space:nowrap;
+    padding:12px 26px; border-radius:11px; white-space:nowrap;
   }
-  .session-refresh-btn .refresh-arrow{font-size:26px; line-height:1;}
+  .session-refresh-btn .refresh-arrow{font-size:45px; line-height:1;}
   .session-refresh-btn:active{opacity:0.8;}
 
   /* ---------- Body layout: sidebar + main ---------- */
@@ -169,6 +168,7 @@
     position:absolute; background:#fff; color:var(--restock);
     font-family:'Oswald'; font-weight:800; letter-spacing:0.3px;
     border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.15);
+    box-sizing:border-box; text-align:center;
   }
 
   .empty-state{text-align:center;padding:60px 24px;color:var(--ink-soft);}
@@ -199,7 +199,7 @@
   }
   .sheet.wide{max-width:560px;}
   .sheet.narrow{max-width:620px;}
-  .sheet.display-wide{max-width:min(900px, 60vw);}
+  .sheet.display-wide{max-width:min(1000px, 64vw);}
   .sheet-close{
     position:absolute; top:12px; right:12px; width:30px;height:30px;border-radius:50%;
     background:var(--restock); color:#fff; font-size:16px; font-weight:700; border:none;
@@ -238,15 +238,16 @@
   .detail-wrap{display:flex; gap:16px;}
   .detail-photo{width:220px; aspect-ratio:4/5; border-radius:10px; overflow:hidden; background:var(--line); flex-shrink:0;}
   .detail-photo img{width:100%;height:100%;object-fit:cover;}
-  /* Plain 1fr columns only — always divides whatever width the popup
-     actually has, so this can never force the grid wider than its
-     container and push columns off-screen. A forced minimum column
-     width was tried here twice before and both times caused real
-     overflow once combined with the popup's zoom scaling, so the
-     "generous on desktop" goal is handled by the popup's own width
-     (below) instead of by a floor on the grid. */
   .size-grid{flex:1; min-width:0; display:grid; grid-template-columns:repeat(7,1fr); gap:4px;}
   .detail-wrap .size-grid{gap:2px;}
+  /* On wide screens (tablet/desktop) columns get a generous floor so XXXL
+     never looks cramped. On narrow phone screens that floor is dropped so
+     the grid actually shrinks to fit instead of forcing the popup to
+     overflow off the edge of the screen. */
+  @media (min-width:700px){
+    .size-grid{grid-template-columns:repeat(7,minmax(95px,1fr)); gap:6px;}
+    .detail-wrap .size-grid{gap:2px;}
+  }
   .detail-wrap .size-col{border-right:1.5px solid var(--line); padding:0 6px;}
   .detail-wrap .size-col:last-child{border-right:none;}
   .size-col{text-align:center;}
@@ -400,10 +401,6 @@ const SIZE_COLORS = {
   XXL:  '#DCC9F0', // pastel purple
   XXXL: '#D9D6D2'  // pastel grey
 };
-// Shorter on-screen labels — the underlying Size value in the sheet/data
-// stays "XXL"/"XXXL" (used for sorting, matching, colors, etc.); only the
-// text shown to the user is shortened, to save horizontal room.
-const SIZE_SHORT_LABEL = { XS:'XS', S:'S', M:'M', L:'L', XL:'XL', XXL:'2XL', XXXL:'3XL' };
 
 let state = loadState();
 let rows = [];              // flat rows from the sheet
@@ -546,7 +543,7 @@ function render(){
       <div class="toolbar-top">
         <div class="chiprow">
           <div class="chip ${storageSizeFilter==='All'?'on':''}" onclick="setStorageSizeFilter('All')">All</div>
-          ${SIZES.map(s=>`<div class="chip ${storageSizeFilter===s?'on':''}" onclick="setStorageSizeFilter('${s}')">${SIZE_SHORT_LABEL[s]}</div>`).join('')}
+          ${SIZES.map(s=>`<div class="chip ${storageSizeFilter===s?'on':''}" onclick="setStorageSizeFilter('${s}')">${s}</div>`).join('')}
         </div>
         <div class="scale-ctrl">
           <button class="scale-btn" onclick="adjustScale(1)">−</button>
@@ -646,7 +643,7 @@ function storageCardHtml(row){
   return `
     <div class="card storage-card" style="border-color:${color}; box-shadow:0 0 0 3px ${color}55;" onclick="openStorageItem('${esc(row.ID)}')">
       <div class="photo" style="background:${color}33;">${photo}</div>
-      <div class="size-badge" style="background:${color};">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
+      <div class="size-badge" style="background:${color};">${esc(row.Size)}</div>
       ${locationFilter==='All' ? `<div class="loc-tag">${esc(row.Location)}</div>` : ''}
       <div class="cap">${esc(row.Name)}</div>
     </div>`;
@@ -771,21 +768,19 @@ function openDisplayCheck(key){
     displayDraft[row.ID] = { original:Number(row.Display||0), current:Number(row.Display||0), minCount:Number(row.MinCount||0) };
   });
   openSheetHtml(`
-    <div style="display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:10px; padding-right:34px;">
-      <h2 style="margin:0; padding-right:0;">${esc(g.name)}</h2>
-      <div class="desc" style="margin:0;">${esc(g.type)} · ${esc(g.location)} · editing <b>Display</b></div>
-    </div>
+    <h2>${esc(g.name)}</h2>
+    <div class="desc">${esc(g.type)} · ${esc(g.location)} · editing <b>Display</b></div>
     <div class="detail-wrap">
       <div class="detail-photo">${g.photo?`<img src="${esc(g.photo)}">`:''}</div>
       <div class="size-grid">
         ${SIZES.map(sz=>{
           const row = g.rows[sz];
-          if(!row) return `<div class="size-col" style="opacity:0.3;"><div class="size-label">${SIZE_SHORT_LABEL[sz]}</div><div class="size-count">—</div></div>`;
+          if(!row) return `<div class="size-col" style="opacity:0.3;"><div class="size-label">${sz}</div><div class="size-count">—</div></div>`;
           const d = displayDraft[row.ID];
           const belowMin = d.current < d.minCount;
           return `
             <div class="size-col">
-              <div class="size-label">${SIZE_SHORT_LABEL[sz]}</div>
+              <div class="size-label">${sz}</div>
               <button class="size-plus" onclick="stepDisplayDraft('${row.ID}',1)">+</button>
               <div class="size-count ${belowMin?'low':''}" id="cnt-${row.ID}">${d.current}</div>
               <button class="size-minus" onclick="stepDisplayDraft('${row.ID}',-1)">−</button>
@@ -845,9 +840,7 @@ function renderResupplyTab(main, list){
   const catFiltered = list.filter(r=>categoryFilter==='All' || r.Type===categoryFilter);
   main.innerHTML = `
     <div class="toolbar-top">
-      <div class="chiprow" style="flex:1;">
-        ${resupplyRowOrder.map(code=>`<div class="chip ${resupplyLocFilter[code]?'on':''}" data-loc-chip="${code}" onclick="toggleResupplyLocFilter('${code}')">${LOC_NAME_BY_CODE[code]}</div>`).join('')}
-      </div>
+      <div style="flex:1;"></div>
       <button class="rotate-btn" onclick="rotateResupplyOrder()" title="Cycle row order">
         <span class="rotate-arrow">⟳</span><span class="rotate-text">Rotate</span>
       </button>
@@ -857,6 +850,11 @@ function renderResupplyTab(main, list){
       </div>
     </div>
     <div class="grid-toolbar"><div class="grid-title">Filter</div></div>
+    <div class="resupply-controls">
+      <div class="chiprow" style="flex:1;">
+        ${resupplyRowOrder.map(code=>`<div class="chip ${resupplyLocFilter[code]?'on':''}" data-loc-chip="${code}" onclick="toggleResupplyLocFilter('${code}')">${LOC_NAME_BY_CODE[code]}</div>`).join('')}
+      </div>
+    </div>
     <div id="resupplyRows"></div>
   `;
   const container = document.getElementById('resupplyRows');
@@ -893,13 +891,16 @@ function resupplyCardHtml(row, code, field){
   const badgeFont = Math.max(10, Math.round(18*scale));
   const padV = Math.max(2, Math.round(4*scale));
   const padH = Math.max(5, Math.round(11*scale));
+  // Keep the Resupply size and quantity badges fixed-width so changing the quantity
+  // never changes the badge dimensions. Width still follows the card zoom level.
+  const badgeWidth = Math.max(44, Math.round(70*scale));
   const offset = Math.max(3, Math.round(6*scale));
   return `
     <div class="card resupply-card" style="width:${w}px;" onclick="openResupplyItem('${esc(row.ID)}','${code}')">
       <div class="photo">${photo}</div>
       <div class="resupply-badge-stack" style="top:${offset}px; left:${offset}px; gap:${offset}px;">
-        <div class="qty-badge" style="font-size:${badgeFont}px; padding:${padV}px ${padH}px;">${qty}</div>
-        <div class="size-badge" style="background:${color}; font-size:${badgeFont}px; padding:${padV}px ${padH}px; border:2px solid #fff;">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
+        <div class="qty-badge" style="width:${badgeWidth}px; font-size:${badgeFont}px; padding:${padV}px ${padH}px;">${qty}</div>
+        <div class="size-badge" style="width:${badgeWidth}px; box-sizing:border-box; text-align:center; background:${color}; font-size:${badgeFont}px; padding:${padV}px ${padH}px; border:2px solid #fff;">${esc(row.Size)}</div>
       </div>
       <div class="cap">${esc(row.Name)}</div>
     </div>`;
@@ -971,7 +972,7 @@ function openResupplyItem(id, code){
   const photo = row.Photo ? `<img src="${esc(row.Photo)}">` : '';
   openSheetHtml(`
     <h2>${esc(row.Name)}</h2>
-    <div class="desc">${esc(row.Type)} · ${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)} · ${esc(LOC_NAME_BY_CODE[code])}</div>
+    <div class="desc">${esc(row.Type)} · ${esc(row.Size)} · ${esc(LOC_NAME_BY_CODE[code])}</div>
     <div class="restock-popup">
       <div class="restock-photo-col"><div class="restock-photo">${photo}</div></div>
       <div class="restock-info-col">
@@ -1029,7 +1030,7 @@ function openStorageItem(id){
         <div class="restock-need-block">
           <div class="restock-section-label">Need</div>
           <div class="restock-need-numbers">
-            <span class="restock-need-size">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</span>
+            <span class="restock-need-size">${esc(row.Size)}</span>
             <span class="restock-need-num">${need}</span>
           </div>
         </div>
@@ -1074,7 +1075,7 @@ async function submitResupply(id){
 function sizeStepperFormHtml(size, value, idPrefix){
   return `
     <div class="size-col">
-      <div class="size-label">${SIZE_SHORT_LABEL[size]}</div>
+      <div class="size-label">${size}</div>
       <button type="button" class="size-plus" onclick="stepFormSize('${idPrefix}-${size}',1)">+</button>
       <input type="number" class="size-count-input${Number(value)===0?' zero-val':''}" id="${idPrefix}-${size}" value="${value}" readonly>
       <button type="button" class="size-minus" onclick="stepFormSize('${idPrefix}-${size}',-1)">−</button>
