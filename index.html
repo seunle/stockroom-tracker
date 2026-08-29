@@ -585,7 +585,8 @@ function render(){
     const resupplyField = RESUPPLY_FIELD_BY_CODE[locationFilter];
     let storageRows = list.filter(r=>matchesFilters({type:r.Type, location:r.Location}))
                            .filter(r=>{
-                             if(Number(r[displayField]||0) >= Number(r.MinCount||0)) return false;
+                             const effectiveNeed = Math.max(0, Number(r.MinCount||0) - Number(r[displayField]||0) - Number(r.OnHold||0));
+                             if(effectiveNeed <= 0) return false;
                              return Number(r[resupplyField]||0)===0;
                            })
                            .sort((a,b)=>SIZES.indexOf(a.Size)-SIZES.indexOf(b.Size));
@@ -694,7 +695,7 @@ function storageCardHtml(row){
   const color = SIZE_COLORS[row.Size] || '#DDD';
   const photo = row.Photo ? `<img src="${esc(row.Photo)}" loading="lazy">` : '👕';
   const displayField = DISPLAY_FIELD_BY_CODE[locationFilter];
-  const need = Math.max(0, Number(row.MinCount||0) - Number(row[displayField]||0));
+  const need = Math.max(0, Number(row.MinCount||0) - Number(row[displayField]||0) - Number(row.OnHold||0));
   return `
     <div class="card storage-card" style="border-color:${color}; box-shadow:0 0 0 3px ${color}55;" onclick="openStorageItem('${esc(row.ID)}')">
       <div class="photo" style="background:${color}33;">${photo}</div>
@@ -1074,15 +1075,12 @@ function openResupplyItem(id, code){
   const row = rows.find(r=>sameId(r.ID,id));
   if(!row) return;
   const field = RESUPPLY_FIELD_BY_CODE[code];
-  const displayField = DISPLAY_FIELD_BY_CODE[code];
   const current = Number(row[field]||0);
-  // The required quantity is the location's shortfall; the editable value is
-  // the location-specific Resupply column. On Hold is the remaining gap
-  // between the required quantity and the Resupply quantity.
-  const requiredNeed = Math.max(0, Number(row.MinCount||0) - Number(row[displayField]||0));
-  const resupplyNeed = current;
-  resupplyEditContext = { id, code, need: requiredNeed };
-  const onHoldPreview = Math.max(0, requiredNeed - current);
+  // NEED is the required quantity stored in the location's Resupply column.
+  // The stepper is the quantity actually fulfilled; the shortfall becomes On Hold.
+  const need = current;
+  resupplyEditContext = { id, code, need };
+  const onHoldPreview = Math.min(5, Math.max(0, need - current));
   const photo = row.Photo ? `<img src="${esc(row.Photo)}">` : '';
   openSheetHtml(`
     <div class="restock-popup">
@@ -1100,7 +1098,7 @@ function openResupplyItem(id, code){
           <div class="restock-section-label need-label">Need</div>
           <div class="restock-need-numbers">
             <span class="restock-need-size">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</span>
-            <span class="restock-need-num">${resupplyNeed}</span>
+            <span class="restock-need-num">${need}</span>
           </div>
         </div>
         <div class="restock-request-section">
@@ -1124,7 +1122,7 @@ function stepResupplyEdit(delta){
 function updateOnHoldPreview(){
   if(!resupplyEditContext) return;
   const value = Number(document.getElementById('resupplyEditQty').value||0);
-  const onHold = Math.max(0, resupplyEditContext.need - value);
+  const onHold = Math.min(5, Math.max(0, resupplyEditContext.need - value));
   const el = document.getElementById('onHoldNum');
   if(el) el.textContent = onHold;
 }
@@ -1132,16 +1130,16 @@ async function submitResupplyEdit(){
   if(!resupplyEditContext) return;
   const { id, code, need } = resupplyEditContext;
   const value = Number(document.getElementById('resupplyEditQty').value||0);
-  const onHold = Math.max(0, need - value);
+  const onHold = Math.min(5, Math.max(0, need - value));
   const row = rows.find(r=>sameId(r.ID,id));
   resupplyEditContext = null;
   if(!row){ closeSheet(); return; }
   pushUndoSnapshot([id]);
   closeSheet();
   toast('Saving…');
-  row[RESUPPLY_FIELD_BY_CODE[code]] = value;
+  row[RESUPPLY_FIELD_BY_CODE[code]] = 0;
   row.OnHold = onHold;
-  const res = await apiPost({action:'setResupplyForLocation', id, location:code, value, onHold});
+  const res = await apiPost({action:'setResupplyForLocation', id, location:code, value:0, onHold});
   toast(res.ok ? 'Saved' : 'Save failed: ' + (res.error||'unknown error'), !res.ok);
   refresh(false);
 }
