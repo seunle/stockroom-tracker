@@ -154,7 +154,6 @@
   .rotate-btn .rotate-text{font-family:'Oswald'; font-weight:700; font-size:28px; letter-spacing:0.5px; text-transform:uppercase;}
   .rotate-btn:active{opacity:0.8;}
   .resupply-row{margin-bottom:20px;}
-  .resupply-row.empty{margin-bottom:4px;}
   .resupply-row-label{
     font-family:'Oswald'; font-weight:600; font-size:26px; letter-spacing:0.6px; text-transform:uppercase;
     color:var(--ink-soft); background:none; padding:0 4px 6px; margin:0 4px 10px; border-bottom:1.5px solid var(--line);
@@ -163,7 +162,12 @@
     display:inline-block; vertical-align:middle; background:var(--line); color:var(--ink); font-weight:800;
     font-size:15px; padding:2px 12px; border-radius:12px; margin-left:8px;
   }
-  .resupply-row-strip{display:flex; gap:10px; overflow-x:auto; padding:0 4px 6px;}
+  .resupply-row-strip{
+    display:flex; gap:10px; overflow-x:auto; overflow-y:hidden; padding:0 4px 6px;
+    max-height:640px; opacity:1;
+    transition:max-height 0.32s cubic-bezier(0.4,0,0.2,1), opacity 0.22s ease, padding 0.32s ease;
+  }
+  .resupply-row-strip.collapsed{max-height:0; opacity:0; padding-top:0; padding-bottom:0; pointer-events:none;}
   .resupply-card{flex-shrink:0; cursor:pointer;}
   .qty-badge{
     position:absolute; top:6px; right:6px; background:rgba(255,255,255,0.8); color:#000;
@@ -220,6 +224,7 @@
     font-size:25px;font-weight:600;color:var(--ink-soft);
   }
   .chip.on{background:var(--thread);border-color:var(--thread);color:#fff;}
+  .chip.on-hold-chip.on{background:var(--restock);border-color:var(--restock);color:#fff;}
   .sheet-actions{display:flex;gap:10px;margin-top:8px;}
   .btn{font-family:'Inter';font-weight:600;font-size:13px;border:none;border-radius:9px;padding:11px 14px;flex:1;}
   .btn-primary{background:var(--thread);color:#fff;}
@@ -288,6 +293,10 @@
   .restock-section-label.need-label{font-size:24px;}
   .restock-request-stepper.lg button{width:45px;height:45px;border-radius:11px;font-size:24px;}
   .restock-request-stepper.lg input{flex:0 0 160px;width:160px;font-size:28px;padding:9px 0;}
+  .restock-request-stepper.xl button{width:72px;height:72px;border-radius:18px;font-size:38px;}
+  .restock-request-stepper.xl input{flex:0 0 170px;width:170px;font-size:44px;padding:14px 0;border-radius:14px;}
+  .on-hold-box{margin-top:14px; padding:10px; border:2px solid var(--restock); border-radius:11px; text-align:center; background:var(--restock-bg);}
+  .on-hold-num{font-family:'Oswald'; font-size:26px; font-weight:800; color:var(--restock);}
   .restock-need-block{padding-bottom:16px; border-bottom:1.5px solid var(--line); margin-bottom:16px; text-align:center;}
   .restock-need-numbers{display:flex; align-items:center; justify-content:center; gap:8px;}
   .restock-need-num,.restock-need-size{
@@ -795,7 +804,7 @@ function openSheetHtml(html, widthMode){
   sheetEl.innerHTML = `<button class="sheet-close" onclick="closeSheet()">×</button>` + html;
   document.getElementById('overlay').classList.add('show');
 }
-function closeSheet(){ document.getElementById('overlay').classList.remove('show'); pendingPhotoBase64=null; }
+function closeSheet(){ document.getElementById('overlay').classList.remove('show'); pendingPhotoBase64=null; resupplyEditContext=null; }
 document.getElementById('overlay').addEventListener('click', e=>{ if(e.target.id==='overlay') closeSheet(); });
 
 /* ============================= ITEM DETAIL POPUP (Display/Storage/Resupply) ============================= */
@@ -884,20 +893,28 @@ async function commitDisplayCheck(forceChecked){
 const RESUPPLY_FIELD_BY_CODE = { T:'ResupplyTangle', P:'ResupplyParkway', B:'ResupplyBears' };
 const DISPLAY_FIELD_BY_CODE = { T:'DisplayTangle', P:'DisplayParkway', B:'DisplayBears' };
 const LOC_NAME_BY_CODE = { T:'Tangle', P:'Parkway', B:'Bears' };
-let resupplyRowOrder = ['T','P','B']; // rotated by the rotate button
-let resupplyLocFilter = { T:true, P:true, B:true }; // which location rows are shown
+const ON_HOLD_CODE = 'H'; // not a real location — a pseudo-row/filter pinned to the end
+let resupplyRowOrder = ['T','P','B']; // rotated by the rotate button (On Hold never joins this array)
+let resupplyLocFilter = { T:true, P:true, B:true }; // which location rows are expanded
+let onHoldActive = false; // On Hold filter selected — shows only On Hold items
+let onHoldPrevFilter = null; // snapshot of resupplyLocFilter to restore when On Hold is deselected
 
 function resupplyItemsForCode(code){
   const field = RESUPPLY_FIELD_BY_CODE[code];
   const catFiltered = activeRows().filter(r=>categoryFilter==='All' || r.Type===categoryFilter);
   return catFiltered.filter(r=>Number(r[field]||0)>0 && r.Location.indexOf(code)!==-1);
 }
+function onHoldItems(){
+  // On Hold isn't per-location, so this just checks the one shared column.
+  return activeRows().filter(r=>(categoryFilter==='All' || r.Type===categoryFilter) && Number(r.OnHold||0)>0);
+}
 function renderResupplyTab(main, list){
   const catFiltered = list.filter(r=>categoryFilter==='All' || r.Type===categoryFilter);
   main.innerHTML = `
     <div class="toolbar-top">
       <div class="chiprow" style="flex:1;">
-        ${resupplyRowOrder.map(code=>`<div class="chip ${resupplyLocFilter[code]?'on':''}" data-loc-chip="${code}" onclick="toggleResupplyLocFilter('${code}')">${LOC_NAME_BY_CODE[code]}</div>`).join('')}
+        ${resupplyRowOrder.map(code=>`<div class="chip ${(!onHoldActive && resupplyLocFilter[code])?'on':''}" data-loc-chip="${code}" onclick="toggleResupplyLocFilter('${code}')">${LOC_NAME_BY_CODE[code]}</div>`).join('')}
+        <div class="chip on-hold-chip ${onHoldActive?'on':''}" data-loc-chip="${ON_HOLD_CODE}" onclick="toggleOnHoldFilter()">On Hold</div>
       </div>
       <button class="rotate-btn" onclick="rotateResupplyOrder()" title="Cycle row order">
         <span class="rotate-arrow">⟳</span><span class="rotate-text">Rotate</span>
@@ -910,27 +927,26 @@ function renderResupplyTab(main, list){
     <div id="resupplyRows"></div>
   `;
   const container = document.getElementById('resupplyRows');
-  const visibleCodes = resupplyRowOrder.filter(code=>resupplyLocFilter[code]);
-  if(visibleCodes.length===0){
-    container.innerHTML = emptyState();
-    return;
-  }
-  container.innerHTML = visibleCodes.map(code=>{
-    const field = RESUPPLY_FIELD_BY_CODE[code];
-    const items = catFiltered.filter(r=>Number(r[field]||0)>0 && r.Location.indexOf(code)!==-1);
-    return resupplyRowHtml(code, field, items);
+  // Rows are ALWAYS rendered (label + count never disappear) — only the
+  // item strip collapses visually. On Hold sits last unless it's the
+  // active filter, in which case it slides to the top.
+  const rowOrder = onHoldActive ? [ON_HOLD_CODE, ...resupplyRowOrder] : [...resupplyRowOrder, ON_HOLD_CODE];
+  container.innerHTML = rowOrder.map(code=>{
+    if(code===ON_HOLD_CODE){
+      const items = onHoldItems();
+      return resupplyRowHtml(code, items, !onHoldActive);
+    }
+    const items = catFiltered.filter(r=>Number(r[RESUPPLY_FIELD_BY_CODE[code]]||0)>0 && r.Location.indexOf(code)!==-1);
+    return resupplyRowHtml(code, items, onHoldActive || !resupplyLocFilter[code]);
   }).join('');
 }
-function resupplyRowHtml(code, field, items){
-  const name = LOC_NAME_BY_CODE[code].toUpperCase();
-  if(items.length===0){
-    return `<div class="resupply-row empty" data-loc-row="${code}"><div class="resupply-row-label">${name} <span class="resupply-row-count">0</span></div></div>`;
-  }
+function resupplyRowHtml(code, items, collapsed){
+  const name = code===ON_HOLD_CODE ? 'ON HOLD' : LOC_NAME_BY_CODE[code].toUpperCase();
+  const collapsedClass = (collapsed || items.length===0) ? ' collapsed' : '';
+  const cardsHtml = items.map(r => code===ON_HOLD_CODE ? onHoldCardHtml(r) : resupplyCardHtml(r, code, RESUPPLY_FIELD_BY_CODE[code])).join('');
   return `<div class="resupply-row" data-loc-row="${code}">
-    <div class="resupply-row-label">${name} <span class="resupply-row-count">${items.length}</span></div>
-    <div class="resupply-row-strip">
-      ${items.map(r=>resupplyCardHtml(r, code, field)).join('')}
-    </div>
+    <div class="resupply-row-label">${esc(name)} <span class="resupply-row-count">${items.length}</span></div>
+    <div class="resupply-row-strip${collapsedClass}">${cardsHtml}</div>
   </div>`;
 }
 function resupplyCardHtml(row, code, field){
@@ -945,6 +961,24 @@ function resupplyCardHtml(row, code, field){
       <div class="photo">${photo}</div>
       <div class="size-badge" style="background:${color}CC; border:2px solid #fff;">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
       <div class="qty-badge">${qty}</div>
+      <div class="cap">${esc(row.Name)}</div>
+    </div>`;
+}
+function onHoldCardHtml(row){
+  // Same look as a regular resupply card, but the badge shows the shared
+  // On Hold count instead of a per-location resupply quantity. Clicking
+  // opens the edit popup for the first location this item actually
+  // belongs to, since On Hold itself isn't tied to one location.
+  const onHold = Number(row.OnHold||0);
+  const photo = row.Photo ? `<img src="${esc(row.Photo)}" loading="lazy">` : '👕';
+  const color = SIZE_COLORS[row.Size] || '#DDD';
+  const w = Math.max(90, Math.round(900/(state.gridColsByTab.resupply||4)));
+  const primaryCode = (row.Location||'').split('').find(c=>LOC_NAME_BY_CODE[c]) || 'T';
+  return `
+    <div class="card resupply-card" style="width:${w}px; border-color:${color}; box-shadow:0 0 0 3px ${color}55;" onclick="openResupplyItem('${esc(row.ID)}','${primaryCode}')">
+      <div class="photo">${photo}</div>
+      <div class="size-badge" style="background:${color}CC; border:2px solid #fff;">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
+      <div class="qty-badge">${onHold}</div>
       <div class="cap">${esc(row.Name)}</div>
     </div>`;
 }
@@ -996,10 +1030,34 @@ function animateResupplyRowChange(mutateFn){
   });
 }
 function toggleResupplyLocFilter(code){
-  animateResupplyRowChange(()=>{ resupplyLocFilter[code] = !resupplyLocFilter[code]; });
+  animateResupplyRowChange(()=>{
+    // Interacting with a location chip while viewing On Hold exits that
+    // exclusive view first, restoring whatever was selected before it,
+    // then applies the toggle on top of that.
+    if(onHoldActive){
+      onHoldActive = false;
+      if(onHoldPrevFilter) resupplyLocFilter = {...onHoldPrevFilter};
+      onHoldPrevFilter = null;
+    }
+    resupplyLocFilter[code] = !resupplyLocFilter[code];
+  });
+}
+function toggleOnHoldFilter(){
+  animateResupplyRowChange(()=>{
+    if(!onHoldActive){
+      onHoldPrevFilter = {...resupplyLocFilter}; // remember so we can restore it
+      onHoldActive = true;
+    }else{
+      onHoldActive = false;
+      if(onHoldPrevFilter) resupplyLocFilter = {...onHoldPrevFilter};
+      onHoldPrevFilter = null;
+    }
+  });
 }
 function rotateResupplyOrder(){
   animateResupplyRowChange(()=>{
+    // On Hold is never part of resupplyRowOrder, so it's untouched by
+    // rotation and stays pinned to the end (unless it's the active filter).
     const withItems = resupplyRowOrder.filter(code => resupplyItemsForCode(code).length > 0);
     const withoutItems = resupplyRowOrder.filter(code => resupplyItemsForCode(code).length === 0);
     if(withItems.length > 1) withItems.push(withItems.shift());
@@ -1007,26 +1065,47 @@ function rotateResupplyOrder(){
   });
 }
 
+// Holds the context for whichever Resupply-tab edit popup is currently
+// open, so the stepper can live-update the On Hold preview and Done can
+// compute the same shortfall it just showed. Cleared on close/submit.
+let resupplyEditContext = null; // { id, code, need }
 function openResupplyItem(id, code){
   const row = rows.find(r=>sameId(r.ID,id));
   if(!row) return;
   const field = RESUPPLY_FIELD_BY_CODE[code];
+  const displayField = DISPLAY_FIELD_BY_CODE[code];
   const current = Number(row[field]||0);
+  const need = Math.max(0, Number(row.MinCount||0) - Number(row[displayField]||0));
+  resupplyEditContext = { id, code, need };
+  const onHoldPreview = Math.max(0, need - current);
   const photo = row.Photo ? `<img src="${esc(row.Photo)}">` : '';
   openSheetHtml(`
-    <h2>${esc(row.Name)}</h2>
-    <div class="desc">${esc(row.Type)} · ${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)} · ${esc(LOC_NAME_BY_CODE[code])}</div>
     <div class="restock-popup">
-      <div class="restock-photo-col"><div class="restock-photo">${photo}</div></div>
+      <div class="restock-photo-col">
+        <div class="restock-name-label">${esc(row.Name)}</div>
+        <div class="restock-meta-label">${esc(LOC_NAME_BY_CODE[code])}: ${esc(row.Type)} · ${esc(SIZE_FULL_NAMES[row.Size]||row.Size)}</div>
+        <div class="restock-photo">${photo}</div>
+      </div>
       <div class="restock-info-col">
+        <div class="restock-need-block">
+          <div class="restock-section-label need-label">Need</div>
+          <div class="restock-need-numbers">
+            <span class="restock-need-size">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</span>
+            <span class="restock-need-num">${need}</span>
+          </div>
+        </div>
         <div class="restock-request-section">
-          <div class="restock-section-label">Resupply Quantity</div>
-          <div class="restock-request-stepper">
+          <div class="restock-request-label">Resupply for ${esc(LOC_NAME_BY_CODE[code])}</div>
+          <div class="restock-request-stepper xl">
             <button type="button" class="rq-minus" onclick="stepResupplyEdit(-1)">−</button>
             <input type="number" id="resupplyEditQty" value="${current}" readonly>
             <button type="button" class="rq-plus" onclick="stepResupplyEdit(1)">+</button>
           </div>
-          <button class="btn btn-primary" style="width:100%;" onclick="submitResupplyEdit('${esc(id)}','${code}')">Done</button>
+          <div class="on-hold-box">
+            <div class="restock-section-label">On Hold</div>
+            <div class="on-hold-num" id="onHoldNum">${onHoldPreview}</div>
+          </div>
+          <button class="btn-resupply" onclick="submitResupplyEdit()">Done</button>
         </div>
       </div>
     </div>
@@ -1035,16 +1114,29 @@ function openResupplyItem(id, code){
 function stepResupplyEdit(delta){
   const el = document.getElementById('resupplyEditQty');
   el.value = Math.max(0, Number(el.value||0)+delta);
+  updateOnHoldPreview();
 }
-async function submitResupplyEdit(id, code){
+function updateOnHoldPreview(){
+  if(!resupplyEditContext) return;
   const value = Number(document.getElementById('resupplyEditQty').value||0);
+  const onHold = Math.max(0, resupplyEditContext.need - value);
+  const el = document.getElementById('onHoldNum');
+  if(el) el.textContent = onHold;
+}
+async function submitResupplyEdit(){
+  if(!resupplyEditContext) return;
+  const { id, code, need } = resupplyEditContext;
+  const value = Number(document.getElementById('resupplyEditQty').value||0);
+  const onHold = Math.max(0, need - value);
   const row = rows.find(r=>sameId(r.ID,id));
-  if(!row) return;
+  resupplyEditContext = null;
+  if(!row){ closeSheet(); return; }
   pushUndoSnapshot([id]);
   closeSheet();
   toast('Saving…');
   row[RESUPPLY_FIELD_BY_CODE[code]] = value;
-  const res = await apiPost({action:'setResupplyForLocation', id, location:code, value});
+  row.OnHold = onHold;
+  const res = await apiPost({action:'setResupplyForLocation', id, location:code, value, onHold});
   toast(res.ok ? 'Saved' : 'Save failed: ' + (res.error||'unknown error'), !res.ok);
   refresh(false);
 }
