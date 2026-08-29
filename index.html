@@ -295,9 +295,9 @@
   .restock-request-stepper.lg input{flex:0 0 160px;width:160px;font-size:28px;padding:9px 0;}
   .restock-request-stepper.xl button{width:72px;height:72px;border-radius:18px;font-size:38px;}
   .restock-request-stepper.xl input{flex:0 0 170px;width:170px;font-size:44px;padding:14px 0;border-radius:14px;}
-  .on-hold-box{margin-top:14px; padding:0; display:flex; align-items:center; justify-content:flex-start; gap:12px; text-align:left; background:none; border:none;}
-  .on-hold-box .restock-section-label{margin:0; font-size:24px; line-height:1; text-align:left; transform:translateY(-4px);}
-  .on-hold-num{display:flex; align-items:center; justify-content:center; width:128px; height:62px; box-sizing:border-box; padding:5px 14px; border:2px solid var(--restock); border-radius:12px; background:var(--restock-bg); font-family:'Oswald'; font-size:33px; font-weight:800; line-height:1; color:var(--restock);}
+  .on-hold-box{margin-top:14px; padding:0; height:62px; position:relative; display:block; text-align:left; background:none; border:none;}
+  .on-hold-box .restock-section-label{margin:0; position:absolute; left:0; top:50%; font-size:12px; line-height:1; text-align:left; transform:translateY(-50%);}
+  .on-hold-num{position:absolute; left:50%; top:0; transform:translateX(-50%); display:flex; align-items:center; justify-content:center; width:128px; height:62px; box-sizing:border-box; padding:5px 14px; border:2px solid var(--restock); border-radius:12px; background:var(--restock-bg); font-family:'Oswald'; font-size:33px; font-weight:800; line-height:1; color:var(--restock);}
   .restock-need-block{padding-bottom:16px; border-bottom:1.5px solid var(--line); margin-bottom:16px; text-align:center;}
   .restock-need-numbers{display:flex; align-items:center; justify-content:center; gap:8px;}
   .restock-need-num,.restock-need-size{
@@ -1074,10 +1074,11 @@ function openResupplyItem(id, code){
   const row = rows.find(r=>sameId(r.ID,id));
   if(!row) return;
   const field = RESUPPLY_FIELD_BY_CODE[code];
-  const displayField = DISPLAY_FIELD_BY_CODE[code];
   const current = Number(row[field]||0);
-  const need = Math.max(0, Number(row.MinCount||0) - Number(row[displayField]||0));
-  const resupplyNeed = Number(row[field]||0);
+  // The Resupply column is the source of truth for the amount needed.
+  // Keep that required amount separate from the editable resupply value so
+  // On Hold reflects the shortfall against the Resupply requirement.
+  const need = Number(row[field]||0);
   resupplyEditContext = { id, code, need };
   const onHoldPreview = Math.max(0, need - current);
   const photo = row.Photo ? `<img src="${esc(row.Photo)}">` : '';
