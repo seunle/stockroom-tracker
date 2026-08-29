@@ -317,7 +317,7 @@
   }
   .restock-request-stepper input::-webkit-outer-spin-button,.restock-request-stepper input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
   .btn-resupply{
-    width:100%; background:var(--restock-bg); color:var(--restock); border:2px solid var(--restock);
+    width:100%; background:#43A047; color:#fff; border:2px solid #2E7D32;
     font-family:'Oswald'; font-weight:700; font-size:14px; letter-spacing:0.5px; text-transform:uppercase;
     padding:13px 0; border-radius:11px; margin-top:14px;
   }
@@ -1085,6 +1085,10 @@ function openResupplyItem(id, code){
         <div class="restock-name-label">${esc(row.Name)}</div>
         <div class="restock-meta-label">${esc(LOC_NAME_BY_CODE[code])}: ${esc(row.Type)} · ${esc(SIZE_FULL_NAMES[row.Size]||row.Size)}</div>
         <div class="restock-photo">${photo}</div>
+        <div class="on-hold-box">
+          <div class="restock-section-label">On Hold</div>
+          <div class="on-hold-num" id="onHoldNum">${onHoldPreview}</div>
+        </div>
       </div>
       <div class="restock-info-col">
         <div class="restock-need-block">
@@ -1100,10 +1104,6 @@ function openResupplyItem(id, code){
             <button type="button" class="rq-minus" onclick="stepResupplyEdit(-1)">−</button>
             <input type="number" id="resupplyEditQty" value="${current}" readonly>
             <button type="button" class="rq-plus" onclick="stepResupplyEdit(1)">+</button>
-          </div>
-          <div class="on-hold-box">
-            <div class="restock-section-label">On Hold</div>
-            <div class="on-hold-num" id="onHoldNum">${onHoldPreview}</div>
           </div>
           <button class="btn-resupply" onclick="submitResupplyEdit()">Done</button>
         </div>
