@@ -19,7 +19,7 @@
     --restock:#AE4239; --restock-bg:#F5DEDA;
   }
   *{box-sizing:border-box;} html,body{margin:0;padding:0;width:100%;height:100%;} body{overflow:hidden;}
-  #uiShell{width:calc(100% / var(--ui-scale));height:calc(100vh / var(--ui-scale));transform:scale(var(--ui-scale));transform-origin:top left;display:flex;flex-direction:column;}
+  #uiShell{width:calc(100% / var(--ui-scale));height:calc(100vh / var(--ui-scale));transform:scale(var(--ui-scale));transform-origin:top left;display:flex;flex-direction:column;flex-shrink:0;}
   body{
     background:var(--paper); color:var(--ink);
     font-family:'Inter',system-ui,-apple-system,sans-serif;
@@ -401,11 +401,12 @@
   <div class="nav-item" data-tab="resupply"><div class="tab-label">Resupply</div></div>
   <div class="nav-item" data-tab="edit"><div class="tab-label">Edit</div></div>
 </nav>
+</div>
 
+<!-- Popups live outside the scaled UI shell so global UI Scale never shrinks or enlarges them. -->
 <div class="overlay" id="overlay"><div class="sheet" id="sheetContent"></div></div>
 <div class="toast" id="toast"></div>
 <input type="file" accept="image/*" id="fileInput" style="display:none;">
-</div>
 
 <script>
 /* ============================= STATE ============================= */
