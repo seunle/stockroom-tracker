@@ -427,7 +427,7 @@
   .item-form-sizes .size-grid{gap:4px;}
 
   .toast{
-    position:fixed;bottom:96px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;
+    position:fixed;top:var(--toast-top, 78px);left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;
     padding:10px 18px;border-radius:22px;font-size:13px;font-weight:600;opacity:0;transition:opacity .25s;
     z-index:60;pointer-events:none;white-space:nowrap;max-width:88vw;
   }
@@ -523,6 +523,7 @@ let pendingPhotoBase64 = null;
 let filePickerTarget = null; // 'add' | 'edit'
 let editingGroupKey = null;
 let undoStack = [];
+let pendingHapticsEnabled = null; // draft value while Settings sheet is open; null = unchanged
 let sessionCheckedKeys = new Set(); // group keys touched via the Display tab this session
 let checkedFilter = 'all'; // 'all' | 'checked' | 'unchecked' — Display tab only
 let storageSizeFilter = 'All'; // 'All' | 'XS' | ... — Storage tab only
@@ -1653,10 +1654,24 @@ function openSettings(){
         <button type="button" class="btn btn-ghost" onclick="adjustUiScale(0.05)">+</button>
       </div>
     </div>
+    <div class="field">
+      <label>Haptic feedback (buzz on tap)</label>
+      <div class="chiprow">
+        <div class="chip ${state.hapticsEnabled!==false?'on':''}" onclick="setHapticsPreview(true)" id="hapticsOnChip">On</div>
+        <div class="chip ${state.hapticsEnabled===false?'on':''}" onclick="setHapticsPreview(false)" id="hapticsOffChip">Off</div>
+      </div>
+      <div class="desc" style="margin-top:6px;margin-bottom:0;">${navigator.vibrate ? 'Vibrates briefly on button/card taps. Android only — iPhones don\'t support this.' : 'This device/browser doesn\'t support vibration, so this setting won\'t do anything here.'}</div>
+    </div>
     <div class="sheet-actions">
       <button class="btn btn-ghost" onclick="closeSheet()">Cancel</button>
       <button class="btn btn-primary" onclick="submitSettings()">Save</button>
     </div>`);
+}
+function setHapticsPreview(on){
+  pendingHapticsEnabled = on;
+  document.getElementById('hapticsOnChip').classList.toggle('on', on);
+  document.getElementById('hapticsOffChip').classList.toggle('on', !on);
+  if(on) hapticTap(); // immediate buzz so you can feel the setting take effect
 }
 function previewUiScale(value){
   const v = Math.max(0.3, Math.min(1.2, Number(value)||1));
@@ -1675,12 +1690,46 @@ function submitSettings(){
   state.apiUrl = document.getElementById('setUrl').value.trim();
   const range = document.getElementById('uiScaleRange');
   if(range) state.uiScale = Math.max(0.3, Math.min(1.2, Number(range.value)||1));
+  if(pendingHapticsEnabled!==null) state.hapticsEnabled = pendingHapticsEnabled;
+  pendingHapticsEnabled = null;
   applyUiScale();
   saveState(); closeSheet(); refresh(true);
 }
 
+/* ============================= TOAST POSITION ============================= */
+// Toast now sits just under the header instead of over the bottom nav
+// (was getting in the way of the nav bar / thumb reach). The header lives
+// inside #uiShell, which is visually scaled via CSS transform for the UI
+// Scale setting — offsetHeight still returns the untransformed layout
+// height, so this stays correct at any scale without needing to recompute
+// on scale changes; only re-measured on load/resize for safety.
+function updateToastPosition(){
+  const header = document.querySelector('header.topbar');
+  if(header) document.documentElement.style.setProperty('--toast-top', (header.offsetHeight + 10) + 'px');
+}
+window.addEventListener('resize', updateToastPosition);
+
+/* ============================= HAPTICS ============================= */
+// Short buzz on tap, Android Chrome only — iOS Safari/PWA has no Vibration
+// API support at all, so this silently does nothing there. Toggleable in
+// Settings; defaults to on.
+function hapticTap(){
+  if(state.hapticsEnabled===false) return;
+  if(navigator.vibrate) navigator.vibrate(12);
+}
+// One delegated listener covers every button/card/chip/nav-item as they're
+// re-rendered, instead of wiring vibration into each individual onclick.
+document.addEventListener('click', (e)=>{
+  const el = e.target.closest(
+    'button, .card, .chip, .nav-item, .top-btn, .side-cat, .loc-row, ' +
+    '.rotate-btn, .session-refresh-btn, .size-plus, .size-minus, .rq-minus, .rq-plus, .scale-btn'
+  );
+  if(el) hapticTap();
+}, true);
+
 /* ============================= INIT ============================= */
 applyUiScale();
+updateToastPosition();
 render();
 refresh(false);
 setInterval(()=>{ if(!document.hidden) refresh(false); }, 20000);
