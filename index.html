@@ -299,6 +299,11 @@
        here so phones get the same full-width behavior as any other
        popup; the desktop widening above is untouched for wider screens.*/
     .sheet.display-wide{max-width:calc(100vw - 32px);}
+    /* The fixed 220px photo left too little room beside the 7-column
+       size grid on a phone-width popup, which is why the +/- buttons
+       and counts were cramped/overlapping. Stack instead of side-by-side. */
+    .detail-wrap{flex-direction:column;}
+    .detail-photo{width:100%; max-width:200px; margin:0 auto 8px;}
     .size-label{font-size:15px; margin-bottom:3px;}
     .size-plus,.size-minus{font-size:20px; height:30px;}
     .size-minus{margin-top:10px;}
@@ -343,6 +348,29 @@
     -moz-appearance:textfield;
   }
   .restock-request-stepper input::-webkit-outer-spin-button,.restock-request-stepper input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+  /* Phone version of the Storage/Resupply popups. Desktop lays the photo
+     and the info column side by side with large touch targets — on a
+     narrow phone that fixed-width photo column left too little room for
+     the info column, so the stepper's +/- buttons and the Need numbers
+     were overlapping neighboring text or getting clipped by the sheet's
+     max-width. Stacking the layout (photo on top, full-width info below)
+     and scaling the numbers/buttons down fixes both problems at once. */
+  @media (max-width:699px){
+    .restock-popup{flex-direction:column; gap:10px;}
+    .restock-photo-col{width:100%; max-width:200px; margin:0 auto;}
+    .restock-photo{width:100%; max-width:200px; margin:0 auto;}
+    .restock-need-num,.restock-need-size{font-size:32px; padding:8px 14px; min-width:50px; border-radius:10px;}
+    .restock-request-label{font-size:13px;}
+    .restock-section-label.need-label{font-size:17px;}
+    .restock-request-stepper{gap:6px;}
+    .restock-request-stepper.lg button{width:32px;height:32px;border-radius:8px;font-size:16px;}
+    .restock-request-stepper.lg input{flex:0 0 92px;width:92px;font-size:17px;padding:5px 0;}
+    .restock-request-stepper.xl button{width:38px;height:38px;border-radius:9px;font-size:18px;}
+    .restock-request-stepper.xl input{flex:0 0 100px;width:100px;font-size:19px;padding:5px 0;border-radius:9px;}
+    .on-hold-box{height:44px;}
+    .on-hold-box .restock-section-label{font-size:10.5px;}
+    .on-hold-num{width:78px;height:44px;font-size:20px;padding:4px 8px;border-radius:9px;}
+  }
   .btn-resupply{
     width:100%; background:#B7D9C2; color:#2E7D32; border:2px solid #2E7D32;
     font-family:'Oswald'; font-weight:700; font-size:28px; letter-spacing:0.5px; text-transform:uppercase;
