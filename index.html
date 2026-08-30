@@ -17,7 +17,7 @@
     --ok:#4C7A5D; --ok-bg:#E4EEE6; --low:#C2801F; --low-bg:#F7E9D3;
     --restock:#AE4239; --restock-bg:#F5DEDA;
   }
-  *{box-sizing:border-box;} html,body{margin:0;padding:0;height:100%;}
+  *{box-sizing:border-box;} html,body{margin:0;padding:0;height:100%;} body{zoom:var(--ui-scale,1);}
   body{
     background:var(--paper); color:var(--ink);
     font-family:'Inter',system-ui,-apple-system,sans-serif;
@@ -422,6 +422,7 @@ const SIZE_COLORS = {
 const SIZE_SHORT_LABEL = { XS:'XS', S:'S', M:'M', L:'L', XL:'XL', XXL:'2XL', XXXL:'3XL' };
 
 let state = loadState();
+function applyUiScale(){ document.body.style.zoom = String(state.uiScale || 1); }
 let rows = [];              // flat rows from the sheet
 let currentTab = 'display';
 let locationFilter = state.deviceLocation || 'All'; // 'All' | 'T' | 'P' | 'B' — persisted per device, see pickLocationFilter
@@ -465,6 +466,7 @@ function loadState(){
     if(raw){
       const s = JSON.parse(raw);
       if(s.apiUrl){
+        s.uiScale = Math.max(0.6, Math.min(1.2, Number(s.uiScale) || 1));
         if(!s.gridColsByTab){
           const legacy = s.gridCols || 4; // migrate old shared value
           s.gridColsByTab = { display:legacy, storage:legacy, resupply:legacy, edit:legacy };
@@ -473,7 +475,7 @@ function loadState(){
       }
     }
   }catch(e){}
-  return { apiUrl: DEFAULT_API_URL, gridColsByTab: { display:4, storage:4, resupply:4, edit:4 } }; // falls back to the baked-in URL if nothing saved (or it got cleared)
+  return { apiUrl: DEFAULT_API_URL, uiScale: 1, gridColsByTab: { display:4, storage:4, resupply:4, edit:4 } }; // falls back to the baked-in URL if nothing saved (or it got cleared)
 }
 function saveState(){ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
 
@@ -1541,21 +1543,47 @@ function openGroup(key){
 
 document.getElementById('btnSettings').addEventListener('click', openSettings);
 function openSettings(){
+  const pct = Math.round((state.uiScale || 1) * 100);
   openSheetHtml(`
     <h2>Settings</h2>
-    <div class="desc">Paste the Apps Script web app URL from your Google Sheet. Grid zoom is now set per-tab using each tab's own +/- buttons.</div>
+    <div class="desc">Adjust the overall web UI size for smaller or larger screens. This scales the entire interface, independently of the per-tab grid controls.</div>
     <div class="field"><label>Apps Script URL</label><input type="text" id="setUrl" value="${esc(state.apiUrl)}" placeholder="https://script.google.com/macros/s/.../exec"></div>
+    <div class="field">
+      <label>UI Scale <span id="uiScaleValue">${pct}%</span></label>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <button type="button" class="btn btn-ghost" onclick="adjustUiScale(-0.05)">−</button>
+        <input type="range" id="uiScaleRange" min="0.6" max="1.2" step="0.05" value="${state.uiScale || 1}" style="flex:1;" oninput="previewUiScale(this.value)">
+        <button type="button" class="btn btn-ghost" onclick="adjustUiScale(0.05)">+</button>
+      </div>
+    </div>
     <div class="sheet-actions">
       <button class="btn btn-ghost" onclick="closeSheet()">Cancel</button>
       <button class="btn btn-primary" onclick="submitSettings()">Save</button>
     </div>`);
 }
+function previewUiScale(value){
+  const v = Math.max(0.6, Math.min(1.2, Number(value)||1));
+  document.body.style.zoom = String(v);
+  const label = document.getElementById('uiScaleValue');
+  if(label) label.textContent = Math.round(v*100)+'%';
+}
+function adjustUiScale(delta){
+  const range = document.getElementById('uiScaleRange');
+  const current = Number(range ? range.value : state.uiScale || 1);
+  const v = Math.max(0.6, Math.min(1.2, Math.round((current+delta)*20)/20));
+  if(range) range.value = v;
+  previewUiScale(v);
+}
 function submitSettings(){
   state.apiUrl = document.getElementById('setUrl').value.trim();
+  const range = document.getElementById('uiScaleRange');
+  if(range) state.uiScale = Math.max(0.6, Math.min(1.2, Number(range.value)||1));
+  applyUiScale();
   saveState(); closeSheet(); refresh(true);
 }
 
 /* ============================= INIT ============================= */
+applyUiScale();
 render();
 refresh(false);
 setInterval(()=>{ if(!document.hidden) refresh(false); }, 20000);
