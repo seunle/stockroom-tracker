@@ -983,6 +983,11 @@ function openDisplayCheck(key){
       <button class="btn btn-primary" onclick="commitDisplayCheck(false)">Done</button>
     </div>
   `, 'display');
+  // Opens scrolled to the bottom (Done/Checked buttons) instead of the top —
+  // on phone the size grid can run taller than the popup, and the buttons
+  // you actually tap live at the bottom, not the sizes at the top.
+  const scrollEl = document.querySelector('#sheetContent .sheet-scroll');
+  if(scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
 }
 function stepDisplayDraft(id, delta){
   const d = displayDraft && displayDraft[id];
