@@ -192,8 +192,8 @@
   .resupply-row{margin-bottom:20px;}
   .resupply-row.onhold-glow{
     border-radius:18px; padding:12px 12px 4px;
-    background:rgba(174,66,57,0.07);
-    box-shadow:0 0 0 2px rgba(174,66,57,0.35), 0 0 26px 4px rgba(174,66,57,0.25);
+    background:rgba(174,66,57,0.13);
+    box-shadow:0 0 0 3px rgba(174,66,57,0.55), 0 0 40px 10px rgba(174,66,57,0.45);
   }
   .resupply-row-label{
     font-family:'Oswald'; font-weight:600; font-size:26px; letter-spacing:0.6px; text-transform:uppercase;
@@ -394,7 +394,7 @@
   .restock-request-stepper.lg button{width:clamp(32px, 6cqw, 45px);height:clamp(32px, 6cqw, 45px);border-radius:11px;font-size:clamp(16px, 3cqw, 24px);}
   .restock-request-stepper.lg input{flex:0 0 clamp(92px, 20cqw, 160px);width:clamp(92px, 20cqw, 160px);font-size:clamp(17px, 3.5cqw, 28px);padding:9px 0;}
   .restock-request-stepper.xl button{width:clamp(46px, 10cqw, 88px);height:clamp(46px, 10cqw, 88px);border-radius:20px;font-size:clamp(22px, 5.5cqw, 46px);}
-  .restock-request-stepper.xl input{flex:0 0 clamp(120px, 26cqw, 200px);width:clamp(120px, 26cqw, 200px);font-size:clamp(24px, 6cqw, 54px);padding:16px 0;border-radius:16px;}
+  .restock-request-stepper.xl input{flex:0 0 clamp(120px, 26cqw, 200px);width:clamp(120px, 26cqw, 200px);font-size:clamp(28px, 7cqw, 64px);padding:16px 0;border-radius:16px;}
   .on-hold-box{margin-top:14px; padding:0; height:clamp(44px, 8cqw, 62px); position:relative; display:block; text-align:left; background:none; border:none;}
   .on-hold-box .restock-section-label{margin:0; position:absolute; left:0; top:50%; font-size:clamp(10.5px, 1.4cqw, 12px); line-height:1; text-align:left; transform:translateY(-50%);}
   .on-hold-num{position:absolute; left:50%; top:0; transform:translateX(-50%); display:flex; align-items:center; justify-content:center; width:clamp(78px, 16cqw, 128px); height:clamp(44px, 8cqw, 62px); box-sizing:border-box; padding:5px 14px; border:2px solid var(--restock); border-radius:12px; background:var(--restock-bg); font-family:'Oswald'; font-size:clamp(20px, 4.2cqw, 33px); font-weight:800; line-height:1; color:var(--restock);}
@@ -416,8 +416,9 @@
     font-family:'Oswald'; font-weight:700; font-size:13px; letter-spacing:1px; text-transform:uppercase;
     color:var(--ink-soft); margin-bottom:8px;
   }
+  .resupply-edit-hold-label{color:var(--restock);}
   .resupply-edit-nh-box{
-    font-family:'Oswald'; font-size:clamp(24px, 9cqw, 36px); font-weight:800; background:var(--line); color:var(--ink);
+    font-family:'Oswald'; font-size:clamp(32px, 12cqw, 50px); font-weight:800; background:var(--line); color:var(--ink);
     border-radius:12px; aspect-ratio:1; display:flex; align-items:center; justify-content:center;
   }
   .resupply-edit-hold-box{background:var(--restock-bg); color:var(--restock); border:2px solid var(--restock);}
@@ -453,8 +454,8 @@
     color:var(--ink-soft); text-transform:uppercase; margin-bottom:6px;
   }
   .onhold-value-box{
-    font-family:'Oswald'; font-size:22px; font-weight:800; background:var(--line); color:var(--ink);
-    border-radius:9px; padding:8px 0; margin-bottom:10px;
+    font-family:'Oswald'; font-size:32px; font-weight:800; background:var(--line); color:var(--ink);
+    border-radius:9px; padding:10px 0; margin-bottom:10px;
   }
   /* Size box sits as its own column, leftmost, in line with the T/P/B
      columns. Its top edge lines up with their VALUE BOX (not the T/P/B
@@ -465,14 +466,22 @@
     background:var(--line); border-radius:9px;
     font-family:'Oswald'; font-weight:800; font-size:clamp(26px, 9cqw, 40px); color:var(--ink);
   }
-  /* Taller, easier-to-tap +/- buttons, a bigger count, and a lighter count
-     background matching the Storage popup's own stepper box — scoped to
-     .onhold-col so the Display popup's identical-looking size grid (which
-     reuses the same .size-plus/.size-minus/.size-count classes) is
-     completely unaffected. */
-  .onhold-col .size-plus, .onhold-col .size-minus{height:52px;}
+  /* The non-adjustable value box above is the important number for at-a-
+     glance understanding, so it gets size priority — the adjustable
+     stepper below it (buttons + count) is deliberately smaller/quieter by
+     comparison. Scoped to .onhold-col so the Display popup's identical-
+     looking size grid (which reuses the same .size-plus/.size-minus/
+     .size-count classes) is completely unaffected. */
+  .onhold-col .size-plus, .onhold-col .size-minus{height:42px; font-size:16px;}
   .onhold-col .size-count{
-    font-size:26px; padding:10px 0; background:var(--paper); border:1.5px solid var(--line);
+    font-size:18px; padding:7px 0; background:var(--paper); border:1.5px solid var(--line);
+  }
+  /* Stepper reads below the original On Hold value = some of it will
+     still be unresolved after Stock is pressed. Reddish-orange, distinct
+     from the pure red used for On Hold elsewhere, so it reads as "partial"
+     rather than "still fully on hold". */
+  .onhold-col .size-count.onhold-partial{
+    background:#E0592E; color:#fff; border-color:#E0592E;
   }
   /* As with the Display popup above: the photo column and info column
      can only shrink so far side by side before the stepper/Need numbers
@@ -1485,6 +1494,9 @@ function stepOnHoldResolve(code, delta){
   const current = Number(el.textContent||0);
   const next = Math.max(0, Math.min(max, current+delta));
   el.textContent = next;
+  // Below the original On Hold value means some of it will still be
+  // unresolved after Stock is pressed — flag that visually.
+  el.classList.toggle('onhold-partial', next < max);
 }
 async function submitOnHoldResolve(){
   if(!onHoldResolveContext) return;
@@ -1538,7 +1550,7 @@ function openResupplyItem(id, code){
     <div class="resupply-edit-photo">${photo}</div>
     <div class="resupply-edit-nh-grid">
       <div class="resupply-edit-nh-label" style="grid-column:span 2;">Need</div>
-      <div class="resupply-edit-nh-label">Hold</div>
+      <div class="resupply-edit-nh-label resupply-edit-hold-label">Hold</div>
       <div class="resupply-edit-nh-box">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
       <div class="resupply-edit-nh-box">${requiredQty}</div>
       <div class="resupply-edit-nh-box resupply-edit-hold-box" id="onHoldNum">${onHoldPreview}</div>
@@ -1552,6 +1564,7 @@ function openResupplyItem(id, code){
     </div>
     <button class="btn-resupply" onclick="submitResupplyEdit()">Done</button>
   `, 'restock');
+  scrollSheetToBottom();
 }
 
 function stepResupplyEdit(delta){
