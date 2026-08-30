@@ -19,12 +19,25 @@
     --restock:#AE4239; --restock-bg:#F5DEDA;
   }
   *{box-sizing:border-box;} html,body{margin:0;padding:0;width:100%;height:100%;} body{overflow:hidden;}
-  #uiShell{width:calc(100% / var(--ui-scale));height:calc(100vh / var(--ui-scale));transform:scale(var(--ui-scale));transform-origin:top left;display:flex;flex-direction:column;flex-shrink:0;}
+  /* uiShell is sized "oversized then scaled down" so everything inside
+     (including the fixed bottom nav) shrinks/grows together. Because the
+     shell has a transform, any position:fixed descendant (the bottom nav)
+     becomes anchored to the SHELL's own box instead of the true viewport —
+     so the shell's height needs to track the real visible viewport exactly.
+     Plain 100vh is ambiguous on mobile (it can mean the viewport height
+     with or without the browser's address bar depending on browser/state,
+     and that ambiguity shifts as the address bar shows/hides), which is
+     what let the bottom nav drift out of place specifically on phones —
+     and the drift gets bigger at smaller --ui-scale values since the
+     shell's height is divided by the scale before being shrunk back down.
+     100dvh always reflects the actual current visible viewport, so we
+     prefer it and keep 100vh only as a fallback for older browsers. */
+  #uiShell{width:calc(100% / var(--ui-scale));height:calc(100vh / var(--ui-scale));height:calc(100dvh / var(--ui-scale));transform:scale(var(--ui-scale));transform-origin:top left;display:flex;flex-direction:column;flex-shrink:0;}
   body{
     background:var(--paper); color:var(--ink);
     font-family:'Inter',system-ui,-apple-system,sans-serif;
     -webkit-tap-highlight-color:transparent; overscroll-behavior:none;
-    display:flex; flex-direction:column; height:100vh;
+    display:flex; flex-direction:column; height:100vh; height:100dvh;
   }
   h1,h2,.tab-label,.side-cat,.stamp{font-family:'Oswald',system-ui,sans-serif;}
   ::-webkit-scrollbar{width:0;height:0;}
@@ -277,6 +290,15 @@
   /* Phone-width version of the same size-grid controls — scaled down so
      they actually fit the now-narrower columns instead of overflowing. */
   @media (max-width:699px){
+    /* The 60vw desktop-widening rule above computes to well under a
+       phone's own screen width once you get below ~700px viewport
+       (e.g. 234px on a 390px phone) — smaller than the plain .sheet's
+       420px cap would've given it. That starved the fixed 220px photo
+       + 7-column size grid of room, which is what made the popup look
+       tiny and cut content off on phones specifically. Undo the cap
+       here so phones get the same full-width behavior as any other
+       popup; the desktop widening above is untouched for wider screens.*/
+    .sheet.display-wide{max-width:calc(100vw - 32px);}
     .size-label{font-size:15px; margin-bottom:3px;}
     .size-plus,.size-minus{font-size:20px; height:30px;}
     .size-minus{margin-top:10px;}
@@ -430,7 +452,7 @@ const SIZE_SHORT_LABEL = { XS:'XS', S:'S', M:'M', L:'L', XL:'XL', XXL:'2XL', XXX
 
 let state = loadState();
 function applyUiScale(){
-  const v = Math.max(0.6, Math.min(1.2, Number(state.uiScale) || 1));
+  const v = Math.max(0.3, Math.min(1.2, Number(state.uiScale) || 1));
   document.documentElement.style.setProperty('--ui-scale', String(v));
 }
 let rows = [];              // flat rows from the sheet
@@ -476,7 +498,7 @@ function loadState(){
     if(raw){
       const s = JSON.parse(raw);
       if(s.apiUrl){
-        s.uiScale = Math.max(0.6, Math.min(1.2, Number(s.uiScale) || 1));
+        s.uiScale = Math.max(0.3, Math.min(1.2, Number(s.uiScale) || 1));
         if(!s.gridColsByTab){
           const legacy = s.gridCols || 4; // migrate old shared value
           s.gridColsByTab = { display:legacy, storage:legacy, resupply:legacy, edit:legacy };
@@ -1562,7 +1584,7 @@ function openSettings(){
       <label>UI Scale <span id="uiScaleValue">${pct}%</span></label>
       <div style="display:flex;align-items:center;gap:12px;">
         <button type="button" class="btn btn-ghost" onclick="adjustUiScale(-0.05)">−</button>
-        <input type="range" id="uiScaleRange" min="0.6" max="1.2" step="0.05" value="${state.uiScale || 1}" style="flex:1;" oninput="previewUiScale(this.value)">
+        <input type="range" id="uiScaleRange" min="0.3" max="1.2" step="0.05" value="${state.uiScale || 1}" style="flex:1;" oninput="previewUiScale(this.value)">
         <button type="button" class="btn btn-ghost" onclick="adjustUiScale(0.05)">+</button>
       </div>
     </div>
@@ -1572,7 +1594,7 @@ function openSettings(){
     </div>`);
 }
 function previewUiScale(value){
-  const v = Math.max(0.6, Math.min(1.2, Number(value)||1));
+  const v = Math.max(0.3, Math.min(1.2, Number(value)||1));
   document.documentElement.style.setProperty('--ui-scale', String(v));
   const label = document.getElementById('uiScaleValue');
   if(label) label.textContent = Math.round(v*100)+'%';
@@ -1580,14 +1602,14 @@ function previewUiScale(value){
 function adjustUiScale(delta){
   const range = document.getElementById('uiScaleRange');
   const current = Number(range ? range.value : state.uiScale || 1);
-  const v = Math.max(0.6, Math.min(1.2, Math.round((current+delta)*20)/20));
+  const v = Math.max(0.3, Math.min(1.2, Math.round((current+delta)*20)/20));
   if(range) range.value = v;
   previewUiScale(v);
 }
 function submitSettings(){
   state.apiUrl = document.getElementById('setUrl').value.trim();
   const range = document.getElementById('uiScaleRange');
-  if(range) state.uiScale = Math.max(0.6, Math.min(1.2, Number(range.value)||1));
+  if(range) state.uiScale = Math.max(0.3, Math.min(1.2, Number(range.value)||1));
   applyUiScale();
   saveState(); closeSheet(); refresh(true);
 }
