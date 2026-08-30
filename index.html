@@ -92,14 +92,14 @@
                              (and the Edit button) never sit hidden behind it */
   }
   .side-cat{
-    padding:12px 6px; text-align:center; font-size:20px; font-weight:600;
+    padding:24px 6px; text-align:center; font-weight:600; /* padding doubled from 12px — ~2x box height */
     letter-spacing:0.3px; text-transform:uppercase; color:var(--ink-soft);
     border-bottom:1.5px solid var(--line); line-height:1.15; position:relative;
     word-break:break-word; /* safety net so a future long/unbroken type name
                                shrinks its wrapping instead of overflowing the box */
   }
   .side-cat.active{background:var(--thread); color:#fff;}
-  .side-cat.side-cat-all{padding:9px 6px;} /* ~75% of the regular box's vertical padding */
+  .side-cat.side-cat-all{padding:9px 6px; font-size:20px;} /* excluded from the 2x height/font changes below */
   .side-cat .rm{
     position:absolute; top:3px; right:3px; width:16px;height:16px;border-radius:50%;
     background:rgba(0,0,0,0.15); color:#fff; font-size:10px; line-height:16px; display:none;
@@ -170,6 +170,18 @@
   .resupply-controls{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 4px 6px;}
   .toolbar-top{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 4px 4px;}
   .toolbar-top .chiprow{flex:1;}
+  /* Portrait-phone-only alternate toolbar layout (stacked location chips on
+     the left, Rotate/scale on top-right, On Hold below them) — hidden here,
+     swapped in for .resupply-toolbar-default below the phone-portrait
+     breakpoint. Landscape and desktop/web keep the row-based .toolbar-top
+     layout above completely untouched. */
+  .resupply-toolbar-portrait{display:none; gap:10px; margin:0 4px 10px; align-items:flex-start;}
+  .rtp-locs{display:flex; flex-direction:column; gap:8px;}
+  .rtp-locs .chip{height:48px; padding:0 18px; font-size:20px;}
+  .rtp-right{flex:1; min-width:0; display:flex; flex-direction:column; gap:8px;}
+  .rtp-actions{display:flex; align-items:center; gap:8px;}
+  .rtp-actions .rotate-btn{flex:1; width:auto; min-width:0;}
+  .rtp-right .on-hold-chip{width:100%;}
   .rotate-btn{
     flex-shrink:0; width:170px; height:78px; box-sizing:border-box; display:inline-flex; align-items:center; justify-content:center; gap:6px;
     background:var(--thread); color:#fff; border:none; border-radius:16px;
@@ -354,6 +366,14 @@
        everything down for a phone-width container on its own. */
     .sheet{zoom:1;}
   }
+  @media (max-width:699px) and (orientation:portrait){
+    /* Resupply tab only: swap the row-based toolbar for the stacked
+       layout (location chips in a column on the left, Rotate/scale on
+       top-right, On Hold below them) — requested specifically for phone
+       portrait. Landscape and desktop/web are untouched by this query. */
+    .resupply-toolbar-default{display:none;}
+    .resupply-toolbar-portrait{display:flex;}
+  }
 
   /* Storage tab's Request/Resupply popup */
   .restock-popup{display:flex; gap:16px;}
@@ -392,6 +412,31 @@
     -moz-appearance:textfield;
   }
   .restock-request-stepper input::-webkit-outer-spin-button,.restock-request-stepper input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+  /* On Hold resolve popup (Resupply tab → tapping an On Hold card only) */
+  .onhold-resolve-size{
+    font-family:'Oswald'; font-weight:800; font-size:34px; text-align:center;
+    background:var(--line); border-radius:12px; padding:10px 0; margin-bottom:16px; color:var(--ink);
+  }
+  .onhold-resolve-cols{display:flex; gap:10px; justify-content:center; margin-bottom:16px;}
+  .onhold-col{flex:1; max-width:130px; min-width:0; text-align:center;}
+  .onhold-col-label{
+    font-family:'Oswald'; font-weight:700; font-size:18px; letter-spacing:0.5px;
+    color:var(--ink-soft); text-transform:uppercase; margin-bottom:6px;
+  }
+  .onhold-value-box{
+    font-family:'Oswald'; font-size:22px; font-weight:800; background:var(--line); color:var(--ink);
+    border-radius:9px; padding:8px 0; margin-bottom:10px;
+  }
+  .onhold-stepper{display:flex; align-items:center; justify-content:center; gap:5px; min-width:0;}
+  .onhold-stepper button{width:30px;height:30px;border-radius:8px;border:none;font-size:16px;font-weight:800;color:#fff;flex-shrink:0;}
+  .onhold-stepper .rq-minus{background:var(--restock);}
+  .onhold-stepper .rq-plus{background:var(--ok);}
+  .onhold-stepper input{
+    flex:1; min-width:0; width:100%; text-align:center; font-size:16px; font-weight:800; border:1.5px solid var(--line);
+    border-radius:8px; padding:5px 0; background:var(--paper); color:var(--ink); font-family:'Inter';
+    -moz-appearance:textfield;
+  }
+  .onhold-stepper input::-webkit-outer-spin-button,.onhold-stepper input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
   /* As with the Display popup above: the photo column and info column
      can only shrink so far side by side before the stepper/Need numbers
      start overlapping. That's the one thing here that still needs a hard
@@ -859,13 +904,28 @@ function sidebarCategoryLabel(c){
   const parts = SIDEBAR_LABEL_BREAKS[c];
   return parts ? parts.map(esc).join('<br>') : esc(c);
 }
+// Bigger font for short labels (so "Men"/"Cap" actually fill the taller
+// box instead of floating in empty space), smaller for long ones (so
+// "Crewneck" or a stacked "Y Hoodie"/"Crewneck" line still fits the
+// sidebar's ~118px content width). Based on the longest individual line
+// after any SIDEBAR_LABEL_BREAKS split, not the raw type-string length.
+function sidebarFontSize(c){
+  const parts = SIDEBAR_LABEL_BREAKS[c] || [c];
+  const longest = Math.max(...parts.map(p=>p.length));
+  if(longest<=3) return 34;
+  if(longest<=4) return 32;
+  if(longest<=5) return 30;
+  if(longest<=6) return 27;
+  if(longest<=7) return 25;
+  return 22; // 8+ chars, e.g. "CREWNECK", "Y HOODIE"
+}
 function renderSidebar(){
   const el = document.getElementById('sidebar');
   el.classList.toggle('edit-mode', sidebarEditMode);
   const cats = categoriesList();
   let html = `<div class="side-cat side-cat-all ${categoryFilter==='All'?'active':''}" onclick="setCategory('All')">All</div>`;
   html += cats.map(c=>`
-    <div class="side-cat ${categoryFilter===c?'active':''}" onclick="${sidebarEditMode?'':`setCategory('${esc(c)}')`}">
+    <div class="side-cat ${categoryFilter===c?'active':''}" style="font-size:${sidebarFontSize(c)}px;" onclick="${sidebarEditMode?'':`setCategory('${esc(c)}')`}">
       ${sidebarCategoryLabel(c)}${sidebarEditMode?`<div class="rm" onclick="event.stopPropagation();removeCategory('${esc(c)}')">×</div>`:''}
     </div>`).join('');
   html += `<div class="side-editbtn" onclick="sidebarEditMode=!sidebarEditMode;render();">${sidebarEditMode?'Done':'Edit'}</div>`;
@@ -958,7 +1018,7 @@ function openSheetHtml(html, widthMode){
   sheetEl.innerHTML = `<button class="sheet-close" onclick="closeSheet()">×</button><div class="sheet-scroll">${html}</div>`;
   document.getElementById('overlay').classList.add('show');
 }
-function closeSheet(){ document.getElementById('overlay').classList.remove('show'); pendingPhotoBase64=null; resupplyEditContext=null; }
+function closeSheet(){ document.getElementById('overlay').classList.remove('show'); pendingPhotoBase64=null; resupplyEditContext=null; onHoldResolveContext=null; }
 document.getElementById('overlay').addEventListener('click', e=>{ if(e.target.id==='overlay') closeSheet(); });
 
 /* ============================= ITEM DETAIL POPUP (Display/Storage/Resupply) ============================= */
@@ -1041,6 +1101,7 @@ async function commitDisplayCheck(forceChecked){
   const draft = displayDraft, groupKeyForDraft = displayDraftGroupKey, locForDraft = displayDraftLocation;
   const displayField = DISPLAY_FIELD_BY_CODE[locForDraft];
   const onHoldField = ON_HOLD_FIELD_BY_CODE[locForDraft];
+  const resupplyField = RESUPPLY_FIELD_BY_CODE[locForDraft];
   displayDraft = null; displayDraftGroupKey = null; displayDraftLocation = null;
   closeSheet();
   if(!draft) return;
@@ -1057,14 +1118,31 @@ async function commitDisplayCheck(forceChecked){
     const row = rows.find(r=>sameId(r.ID,id));
     if(!row) return;
     const currentOnHold = Number(row[onHoldField]||0);
-    if(currentOnHold <= 0) return; // not on hold — normal Storage-trigger logic applies below
+    if(currentOnHold <= 0) return; // not on hold — Resupply check below applies instead
     const need = Math.max(0, Number(draft[id].minCount||0) - draft[id].current);
     if(need > 0) onHoldUpdates[id] = currentOnHold + need;
   });
 
-  const affectedIds = Array.from(new Set([...changedIds, ...Object.keys(onHoldUpdates)]));
+  // Same idea, one tier down: for anything NOT already On Hold, check
+  // whether this location already has an outstanding Resupply request
+  // (Resupply column > 0). If so, any new shortfall gets added onto that
+  // Resupply number instead of ever flagging Storage — an item already
+  // sitting in the Resupply tab's queue for this location shouldn't also
+  // get flagged in Storage as if nobody had asked for it yet.
+  const resupplyUpdates = {}; // id -> new Resupply value for this location
+  Object.keys(draft).forEach(id=>{
+    if(onHoldUpdates[id] !== undefined) return; // On Hold already claimed this one
+    const row = rows.find(r=>sameId(r.ID,id));
+    if(!row) return;
+    const currentResupply = Number(row[resupplyField]||0);
+    if(currentResupply <= 0) return; // no outstanding request — normal Storage-trigger logic applies below
+    const need = Math.max(0, Number(draft[id].minCount||0) - draft[id].current);
+    if(need > 0) resupplyUpdates[id] = currentResupply + need;
+  });
+
+  const affectedIds = Array.from(new Set([...changedIds, ...Object.keys(onHoldUpdates), ...Object.keys(resupplyUpdates)]));
   if(affectedIds.length>0){
-    pushUndoSnapshot(affectedIds); // one batch undo covering both Display and On Hold changes from this check
+    pushUndoSnapshot(affectedIds); // one batch undo covering Display, On Hold, and Resupply changes from this check
     toast('Saving…');
     for(const id of changedIds){
       const newVal = draft[id].current;
@@ -1078,16 +1156,22 @@ async function commitDisplayCheck(forceChecked){
       if(row) row[onHoldField] = newOnHold;
       await apiPost({action:'setResupplyForLocation', id, location:locForDraft, onHold:newOnHold, applyOnHold:true});
     }
+    for(const id of Object.keys(resupplyUpdates)){
+      const newResupply = resupplyUpdates[id];
+      const row = rows.find(r=>sameId(r.ID,id));
+      if(row) row[resupplyField] = newResupply;
+      await apiPost({action:'setResupplyForLocation', id, location:locForDraft, value:newResupply});
+    }
   }
   // Pressing Done/Checked is an explicit review of EVERY size shown in this
   // popup, not just the ones adjusted with +/-. A size already sitting at 0
   // that you simply confirmed (no change needed) still needs to register as
   // reviewed so it can appear in Storage — otherwise an untouched
   // below-minimum size never gets a trigger recorded and stays invisible
-  // there even though you looked right at it. Sizes folded into On Hold
-  // above must NEVER get a Storage trigger.
+  // there even though you looked right at it. Sizes folded into On Hold or
+  // Resupply above must NEVER get a Storage trigger.
   Object.keys(draft).forEach(id=>{
-    if(onHoldUpdates[id] !== undefined){ clearStorageDisplayTrigger(locForDraft, id); return; }
+    if(onHoldUpdates[id] !== undefined || resupplyUpdates[id] !== undefined){ clearStorageDisplayTrigger(locForDraft, id); return; }
     const finalVal = draft[id].current;
     if(finalVal >= Number(draft[id].minCount||0)){ clearStorageDisplayTrigger(locForDraft, id); }
     else { markStorageDisplayTrigger(locForDraft, id, finalVal); }
@@ -1125,7 +1209,7 @@ function onHoldItems(){
 function renderResupplyTab(main, list){
   const catFiltered = list.filter(r=>categoryFilter==='All' || r.Type===categoryFilter);
   main.innerHTML = `
-    <div class="toolbar-top">
+    <div class="toolbar-top resupply-toolbar-default">
       <div class="chiprow" style="flex:1;">
         ${LOC_FILTER_CHIP_ORDER.map(code=>`<div class="chip ${(!onHoldActive && resupplyLocFilter[code])?'on':''}" data-loc-chip="${code}" onclick="toggleResupplyLocFilter('${code}')">${LOC_NAME_BY_CODE[code]}</div>`).join('')}
         <div class="chip on-hold-chip ${onHoldActive?'on':''}" data-loc-chip="${ON_HOLD_CODE}" onclick="toggleOnHoldFilter()">On Hold</div>
@@ -1136,6 +1220,23 @@ function renderResupplyTab(main, list){
       <div class="scale-ctrl">
         <button class="scale-btn" onclick="adjustScale(1)">−</button>
         <button class="scale-btn" onclick="adjustScale(-1)">+</button>
+      </div>
+    </div>
+    <div class="resupply-toolbar-portrait">
+      <div class="rtp-locs">
+        ${LOC_FILTER_CHIP_ORDER.map(code=>`<div class="chip ${(!onHoldActive && resupplyLocFilter[code])?'on':''}" onclick="toggleResupplyLocFilter('${code}')">${LOC_NAME_BY_CODE[code]}</div>`).join('')}
+      </div>
+      <div class="rtp-right">
+        <div class="rtp-actions">
+          <button class="rotate-btn" onclick="rotateResupplyOrder()" title="Cycle row order">
+            <span class="rotate-arrow">⟳</span><span class="rotate-text">Rotate</span>
+          </button>
+          <div class="scale-ctrl">
+            <button class="scale-btn" onclick="adjustScale(1)">−</button>
+            <button class="scale-btn" onclick="adjustScale(-1)">+</button>
+          </div>
+        </div>
+        <div class="chip on-hold-chip ${onHoldActive?'on':''}" onclick="toggleOnHoldFilter()">On Hold</div>
       </div>
     </div>
     <div id="resupplyRows"></div>
@@ -1180,15 +1281,14 @@ function resupplyCardHtml(row, code, field){
 }
 function onHoldCardHtml(row){
   // Same look as a regular resupply card, but the badge shows the total
-  // On Hold count across locations. Clicking opens the popup for a location
-  // that actually has On Hold units, preserving location-specific storage.
+  // On Hold count across locations, and clicking opens the dedicated
+  // On Hold resolve popup (not the regular per-location resupply popup).
   const onHold = ['T','P','B'].reduce((sum,c)=>sum+Number(row[ON_HOLD_FIELD_BY_CODE[c]]||0),0);
   const photo = row.Photo ? `<img src="${esc(row.Photo)}" loading="lazy">` : '👕';
   const color = SIZE_COLORS[row.Size] || '#DDD';
   const w = Math.max(90, Math.round(900/(state.gridColsByTab.resupply||4)));
-  const primaryCode = ['T','P','B'].find(c=>Number(row[ON_HOLD_FIELD_BY_CODE[c]]||0)>0 && (row.Location||'').indexOf(c)!==-1) || ['T','P','B'].find(c=>Number(row[ON_HOLD_FIELD_BY_CODE[c]]||0)>0) || (row.Location||'').split('').find(c=>LOC_NAME_BY_CODE[c]) || 'T';
   return `
-    <div class="card resupply-card" style="width:${w}px; border-color:${color}; box-shadow:0 0 0 3px ${color}55;" onclick="openResupplyItem('${esc(row.ID)}','${primaryCode}')">
+    <div class="card resupply-card" style="width:${w}px; border-color:${color}; box-shadow:0 0 0 3px ${color}55;" onclick="openOnHoldItem('${esc(row.ID)}')">
       <div class="photo">${photo}</div>
       <div class="size-badge" style="background:${color}CC; border:2px solid #fff;">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
       <div class="qty-badge">${onHold}</div>
@@ -1290,7 +1390,81 @@ function rotateResupplyOrder(){
   });
 }
 
-// Holds the context for whichever Resupply-tab edit popup is currently
+// On Hold resolve popup — the ONLY popup opened from tapping an On Hold
+// card in the Resupply tab. Shows all 3 locations side by side (T/P/B),
+// each with its current On Hold value and its own stepper. Every stepper
+// starts equal to that location's current On Hold value — leaving it
+// untouched and pressing "In Stock" means "all of these came in", clearing
+// that location's hold to 0. Pulling the stepper down means "only this
+// many came in"; the rest stays on hold. Formula per location:
+//   new On Hold = original On Hold − stepper's final value
+// This is a completely separate popup from openResupplyItem — it never
+// touches the regular per-location Resupply popup used elsewhere in this tab.
+let onHoldResolveContext = null; // { id, original: {T,P,B} }
+function openOnHoldItem(id){
+  const row = rows.find(r=>sameId(r.ID,id));
+  if(!row) return;
+  const original = {
+    T: Number(row.OnHoldTangle||0),
+    P: Number(row.OnHoldParkway||0),
+    B: Number(row.OnHoldBears||0)
+  };
+  onHoldResolveContext = { id, original };
+  openSheetHtml(`
+    <h2>${esc(row.Name)}</h2>
+    <div class="desc">${esc(row.Type)} · On Hold</div>
+    <div class="onhold-resolve-size">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
+    <div class="onhold-resolve-cols">
+      ${['T','P','B'].map(code=>`
+        <div class="onhold-col">
+          <div class="onhold-col-label">${code}</div>
+          <div class="onhold-value-box">${original[code]}</div>
+          <div class="onhold-stepper">
+            <button type="button" class="rq-minus" onclick="stepOnHoldResolve('${code}',-1)">−</button>
+            <input type="number" id="onHoldResolve-${code}" value="${original[code]}" readonly>
+            <button type="button" class="rq-plus" onclick="stepOnHoldResolve('${code}',1)">+</button>
+          </div>
+        </div>`).join('')}
+    </div>
+    <button class="btn-resupply" onclick="submitOnHoldResolve()">In Stock</button>
+  `, 'restock');
+}
+function stepOnHoldResolve(code, delta){
+  if(!onHoldResolveContext) return;
+  const el = document.getElementById('onHoldResolve-'+code);
+  if(!el) return;
+  // Clamped between 0 and that location's original On Hold value — the
+  // stepper represents "how many of the original on-hold amount are now
+  // in stock", so it can never go negative or exceed what was on hold.
+  const max = onHoldResolveContext.original[code];
+  const next = Math.max(0, Math.min(max, Number(el.value||0)+delta));
+  el.value = next;
+}
+async function submitOnHoldResolve(){
+  if(!onHoldResolveContext) return;
+  const { id, original } = onHoldResolveContext;
+  const row = rows.find(r=>sameId(r.ID,id));
+  onHoldResolveContext = null;
+  if(!row){ closeSheet(); return; }
+  const updates = {};
+  ['T','P','B'].forEach(code=>{
+    const el = document.getElementById('onHoldResolve-'+code);
+    const stepperVal = el ? Number(el.value||0) : 0;
+    const newOnHold = Math.max(0, original[code] - stepperVal);
+    if(newOnHold !== original[code]) updates[code] = newOnHold;
+  });
+  const changedCodes = Object.keys(updates);
+  if(changedCodes.length===0){ closeSheet(); return; }
+  pushUndoSnapshot([id]);
+  closeSheet();
+  toast('Saving…');
+  for(const code of changedCodes){
+    row[ON_HOLD_FIELD_BY_CODE[code]] = updates[code];
+    await apiPost({action:'setResupplyForLocation', id, location:code, onHold:updates[code], applyOnHold:true});
+  }
+  toast('Updated');
+  refresh(false);
+}
 // open, so the stepper can live-update the On Hold preview and Done can
 // compute the same shortfall it just showed. Cleared on close/submit.
 let resupplyEditContext = null; // { id, code, requiredQty }
