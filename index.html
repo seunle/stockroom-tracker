@@ -427,16 +427,6 @@
     font-family:'Oswald'; font-size:22px; font-weight:800; background:var(--line); color:var(--ink);
     border-radius:9px; padding:8px 0; margin-bottom:10px;
   }
-  .onhold-stepper{display:flex; align-items:center; justify-content:center; gap:5px; min-width:0;}
-  .onhold-stepper button{width:30px;height:30px;border-radius:8px;border:none;font-size:16px;font-weight:800;color:#fff;flex-shrink:0;}
-  .onhold-stepper .rq-minus{background:var(--restock);}
-  .onhold-stepper .rq-plus{background:var(--ok);}
-  .onhold-stepper input{
-    flex:1; min-width:0; width:100%; text-align:center; font-size:16px; font-weight:800; border:1.5px solid var(--line);
-    border-radius:8px; padding:5px 0; background:var(--paper); color:var(--ink); font-family:'Inter';
-    -moz-appearance:textfield;
-  }
-  .onhold-stepper input::-webkit-outer-spin-button,.onhold-stepper input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
   /* As with the Display popup above: the photo column and info column
      can only shrink so far side by side before the stepper/Need numbers
      start overlapping. That's the one thing here that still needs a hard
@@ -1410,23 +1400,27 @@ function openOnHoldItem(id){
     B: Number(row.OnHoldBears||0)
   };
   onHoldResolveContext = { id, original };
+  const photo = row.Photo ? `<img src="${esc(row.Photo)}">` : '';
   openSheetHtml(`
-    <h2>${esc(row.Name)}</h2>
-    <div class="desc">${esc(row.Type)} · On Hold</div>
+    <div style="display:flex; gap:14px; align-items:flex-start; margin-bottom:14px; padding-right:34px;">
+      <div class="restock-photo" style="width:90px; flex-shrink:0;">${photo}</div>
+      <div style="flex:1; min-width:0;">
+        <h2 style="margin:0 0 2px; padding-right:0;">${esc(row.Name)}</h2>
+        <div class="desc" style="margin:0;">${esc(row.Type)} · On Hold</div>
+      </div>
+    </div>
     <div class="onhold-resolve-size">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
     <div class="onhold-resolve-cols">
       ${['T','P','B'].map(code=>`
         <div class="onhold-col">
           <div class="onhold-col-label">${code}</div>
           <div class="onhold-value-box">${original[code]}</div>
-          <div class="onhold-stepper">
-            <button type="button" class="rq-minus" onclick="stepOnHoldResolve('${code}',-1)">−</button>
-            <input type="number" id="onHoldResolve-${code}" value="${original[code]}" readonly>
-            <button type="button" class="rq-plus" onclick="stepOnHoldResolve('${code}',1)">+</button>
-          </div>
+          <button type="button" class="size-plus" onclick="stepOnHoldResolve('${code}',1)">+</button>
+          <div class="size-count" id="onHoldResolve-${code}">${original[code]}</div>
+          <button type="button" class="size-minus" onclick="stepOnHoldResolve('${code}',-1)">−</button>
         </div>`).join('')}
     </div>
-    <button class="btn-resupply" onclick="submitOnHoldResolve()">In Stock</button>
+    <button class="btn-resupply" onclick="submitOnHoldResolve()">Stock</button>
   `, 'restock');
 }
 function stepOnHoldResolve(code, delta){
@@ -1437,8 +1431,9 @@ function stepOnHoldResolve(code, delta){
   // stepper represents "how many of the original on-hold amount are now
   // in stock", so it can never go negative or exceed what was on hold.
   const max = onHoldResolveContext.original[code];
-  const next = Math.max(0, Math.min(max, Number(el.value||0)+delta));
-  el.value = next;
+  const current = Number(el.textContent||0);
+  const next = Math.max(0, Math.min(max, current+delta));
+  el.textContent = next;
 }
 async function submitOnHoldResolve(){
   if(!onHoldResolveContext) return;
@@ -1449,7 +1444,7 @@ async function submitOnHoldResolve(){
   const updates = {};
   ['T','P','B'].forEach(code=>{
     const el = document.getElementById('onHoldResolve-'+code);
-    const stepperVal = el ? Number(el.value||0) : 0;
+    const stepperVal = el ? Number(el.textContent||0) : 0;
     const newOnHold = Math.max(0, original[code] - stepperVal);
     if(newOnHold !== original[code]) updates[code] = newOnHold;
   });
