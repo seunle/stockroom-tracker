@@ -1120,7 +1120,7 @@ async function commitDisplayCheck(forceChecked){
     const currentOnHold = Number(row[onHoldField]||0);
     if(currentOnHold <= 0) return; // not on hold — Resupply check below applies instead
     const need = Math.max(0, Number(draft[id].minCount||0) - draft[id].current);
-    if(need > 0) onHoldUpdates[id] = currentOnHold + need;
+    if(need > 0) onHoldUpdates[id] = Math.min(5, currentOnHold + need); // backend caps On Hold at 5
   });
 
   // Same idea, one tier down: for anything NOT already On Hold, check
@@ -1129,7 +1129,7 @@ async function commitDisplayCheck(forceChecked){
   // Resupply number instead of ever flagging Storage — an item already
   // sitting in the Resupply tab's queue for this location shouldn't also
   // get flagged in Storage as if nobody had asked for it yet.
-  const resupplyUpdates = {}; // id -> new Resupply value for this location
+  const resupplyIncrements = {}; // id -> amount to add to this location's Resupply value
   Object.keys(draft).forEach(id=>{
     if(onHoldUpdates[id] !== undefined) return; // On Hold already claimed this one
     const row = rows.find(r=>sameId(r.ID,id));
@@ -1137,10 +1137,10 @@ async function commitDisplayCheck(forceChecked){
     const currentResupply = Number(row[resupplyField]||0);
     if(currentResupply <= 0) return; // no outstanding request — normal Storage-trigger logic applies below
     const need = Math.max(0, Number(draft[id].minCount||0) - draft[id].current);
-    if(need > 0) resupplyUpdates[id] = currentResupply + need;
+    if(need > 0) resupplyIncrements[id] = need;
   });
 
-  const affectedIds = Array.from(new Set([...changedIds, ...Object.keys(onHoldUpdates), ...Object.keys(resupplyUpdates)]));
+  const affectedIds = Array.from(new Set([...changedIds, ...Object.keys(onHoldUpdates), ...Object.keys(resupplyIncrements)]));
   if(affectedIds.length>0){
     pushUndoSnapshot(affectedIds); // one batch undo covering Display, On Hold, and Resupply changes from this check
     toast('Saving…');
@@ -1154,13 +1154,13 @@ async function commitDisplayCheck(forceChecked){
       const newOnHold = onHoldUpdates[id];
       const row = rows.find(r=>sameId(r.ID,id));
       if(row) row[onHoldField] = newOnHold;
-      await apiPost({action:'setResupplyForLocation', id, location:locForDraft, onHold:newOnHold, applyOnHold:true});
+      await apiPost({action:'setResupplyForLocation', id, location:locForDraft, onHold:newOnHold});
     }
-    for(const id of Object.keys(resupplyUpdates)){
-      const newResupply = resupplyUpdates[id];
+    for(const id of Object.keys(resupplyIncrements)){
+      const amount = resupplyIncrements[id];
       const row = rows.find(r=>sameId(r.ID,id));
-      if(row) row[resupplyField] = newResupply;
-      await apiPost({action:'setResupplyForLocation', id, location:locForDraft, value:newResupply});
+      if(row) row[resupplyField] = Number(row[resupplyField]||0) + amount; // optimistic — server computes the authoritative total
+      await apiPost({action:'incrementResupplyForLocation', id, location:locForDraft, amount});
     }
   }
   // Pressing Done/Checked is an explicit review of EVERY size shown in this
@@ -1171,7 +1171,7 @@ async function commitDisplayCheck(forceChecked){
   // there even though you looked right at it. Sizes folded into On Hold or
   // Resupply above must NEVER get a Storage trigger.
   Object.keys(draft).forEach(id=>{
-    if(onHoldUpdates[id] !== undefined || resupplyUpdates[id] !== undefined){ clearStorageDisplayTrigger(locForDraft, id); return; }
+    if(onHoldUpdates[id] !== undefined || resupplyIncrements[id] !== undefined){ clearStorageDisplayTrigger(locForDraft, id); return; }
     const finalVal = draft[id].current;
     if(finalVal >= Number(draft[id].minCount||0)){ clearStorageDisplayTrigger(locForDraft, id); }
     else { markStorageDisplayTrigger(locForDraft, id, finalVal); }
@@ -1460,7 +1460,7 @@ async function submitOnHoldResolve(){
   toast('Saving…');
   for(const code of changedCodes){
     row[ON_HOLD_FIELD_BY_CODE[code]] = updates[code];
-    await apiPost({action:'setResupplyForLocation', id, location:code, onHold:updates[code], applyOnHold:true});
+    await apiPost({action:'setResupplyForLocation', id, location:code, onHold:updates[code]});
   }
   toast('Updated');
   refresh(false);
@@ -1478,7 +1478,7 @@ function openResupplyItem(id, code){
   // It must never be calculated from Min Count, Display, or On Hold.
   const field = RESUPPLY_FIELD_BY_CODE[code];
   const requiredQty = Number(row[field] || 0);
-  const current = requiredQty;
+  const current = Math.min(6, requiredQty); // stepper is capped at 6 — any excess above that shows as On Hold below
 
   // On Hold is the shortfall between the original location-specific
   // Resupply requirement and the quantity currently shown in the stepper.
@@ -1521,7 +1521,7 @@ function openResupplyItem(id, code){
 
 function stepResupplyEdit(delta){
   const el = document.getElementById('resupplyEditQty');
-  el.value = Math.max(0, Number(el.value||0)+delta);
+  el.value = Math.max(0, Math.min(6, Number(el.value||0)+delta));
   updateOnHoldPreview();
 }
 
@@ -1579,6 +1579,7 @@ function openStorageItem(id){
   const row = rows.find(r=>sameId(r.ID,id));
   if(!row) return;
   const need = Math.max(0, Number(row.MinCount||0) - Number(row[displayField]||0));
+  const requestStart = Math.min(6, need); // stepper is capped at 6 even if the true shortfall is larger
   const photo = row.Photo ? `<img src="${esc(row.Photo)}">` : '';
   openSheetHtml(`
     <div class="restock-popup">
@@ -1599,7 +1600,7 @@ function openStorageItem(id){
           <div class="restock-request-label">Request for ${esc(LOC_NAME_BY_CODE[locationFilter])}</div>
           <div class="restock-request-stepper lg">
             <button type="button" class="rq-minus" onclick="stepRequest(-1)">−</button>
-            <input type="number" id="requestQty" value="${need}" readonly>
+            <input type="number" id="requestQty" value="${requestStart}" readonly>
             <button type="button" class="rq-plus" onclick="stepRequest(1)">+</button>
           </div>
           <button class="btn-resupply" onclick="submitResupply('${esc(row.ID)}')">Resupply</button>
@@ -1611,7 +1612,7 @@ function openStorageItem(id){
 }
 function stepRequest(delta){
   const el = document.getElementById('requestQty');
-  el.value = Math.max(0, Number(el.value||0)+delta);
+  el.value = Math.max(0, Math.min(6, Number(el.value||0)+delta));
 }
 async function submitResupply(id){
   if(locationFilter==='All'){
@@ -1630,11 +1631,12 @@ async function submitResupply(id){
     // This item is already On Hold for this location — a resupply request
     // here does NOT go to Storage/Display at all (no Display bump, no
     // Resupply column write). It just adds the requested quantity onto
-    // the existing On Hold amount for this location.
+    // the existing On Hold amount for this location, capped at 5 (matching
+    // the backend's own cap on the On Hold column).
     toast('Adding to On Hold…');
-    const newOnHold = currentOnHold + requestQty;
+    const newOnHold = Math.min(5, currentOnHold + requestQty);
     row[onHoldField] = newOnHold;
-    const res = await apiPost({action:'setResupplyForLocation', id, location:locationFilter, onHold:newOnHold, applyOnHold:true});
+    const res = await apiPost({action:'setResupplyForLocation', id, location:locationFilter, onHold:newOnHold});
     toast(res.ok ? `On Hold for ${LOC_NAME_BY_CODE[locationFilter]} is now ${newOnHold}` : 'Could not update On Hold: ' + (res.error||'unknown error'), !res.ok);
     refresh(false);
     return;
