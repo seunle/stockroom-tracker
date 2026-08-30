@@ -12,38 +12,21 @@
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root{
-    --ui-scale:1;
     --paper:#F3EFE6; --paper-raised:#FBF9F4; --ink:#25241F; --ink-soft:#6B655A;
     --line:#DAD3C2; --thread:#3E5C76; --thread-dark:#2C4257;
     --ok:#4C7A5D; --ok-bg:#E4EEE6; --low:#C2801F; --low-bg:#F7E9D3;
     --restock:#AE4239; --restock-bg:#F5DEDA;
   }
-  *{box-sizing:border-box;} html,body{margin:0;padding:0;width:100%;height:100%;} body{overflow:hidden;}
-  /* uiShell is sized "oversized then scaled down" so everything inside
-     (including the fixed bottom nav) shrinks/grows together. Because the
-     shell has a transform, any position:fixed descendant (the bottom nav)
-     becomes anchored to the SHELL's own box instead of the true viewport —
-     so the shell's height needs to track the real visible viewport exactly.
-     Plain 100vh is ambiguous on mobile (it can mean the viewport height
-     with or without the browser's address bar depending on browser/state,
-     and that ambiguity shifts as the address bar shows/hides), which is
-     what let the bottom nav drift out of place specifically on phones —
-     and the drift gets bigger at smaller --ui-scale values since the
-     shell's height is divided by the scale before being shrunk back down.
-     100dvh always reflects the actual current visible viewport, so we
-     prefer it and keep 100vh only as a fallback for older browsers. */
-  #uiShell{width:calc(100% / var(--ui-scale));height:calc(100vh / var(--ui-scale));height:calc(100dvh / var(--ui-scale));transform:scale(var(--ui-scale));transform-origin:top left;display:flex;flex-direction:column;flex-shrink:0;}
+  *{box-sizing:border-box;} html,body{margin:0;padding:0;height:100%;}
   body{
     background:var(--paper); color:var(--ink);
     font-family:'Inter',system-ui,-apple-system,sans-serif;
     -webkit-tap-highlight-color:transparent; overscroll-behavior:none;
-    display:flex; flex-direction:column; height:100vh; height:100dvh;
+    display:flex; flex-direction:column; height:100vh;
   }
   h1,h2,.tab-label,.side-cat,.stamp{font-family:'Oswald',system-ui,sans-serif;}
   ::-webkit-scrollbar{width:0;height:0;}
 
-  /* The UI shell is scaled as one unit so the photo grid, its columns, and all controls
-     shrink/grow together instead of browser zoom expanding the CSS viewport. */
   /* ---------- Top bar ---------- */
   header.topbar{
     background:var(--thread-dark); color:#fff; flex-shrink:0;
@@ -67,8 +50,8 @@
   }
   .top-btn.new-btn{background:#fff;color:var(--thread-dark);border-color:#fff;}
   .top-btn.icon-only{padding:9px 10px; font-size:16px;}
-  #btnUndo{min-width:76px; background:#F6D9A0; border:2px solid #fff; color:var(--thread);}
-  #btnUndo svg{display:block; filter:drop-shadow(1px 0 0 #fff) drop-shadow(-1px 0 0 #fff) drop-shadow(0 1px 0 #fff) drop-shadow(0 -1px 0 #fff);}
+  #btnUndo{min-width:76px; background:#E3A72E; border-color:#E3A72E; color:var(--ink);}
+  #btnUndo svg{display:block;}
   .top-btn:active{opacity:0.75;}
   .session-refresh-btn{
     justify-self:center; height:48px; box-sizing:border-box; background:var(--ok); color:#fff; border:none;
@@ -150,13 +133,11 @@
     padding:2px 6px; border-radius:6px;
   }
   .card.storage-card{border-width:3px;}
-  .card.resupply-card{border-width:3px;}
   .card.storage-card .loc-tag{top:auto; bottom:34px; left:6px;}
   .size-badge{
     position:absolute; top:6px; left:6px; color:var(--ink);
-    font-family:'Oswald'; font-size:30px; font-weight:800; letter-spacing:0.3px;
+    font-family:'Oswald'; font-size:28px; font-weight:700; letter-spacing:0.3px;
     padding:6px 18px; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.15);
-    -webkit-text-stroke:1px #999; text-stroke:1px #999;
   }
 
   /* Resupply tab: per-location rows */
@@ -171,26 +152,23 @@
   .rotate-btn .rotate-text{font-family:'Oswald'; font-weight:700; font-size:28px; letter-spacing:0.5px; text-transform:uppercase;}
   .rotate-btn:active{opacity:0.8;}
   .resupply-row{margin-bottom:20px;}
+  .resupply-row.empty{margin-bottom:4px;}
   .resupply-row-label{
     font-family:'Oswald'; font-weight:600; font-size:26px; letter-spacing:0.6px; text-transform:uppercase;
     color:var(--ink-soft); background:none; padding:0 4px 6px; margin:0 4px 10px; border-bottom:1.5px solid var(--line);
   }
   .resupply-row-count{
-    display:inline-block; vertical-align:middle; background:var(--line); color:var(--ink); font-weight:800;
+    display:inline-block; background:var(--line); color:var(--ink); font-weight:800;
     font-size:15px; padding:2px 12px; border-radius:12px; margin-left:8px;
   }
-  .resupply-row-strip{
-    display:flex; gap:10px; overflow-x:auto; overflow-y:hidden; padding:0 4px 6px;
-    max-height:640px; opacity:1;
-    transition:max-height 0.32s cubic-bezier(0.4,0,0.2,1), opacity 0.22s ease, padding 0.32s ease;
-  }
-  .resupply-row-strip.collapsed{max-height:0; opacity:0; padding-top:0; padding-bottom:0; pointer-events:none;}
+  .resupply-row-strip{display:flex; gap:10px; overflow-x:auto; padding:0 4px 6px;}
   .resupply-card{flex-shrink:0; cursor:pointer;}
+  .resupply-badge-stack{position:absolute; display:flex; flex-direction:row; align-items:flex-start;}
+  .resupply-badge-stack .size-badge, .resupply-badge-stack .qty-badge{position:static;}
   .qty-badge{
-    position:absolute; top:6px; right:6px; background:rgba(255,255,255,0.8); color:#000;
-    font-family:'Oswald'; font-size:30px; font-weight:800; letter-spacing:0.3px;
-    padding:6px 18px; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.15);
-    -webkit-text-stroke:1px #999; text-stroke:1px #999;
+    position:absolute; background:var(--restock); color:#fff;
+    font-family:'Oswald'; font-weight:800; letter-spacing:0.3px;
+    border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.15);
   }
 
   .empty-state{text-align:center;padding:60px 24px;color:var(--ink-soft);}
@@ -216,29 +194,15 @@
   .overlay.show{display:flex;}
   .sheet{
     background:var(--paper-raised); width:100%; max-width:420px; border-radius:16px;
-    position:relative; overflow:hidden;
+    padding:18px; max-height:60vh; overflow-y:auto; overflow-x:hidden; position:relative;
     zoom:1.5; /* scales the whole popup uniformly, so every element keeps its exact relative layout */
-    /* Lets descendants use @container queries + cqw units keyed to THIS
-       box's own rendered width, rather than guessing from the device's
-       viewport width via @media. This is what actually varies by device/
-       window size (tablet, foldable, resized desktop window, etc.) — the
-       popup's own width is the thing that determines whether its content
-       fits, not the raw screen size. */
-    container-type: inline-size;
-    container-name: popup;
-  }
-  /* The actual scrolling happens in here, not on .sheet itself — .sheet-close
-     is a direct child of .sheet (outside this div), so it never scrolls out
-     of reach no matter how far you scroll the content underneath it. */
-  .sheet-scroll{
-    padding:18px; max-height:82vh; overflow-y:auto; overflow-x:hidden;
   }
   .sheet.wide{max-width:560px;}
   .sheet.narrow{max-width:620px;}
   .sheet.display-wide{max-width:min(900px, 60vw);}
   .sheet-close{
     position:absolute; top:12px; right:12px; width:30px;height:30px;border-radius:50%;
-    background:var(--restock); color:#fff; font-size:16px; font-weight:700; border:none; z-index:5;
+    background:var(--restock); color:#fff; font-size:16px; font-weight:700; border:none;
   }
   .sheet h2{font-size:16px;margin:0 0 4px;text-transform:uppercase;letter-spacing:0.5px;padding-right:34px;}
   .sheet .desc{font-size:12.5px;color:var(--ink-soft);margin-bottom:14px;line-height:1.5;}
@@ -255,7 +219,6 @@
     font-size:25px;font-weight:600;color:var(--ink-soft);
   }
   .chip.on{background:var(--thread);border-color:var(--thread);color:#fff;}
-  .chip.on-hold-chip.on{background:var(--restock);border-color:var(--restock);color:#fff;}
   .sheet-actions{display:flex;gap:10px;margin-top:8px;}
   .btn{font-family:'Inter';font-weight:600;font-size:13px;border:none;border-radius:9px;padding:11px 14px;flex:1;}
   .btn-primary{background:var(--thread);color:#fff;}
@@ -273,104 +236,59 @@
 
   /* item detail popup, per sketch */
   .detail-wrap{display:flex; gap:16px;}
-  /* clamp(min, preferred, max): the preferred value is in cqw (% of the
-     .sheet container's own width), so the photo shrinks/grows continuously
-     as the popup gets narrower or wider — a tablet or a resized desktop
-     window lands somewhere sensible in between, not just "desktop size"
-     or "phone size" with nothing in between. */
-  .detail-photo{width:clamp(110px, 45cqw, 220px); aspect-ratio:4/5; border-radius:10px; overflow:hidden; background:var(--line); flex-shrink:0;}
+  .detail-photo{width:220px; aspect-ratio:4/5; border-radius:10px; overflow:hidden; background:var(--line); flex-shrink:0;}
   .detail-photo img{width:100%;height:100%;object-fit:cover;}
-  /* IMPORTANT: minmax(0,1fr), not bare 1fr. A bare "1fr" track is really
-     shorthand for minmax(auto,1fr) — the "auto" floor means a column
-     won't shrink below the natural width of its own content (e.g. the
-     "2XL"/"3XL" labels), so on a narrow popup the grid could still end
-     up wider than its container and get clipped/require scrolling, even
-     though every column was nominally "equal". minmax(0,1fr) removes
-     that floor so the grid always divides whatever width it actually
-     has and can never force itself wider than its container. (A forced
-     minimum was previously tried here and reverted for the same
-     overflow reason — that's a different thing: an intentional min
-     added on top, not this implicit content-based one.) */
-  .size-grid{flex:1; min-width:0; display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:4px;}
+  /* Plain 1fr columns only — always divides whatever width the popup
+     actually has, so this can never force the grid wider than its
+     container and push columns off-screen. A forced minimum column
+     width was tried here twice before and both times caused real
+     overflow once combined with the popup's zoom scaling, so the
+     "generous on desktop" goal is handled by the popup's own width
+     (below) instead of by a floor on the grid. */
+  .size-grid{flex:1; min-width:0; display:grid; grid-template-columns:repeat(7,1fr); gap:4px;}
   .detail-wrap .size-grid{gap:2px;}
   .detail-wrap .size-col{border-right:1.5px solid var(--line); padding:0 6px;}
   .detail-wrap .size-col:last-child{border-right:none;}
   .size-col{text-align:center;}
-  .size-label{font-family:'Oswald';font-weight:700;font-size:clamp(15px, 4.2cqw, 39px);margin-bottom:5px;}
+  .size-label{font-family:'Oswald';font-weight:700;font-size:39px;margin-bottom:5px;}
   .size-plus,.size-minus{
     width:100%; border-radius:7px; border:1.5px solid var(--line); background:var(--paper);
-    font-size:clamp(20px, 5cqw, 48px); font-weight:800; height:clamp(30px, 6.5cqw, 63px); padding:0;
+    font-size:48px; font-weight:800; height:63px; padding:0;
     display:flex; align-items:center; justify-content:center;
   }
   .size-plus{color:var(--ok); border-color:var(--ok);}
-  .size-minus{color:var(--restock); border-color:var(--restock); margin-top:4px;}
+  .size-minus{color:var(--restock); border-color:var(--restock); margin-top:26px;}
   .size-count{
-    font-family:'Oswald'; font-size:clamp(14px, 3cqw, 29px); font-weight:800; text-align:center;
+    font-family:'Oswald'; font-size:29px; font-weight:800; text-align:center;
     background:var(--line); border-radius:10px; padding:8px 0; margin:6px 0; color:var(--ink);
   }
   .size-count.low{color:var(--low);}
   .size-min{font-size:9.5px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:0.4px;margin-top:2px;}
-  /* The +/- buttons and 7-column grid can't smoothly "shrink" past a
-     point next to a photo — at some popup width the only real fix is to
-     stop competing for horizontal space and stack instead. That's a
-     binary layout switch (unlike font sizes above, which scale
-     continuously), so it stays a threshold — but the threshold now reads
-     the popup's own rendered width via @container, not the device's
-     viewport width, so it reacts correctly to a resized browser window,
-     a tablet, a foldable, etc. — not just "is this a phone or not." */
-  @container popup (max-width: 420px){
-    .detail-wrap{flex-direction:column;}
-    /* Photo gets to use nearly the popup's full width now that it's no
-       longer sharing a row with the size grid — bigger, more prominent
-       image instead of a small one leaving the box looking sparse. */
-    .detail-photo{width:100%; max-width:340px; margin:0 auto 8px;}
-  }
+  /* Phone-width version of the same size-grid controls — scaled down so
+     they actually fit the now-narrower columns instead of overflowing. */
   @media (max-width:699px){
-    /* The 60vw desktop-widening rule above computes to well under a
-       phone's own screen width once you get below ~700px viewport
-       (e.g. 234px on a 390px phone) — smaller than the plain .sheet's
-       420px cap would've given it. That starved the popup itself of
-       room. This stays a @media (viewport) rule rather than @container
-       because it sets the container's OWN width — a box can't query its
-       own size to decide its own size, only its children can query it. */
-    .sheet.display-wide{max-width:calc(100vw - 32px);}
-    /* zoom:1.5 (set above) inflates the ENTIRE rendered popup by 50%
-       AFTER its width is calculated — deliberate on desktop, where
-       there's spare viewport to absorb it. On a phone, the popup is
-       already sized to nearly the full screen width, so that extra 50%
-       pushes the rendered box wider than the screen itself and cuts
-       content off at the edge (needing a horizontal scroll to see the
-       rest) regardless of how well everything inside was sized to fit.
-       Dropping zoom back to 1 on phones makes the popup's rendered size
-       match its calculated size exactly, so nothing can overflow the
-       screen this way. The clamp()-based sizing elsewhere already scales
-       everything down for a phone-width container on its own. */
-    .sheet{zoom:1;}
+    .size-label{font-size:15px; margin-bottom:3px;}
+    .size-plus,.size-minus{font-size:20px; height:30px;}
+    .size-minus{margin-top:10px;}
+    .size-count{font-size:14px; padding:4px 0; margin:3px 0; border-radius:6px;}
+    .size-min{font-size:7.5px;}
   }
 
   /* Storage tab's Request/Resupply popup */
   .restock-popup{display:flex; gap:16px;}
-  .restock-photo-col{width:clamp(120px, 45cqw, 240px); flex-shrink:0; text-align:center;}
+  .restock-photo-col{width:240px; flex-shrink:0; text-align:center;}
   .restock-name-label{font-family:'Oswald'; font-weight:700; font-size:15px; margin-bottom:3px; line-height:1.25;}
   .restock-meta-label{font-family:'Inter'; font-weight:400; font-size:11px; color:var(--ink-soft); margin-bottom:8px; line-height:1.3;}
-  .restock-photo{width:clamp(120px, 45cqw, 240px);aspect-ratio:4/5;border-radius:12px;overflow:hidden;background:var(--line);}
+  .restock-photo{width:240px;aspect-ratio:4/5;border-radius:12px;overflow:hidden;background:var(--line);}
   .restock-photo img{width:100%;height:100%;object-fit:cover;}
   .restock-info-col{flex:1; min-width:0; display:flex; flex-direction:column;}
   .restock-section-label{font-family:'Oswald'; font-weight:700; font-size:12px; letter-spacing:1px; text-transform:uppercase; color:var(--ink-soft); margin-bottom:8px; text-align:center;}
-  .restock-request-label{font-family:'Oswald'; font-weight:700; font-size:clamp(13px, 2.2cqw, 18px); letter-spacing:1px; text-transform:uppercase; color:var(--ink-soft); margin-bottom:8px; text-align:center;}
-  .restock-section-label.need-label{font-size:clamp(17px, 3cqw, 24px);}
-  .restock-request-stepper.lg button{width:clamp(32px, 6cqw, 45px);height:clamp(32px, 6cqw, 45px);border-radius:11px;font-size:clamp(16px, 3cqw, 24px);}
-  .restock-request-stepper.lg input{flex:0 0 clamp(92px, 20cqw, 160px);width:clamp(92px, 20cqw, 160px);font-size:clamp(17px, 3.5cqw, 28px);padding:9px 0;}
-  .restock-request-stepper.xl button{width:clamp(38px, 8cqw, 72px);height:clamp(38px, 8cqw, 72px);border-radius:18px;font-size:clamp(18px, 4.5cqw, 38px);}
-  .restock-request-stepper.xl input{flex:0 0 clamp(100px, 22cqw, 170px);width:clamp(100px, 22cqw, 170px);font-size:clamp(19px, 5cqw, 44px);padding:14px 0;border-radius:14px;}
-  .on-hold-box{margin-top:14px; padding:0; height:clamp(44px, 8cqw, 62px); position:relative; display:block; text-align:left; background:none; border:none;}
-  .on-hold-box .restock-section-label{margin:0; position:absolute; left:0; top:50%; font-size:clamp(10.5px, 1.4cqw, 12px); line-height:1; text-align:left; transform:translateY(-50%);}
-  .on-hold-num{position:absolute; left:50%; top:0; transform:translateX(-50%); display:flex; align-items:center; justify-content:center; width:clamp(78px, 16cqw, 128px); height:clamp(44px, 8cqw, 62px); box-sizing:border-box; padding:5px 14px; border:2px solid var(--restock); border-radius:12px; background:var(--restock-bg); font-family:'Oswald'; font-size:clamp(20px, 4.2cqw, 33px); font-weight:800; line-height:1; color:var(--restock);}
+  .restock-request-label{font-family:'Oswald'; font-weight:700; font-size:24px; letter-spacing:1px; text-transform:uppercase; color:var(--ink-soft); margin-bottom:8px; text-align:center;}
   .restock-need-block{padding-bottom:16px; border-bottom:1.5px solid var(--line); margin-bottom:16px; text-align:center;}
   .restock-need-numbers{display:flex; align-items:center; justify-content:center; gap:8px;}
   .restock-need-num,.restock-need-size{
-    font-family:'Oswald'; font-size:clamp(32px, 8cqw, 60px); font-weight:800; color:var(--ink); line-height:1;
-    background:var(--line); border-radius:14px; padding:16px 24px; min-width:clamp(50px, 10cqw, 92px); text-align:center;
+    font-family:'Oswald'; font-size:60px; font-weight:800; color:var(--ink); line-height:1;
+    background:var(--line); border-radius:14px; padding:16px 24px; min-width:92px; text-align:center;
   }
   .restock-request-section{text-align:center; min-width:0;}
   .restock-request-stepper{display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:14px; min-width:0;}
@@ -385,20 +303,9 @@
     -moz-appearance:textfield;
   }
   .restock-request-stepper input::-webkit-outer-spin-button,.restock-request-stepper input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
-  /* As with the Display popup above: the photo column and info column
-     can only shrink so far side by side before the stepper/Need numbers
-     start overlapping. That's the one thing here that still needs a hard
-     switch rather than smooth scaling — but it now keys off the popup's
-     own rendered width via @container, so it reacts correctly regardless
-     of what device or window size produced that width. */
-  @container popup (max-width: 460px){
-    .restock-popup{flex-direction:column; gap:10px;}
-    .restock-photo-col{width:100%; max-width:200px; margin:0 auto;}
-    .restock-photo{width:100%; max-width:200px; margin:0 auto;}
-  }
   .btn-resupply{
-    width:100%; background:#B7D9C2; color:#2E7D32; border:2px solid #2E7D32;
-    font-family:'Oswald'; font-weight:700; font-size:28px; letter-spacing:0.5px; text-transform:uppercase;
+    width:100%; background:var(--restock-bg); color:var(--restock); border:2px solid var(--restock);
+    font-family:'Oswald'; font-weight:700; font-size:14px; letter-spacing:0.5px; text-transform:uppercase;
     padding:13px 0; border-radius:11px; margin-top:14px;
   }
   .btn-resupply:active{opacity:0.8;}
@@ -412,13 +319,9 @@
 
   /* item form (New / Edit) — landscape layout, photo left / fields right */
   .item-form{display:flex; gap:20px; flex-wrap:wrap;}
-  /* Same fluid-photo approach as the other two popups. This one doesn't
-     need a @container rule for stacking — it already has flex-wrap, so
-     once the photo + fields combined width exceeds the popup's own
-     width, fields naturally wrap below the photo on their own. */
-  .item-form-photo{width:clamp(120px, 40cqw, 220px); flex-shrink:0;}
-  .item-form-photo .upload-box{height:clamp(120px, 40cqw, 220px);}
-  .item-form-fields{flex:1; min-width:clamp(160px, 60cqw, 280px); display:flex; flex-direction:column; gap:14px;}
+  .item-form-photo{width:220px; flex-shrink:0;}
+  .item-form-photo .upload-box{height:220px;}
+  .item-form-fields{flex:1; min-width:280px; display:flex; flex-direction:column; gap:14px;}
   .item-form .row2{display:flex; gap:10px;}
   .item-form .row2 .field{margin-bottom:0;}
   .item-form .row2 .field.name-field{flex:5;}
@@ -445,7 +348,6 @@
 </style>
 </head>
 <body>
-<div id="uiShell">
 
 <header class="topbar">
   <div class="brand">
@@ -480,9 +382,7 @@
   <div class="nav-item" data-tab="resupply"><div class="tab-label">Resupply</div></div>
   <div class="nav-item" data-tab="edit"><div class="tab-label">Edit</div></div>
 </nav>
-</div>
 
-<!-- Popups live outside the scaled UI shell so global UI Scale never shrinks or enlarges them. -->
 <div class="overlay" id="overlay"><div class="sheet" id="sheetContent"></div></div>
 <div class="toast" id="toast"></div>
 <input type="file" accept="image/*" id="fileInput" style="display:none;">
@@ -508,10 +408,6 @@ const SIZE_COLORS = {
 const SIZE_SHORT_LABEL = { XS:'XS', S:'S', M:'M', L:'L', XL:'XL', XXL:'2XL', XXXL:'3XL' };
 
 let state = loadState();
-function applyUiScale(){
-  const v = Math.max(0.3, Math.min(1.2, Number(state.uiScale) || 1));
-  document.documentElement.style.setProperty('--ui-scale', String(v));
-}
 let rows = [];              // flat rows from the sheet
 let currentTab = 'display';
 let locationFilter = state.deviceLocation || 'All'; // 'All' | 'T' | 'P' | 'B' — persisted per device, see pickLocationFilter
@@ -526,28 +422,6 @@ let undoStack = [];
 let sessionCheckedKeys = new Set(); // group keys touched via the Display tab this session
 let checkedFilter = 'all'; // 'all' | 'checked' | 'unchecked' — Display tab only
 let storageSizeFilter = 'All'; // 'All' | 'XS' | ... — Storage tab only
-// Storage entries are only eligible when the current Display value matches a value
-// that was explicitly changed through the Display popup on this device. This prevents
-// arbitrary below-minimum values entered directly in Sheets from appearing in Storage.
-let storageDisplayTriggers = {}; // { '<location>:<id>': displayValue }
-function loadStorageDisplayTriggers(){
-  try{ storageDisplayTriggers = JSON.parse(localStorage.getItem('storageDisplayTriggers')||'{}') || {}; }catch(e){ storageDisplayTriggers = {}; }
-}
-function saveStorageDisplayTriggers(){ localStorage.setItem('storageDisplayTriggers', JSON.stringify(storageDisplayTriggers)); }
-function storageTriggerKey(code,id){ return code+':'+String(id); }
-function markStorageDisplayTrigger(code,id,value){
-  const key=storageTriggerKey(code,id);
-  if(Number(value||0) > 0){ storageDisplayTriggers[key]=Number(value||0); }
-  else { storageDisplayTriggers[key]=0; }
-  saveStorageDisplayTriggers();
-}
-function clearStorageDisplayTrigger(code,id){ delete storageDisplayTriggers[storageTriggerKey(code,id)]; saveStorageDisplayTriggers(); }
-function hasCurrentStorageDisplayTrigger(row,code){
-  const key=storageTriggerKey(code,row.ID);
-  return Object.prototype.hasOwnProperty.call(storageDisplayTriggers,key)
-    && Number(storageDisplayTriggers[key]) === Number(row[DISPLAY_FIELD_BY_CODE[code]]||0);
-}
-loadStorageDisplayTriggers();
 
 function loadState(){
   try{
@@ -555,7 +429,6 @@ function loadState(){
     if(raw){
       const s = JSON.parse(raw);
       if(s.apiUrl){
-        s.uiScale = Math.max(0.3, Math.min(1.2, Number(s.uiScale) || 1));
         if(!s.gridColsByTab){
           const legacy = s.gridCols || 4; // migrate old shared value
           s.gridColsByTab = { display:legacy, storage:legacy, resupply:legacy, edit:legacy };
@@ -564,7 +437,7 @@ function loadState(){
       }
     }
   }catch(e){}
-  return { apiUrl: DEFAULT_API_URL, uiScale: 1, gridColsByTab: { display:4, storage:4, resupply:4, edit:4 } }; // falls back to the baked-in URL if nothing saved (or it got cleared)
+  return { apiUrl: DEFAULT_API_URL, gridColsByTab: { display:4, storage:4, resupply:4, edit:4 } }; // falls back to the baked-in URL if nothing saved (or it got cleared)
 }
 function saveState(){ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
 
@@ -623,13 +496,7 @@ function activeRows(){ return rows.filter(r=>Number(r.Active)===1); }
 function allGroups(){ return buildGroups(rows); } // for Edit tab lookups — includes inactive items
 function editFilteredRows(){
   if(editFilter==='active') return rows.filter(r=>Number(r.Active)===1);
-  if(editFilter==='inactive'){
-    // Only items where EVERY size is inactive — an item with some active
-    // and some inactive sizes should show under "Active", not here.
-    const groups = buildGroups(rows); // full row set per group, regardless of filter
-    const fullyInactiveKeys = new Set(groups.filter(g=>!groupIsActive(g)).map(g=>g.key));
-    return rows.filter(r=>fullyInactiveKeys.has(groupKey(r)));
-  }
+  if(editFilter==='inactive') return rows.filter(r=>Number(r.Active)!==1);
   return rows.slice();
 }
 function categoriesList(){
@@ -698,19 +565,8 @@ function render(){
     const resupplyField = RESUPPLY_FIELD_BY_CODE[locationFilter];
     let storageRows = list.filter(r=>matchesFilters({type:r.Type, location:r.Location}))
                            .filter(r=>{
-                             // Storage is driven only by an explicit Display-tab change.
-                             // The selected location's On Hold reduces the remaining need.
-                             // If a resupply has been requested for this location, hide the
-                             // item from Storage until that request is cleared. A below-min
-                             // value entered directly in Sheets is not a Storage trigger.
-                             const effectiveNeed = Math.max(0, Number(r.MinCount||0) - Number(r[displayField]||0) - Number(r[ON_HOLD_FIELD_BY_CODE[locationFilter]]||0));
-                             const resupplyRequested = Number(r[resupplyField]||0) > 0;
-                             // A below-minimum Display value alone is not enough. The
-                             // item must have reached this state through an explicit
-                             // Display-tab change on this device, and the Sheet value
-                             // must still match that recorded Display value.
-                             const displayWasChanged = hasCurrentStorageDisplayTrigger(r, locationFilter);
-                             return effectiveNeed > 0 && displayWasChanged && !resupplyRequested;
+                             if(Number(r[displayField]||0) >= Number(r.MinCount||0)) return false;
+                             return Number(r[resupplyField]||0)===0;
                            })
                            .sort((a,b)=>SIZES.indexOf(a.Size)-SIZES.indexOf(b.Size));
     if(storageSizeFilter!=='All'){
@@ -817,13 +673,10 @@ function cardHtml(g){
 function storageCardHtml(row){
   const color = SIZE_COLORS[row.Size] || '#DDD';
   const photo = row.Photo ? `<img src="${esc(row.Photo)}" loading="lazy">` : '👕';
-  const displayField = DISPLAY_FIELD_BY_CODE[locationFilter];
-  const need = Math.max(0, Number(row.MinCount||0) - Number(row[displayField]||0) - Number(row[ON_HOLD_FIELD_BY_CODE[locationFilter]]||0));
   return `
     <div class="card storage-card" style="border-color:${color}; box-shadow:0 0 0 3px ${color}55;" onclick="openStorageItem('${esc(row.ID)}')">
       <div class="photo" style="background:${color}33;">${photo}</div>
-      <div class="size-badge" style="background:${color}CC;">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
-      <div class="qty-badge">${need}</div>
+      <div class="size-badge" style="background:${color};">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
       ${locationFilter==='All' ? `<div class="loc-tag">${esc(row.Location)}</div>` : ''}
       <div class="cap">${esc(row.Name)}</div>
     </div>`;
@@ -926,10 +779,10 @@ function openSheetHtml(html, widthMode){
   sheetEl.classList.toggle('wide', widthMode===true);
   sheetEl.classList.toggle('narrow', widthMode==='restock');
   sheetEl.classList.toggle('display-wide', widthMode==='display');
-  sheetEl.innerHTML = `<button class="sheet-close" onclick="closeSheet()">×</button><div class="sheet-scroll">${html}</div>`;
+  sheetEl.innerHTML = `<button class="sheet-close" onclick="closeSheet()">×</button>` + html;
   document.getElementById('overlay').classList.add('show');
 }
-function closeSheet(){ document.getElementById('overlay').classList.remove('show'); pendingPhotoBase64=null; resupplyEditContext=null; }
+function closeSheet(){ document.getElementById('overlay').classList.remove('show'); pendingPhotoBase64=null; }
 document.getElementById('overlay').addEventListener('click', e=>{ if(e.target.id==='overlay') closeSheet(); });
 
 /* ============================= ITEM DETAIL POPUP (Display/Storage/Resupply) ============================= */
@@ -954,8 +807,8 @@ function openDisplayCheck(key){
     displayDraft[row.ID] = { original:Number(row[displayField]||0), current:Number(row[displayField]||0), minCount:Number(row.MinCount||0) };
   });
   openSheetHtml(`
-    <div style="margin-bottom:4px; padding-right:34px;">
-      <h2 style="margin:0 0 1px 0;">${esc(g.name)}</h2>
+    <div style="display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:10px; padding-right:34px;">
+      <h2 style="margin:0; padding-right:0;">${esc(g.name)}</h2>
       <div class="desc" style="margin:0;">${esc(g.type)} · ${esc(g.location)} · editing <b>Display - ${esc(LOC_NAME_BY_CODE[locationFilter])}</b></div>
     </div>
     <div class="detail-wrap">
@@ -993,6 +846,7 @@ function stepDisplayDraft(id, delta){
 async function commitDisplayCheck(forceChecked){
   const draft = displayDraft, groupKeyForDraft = displayDraftGroupKey;
   const displayField = DISPLAY_FIELD_BY_CODE[locationFilter];
+  const resupplyField = RESUPPLY_FIELD_BY_CODE[locationFilter];
   displayDraft = null; displayDraftGroupKey = null;
   closeSheet();
   if(!draft) return;
@@ -1004,10 +858,26 @@ async function commitDisplayCheck(forceChecked){
       const newVal = draft[id].current;
       const row = rows.find(r=>sameId(r.ID,id));
       if(row) row[displayField] = newVal;
-      // Only Display-tab changes can create Storage eligibility. Record the exact
-      // value written so a direct Sheet edit cannot accidentally create a Storage item.
-      if(newVal >= Number(draft[id].minCount||0)){ clearStorageDisplayTrigger(locationFilter, id); } else { markStorageDisplayTrigger(locationFilter, id, newVal); }
       await apiPost({action:'setDisplayCount', id, value:newVal, location:locationFilter});
+    }
+  }
+  // Hitting Done/Checked = a fresh floor audit of every size in this item,
+  // not just the ones you actually moved. Any size that's now below its
+  // Min Count but still carries a leftover (nonzero) Resupply value for
+  // this location gets that value cleared — otherwise a size that was
+  // already sitting at 0 untouched this session stays invisible to the
+  // Storage tab forever, since its old Resupply flag never gets reset.
+  const clearIds = Object.keys(draft).filter(id=>{
+    const row = rows.find(r=>sameId(r.ID,id));
+    if(!row) return false;
+    const belowMin = draft[id].current < draft[id].minCount;
+    return belowMin && Number(row[resupplyField]||0) !== 0;
+  });
+  if(clearIds.length>0){
+    for(const id of clearIds){
+      const row = rows.find(r=>sameId(r.ID,id));
+      if(row) row[resupplyField] = 0;
+      await apiPost({action:'setResupplyForLocation', id, location:locationFilter, value:0});
     }
   }
   if(changedIds.length>0 || forceChecked){
@@ -1020,30 +890,21 @@ async function commitDisplayCheck(forceChecked){
 /* ============================= RESUPPLY TAB: PER-LOCATION ROWS ============================= */
 const RESUPPLY_FIELD_BY_CODE = { T:'ResupplyTangle', P:'ResupplyParkway', B:'ResupplyBears' };
 const DISPLAY_FIELD_BY_CODE = { T:'DisplayTangle', P:'DisplayParkway', B:'DisplayBears' };
-const ON_HOLD_FIELD_BY_CODE = { T:'OnHoldTangle', P:'OnHoldParkway', B:'OnHoldBears' };
 const LOC_NAME_BY_CODE = { T:'Tangle', P:'Parkway', B:'Bears' };
-const ON_HOLD_CODE = 'H'; // not a real location — a pseudo-row/filter pinned to the end
-let resupplyRowOrder = ['T','P','B']; // rotated by the rotate button (On Hold never joins this array)
-let resupplyLocFilter = { T:true, P:true, B:true }; // which location rows are expanded
-let onHoldActive = false; // On Hold filter selected — shows only On Hold items
-let onHoldPrevFilter = null; // snapshot of resupplyLocFilter to restore when On Hold is deselected
+let resupplyRowOrder = ['T','P','B']; // rotated by the rotate button
+let resupplyLocFilter = { T:true, P:true, B:true }; // which location rows are shown
 
 function resupplyItemsForCode(code){
   const field = RESUPPLY_FIELD_BY_CODE[code];
   const catFiltered = activeRows().filter(r=>categoryFilter==='All' || r.Type===categoryFilter);
   return catFiltered.filter(r=>Number(r[field]||0)>0 && r.Location.indexOf(code)!==-1);
 }
-function onHoldItems(){
-  // Show items that have On Hold units at any location.
-  return activeRows().filter(r=>(categoryFilter==='All' || r.Type===categoryFilter) && ['T','P','B'].some(c=>Number(r[ON_HOLD_FIELD_BY_CODE[c]]||0)>0));
-}
 function renderResupplyTab(main, list){
   const catFiltered = list.filter(r=>categoryFilter==='All' || r.Type===categoryFilter);
   main.innerHTML = `
     <div class="toolbar-top">
       <div class="chiprow" style="flex:1;">
-        ${resupplyRowOrder.map(code=>`<div class="chip ${(!onHoldActive && resupplyLocFilter[code])?'on':''}" data-loc-chip="${code}" onclick="toggleResupplyLocFilter('${code}')">${LOC_NAME_BY_CODE[code]}</div>`).join('')}
-        <div class="chip on-hold-chip ${onHoldActive?'on':''}" data-loc-chip="${ON_HOLD_CODE}" onclick="toggleOnHoldFilter()">On Hold</div>
+        ${resupplyRowOrder.map(code=>`<div class="chip ${resupplyLocFilter[code]?'on':''}" data-loc-chip="${code}" onclick="toggleResupplyLocFilter('${code}')">${LOC_NAME_BY_CODE[code]}</div>`).join('')}
       </div>
       <button class="rotate-btn" onclick="rotateResupplyOrder()" title="Cycle row order">
         <span class="rotate-arrow">⟳</span><span class="rotate-text">Rotate</span>
@@ -1056,57 +917,47 @@ function renderResupplyTab(main, list){
     <div id="resupplyRows"></div>
   `;
   const container = document.getElementById('resupplyRows');
-  // Rows are ALWAYS rendered (label + count never disappear) — only the
-  // item strip collapses visually. On Hold sits last unless it's the
-  // active filter, in which case it slides to the top.
-  const rowOrder = onHoldActive ? [ON_HOLD_CODE, ...resupplyRowOrder] : [...resupplyRowOrder, ON_HOLD_CODE];
-  container.innerHTML = rowOrder.map(code=>{
-    if(code===ON_HOLD_CODE){
-      const items = onHoldItems();
-      return resupplyRowHtml(code, items, !onHoldActive);
-    }
-    const items = catFiltered.filter(r=>Number(r[RESUPPLY_FIELD_BY_CODE[code]]||0)>0 && r.Location.indexOf(code)!==-1);
-    return resupplyRowHtml(code, items, onHoldActive || !resupplyLocFilter[code]);
+  const visibleCodes = resupplyRowOrder.filter(code=>resupplyLocFilter[code]);
+  if(visibleCodes.length===0){
+    container.innerHTML = emptyState();
+    return;
+  }
+  container.innerHTML = visibleCodes.map(code=>{
+    const field = RESUPPLY_FIELD_BY_CODE[code];
+    const items = catFiltered.filter(r=>Number(r[field]||0)>0 && r.Location.indexOf(code)!==-1);
+    return resupplyRowHtml(code, field, items);
   }).join('');
 }
-function resupplyRowHtml(code, items, collapsed){
-  const name = code===ON_HOLD_CODE ? 'ON HOLD' : LOC_NAME_BY_CODE[code].toUpperCase();
-  const collapsedClass = (collapsed || items.length===0) ? ' collapsed' : '';
-  const cardsHtml = items.map(r => code===ON_HOLD_CODE ? onHoldCardHtml(r) : resupplyCardHtml(r, code, RESUPPLY_FIELD_BY_CODE[code])).join('');
+function resupplyRowHtml(code, field, items){
+  const name = LOC_NAME_BY_CODE[code].toUpperCase();
+  if(items.length===0){
+    return `<div class="resupply-row empty" data-loc-row="${code}"><div class="resupply-row-label">${name} <span class="resupply-row-count">0</span></div></div>`;
+  }
   return `<div class="resupply-row" data-loc-row="${code}">
-    <div class="resupply-row-label">${esc(name)} <span class="resupply-row-count">${items.length}</span></div>
-    <div class="resupply-row-strip${collapsedClass}">${cardsHtml}</div>
+    <div class="resupply-row-label">${name} <span class="resupply-row-count">${items.length}</span></div>
+    <div class="resupply-row-strip">
+      ${items.map(r=>resupplyCardHtml(r, code, field)).join('')}
+    </div>
   </div>`;
 }
 function resupplyCardHtml(row, code, field){
   const qty = Number(row[field]||0);
   const photo = row.Photo ? `<img src="${esc(row.Photo)}" loading="lazy">` : '👕';
   const color = SIZE_COLORS[row.Size] || '#DDD';
-  // Card width still follows grid zoom (+/-), but the badges are now a
-  // fixed size (like the Storage tab) instead of scaling with it.
+  // Grid zoom (+/-) sizes these cards, and the badges scale right along with them.
   const w = Math.max(90, Math.round(900/(state.gridColsByTab.resupply||4)));
+  const scale = (w/150) * 0.75;
+  const badgeFont = Math.max(10, Math.round(18*scale));
+  const padV = Math.max(2, Math.round(4*scale));
+  const padH = Math.max(5, Math.round(11*scale));
+  const offset = Math.max(3, Math.round(6*scale));
   return `
-    <div class="card resupply-card" style="width:${w}px; border-color:${color}; box-shadow:0 0 0 3px ${color}55;" onclick="openResupplyItem('${esc(row.ID)}','${code}')">
+    <div class="card resupply-card" style="width:${w}px;" onclick="openResupplyItem('${esc(row.ID)}','${code}')">
       <div class="photo">${photo}</div>
-      <div class="size-badge" style="background:${color}CC; border:2px solid #fff;">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
-      <div class="qty-badge">${qty}</div>
-      <div class="cap">${esc(row.Name)}</div>
-    </div>`;
-}
-function onHoldCardHtml(row){
-  // Same look as a regular resupply card, but the badge shows the total
-  // On Hold count across locations. Clicking opens the popup for a location
-  // that actually has On Hold units, preserving location-specific storage.
-  const onHold = ['T','P','B'].reduce((sum,c)=>sum+Number(row[ON_HOLD_FIELD_BY_CODE[c]]||0),0);
-  const photo = row.Photo ? `<img src="${esc(row.Photo)}" loading="lazy">` : '👕';
-  const color = SIZE_COLORS[row.Size] || '#DDD';
-  const w = Math.max(90, Math.round(900/(state.gridColsByTab.resupply||4)));
-  const primaryCode = ['T','P','B'].find(c=>Number(row[ON_HOLD_FIELD_BY_CODE[c]]||0)>0 && (row.Location||'').indexOf(c)!==-1) || ['T','P','B'].find(c=>Number(row[ON_HOLD_FIELD_BY_CODE[c]]||0)>0) || (row.Location||'').split('').find(c=>LOC_NAME_BY_CODE[c]) || 'T';
-  return `
-    <div class="card resupply-card" style="width:${w}px; border-color:${color}; box-shadow:0 0 0 3px ${color}55;" onclick="openResupplyItem('${esc(row.ID)}','${primaryCode}')">
-      <div class="photo">${photo}</div>
-      <div class="size-badge" style="background:${color}CC; border:2px solid #fff;">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
-      <div class="qty-badge">${onHold}</div>
+      <div class="resupply-badge-stack" style="top:${offset}px; left:${offset}px; gap:${offset}px;">
+        <div class="size-badge" style="background:${color}; font-size:${badgeFont}px; padding:${padV}px ${padH}px; border:2px solid #fff;">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
+        <div class="qty-badge" style="font-size:${badgeFont}px; padding:${padV}px ${padH}px;">${qty}</div>
+      </div>
       <div class="cap">${esc(row.Name)}</div>
     </div>`;
 }
@@ -1158,35 +1009,10 @@ function animateResupplyRowChange(mutateFn){
   });
 }
 function toggleResupplyLocFilter(code){
-  animateResupplyRowChange(()=>{
-    // While On Hold is active, a location click switches into location mode
-    // and selects that location; it does not toggle that location off.
-    if(onHoldActive){
-      onHoldActive = false;
-      onHoldPrevFilter = null;
-      resupplyLocFilter = {T:false, P:false, B:false};
-      resupplyLocFilter[code] = true;
-      return;
-    }
-    resupplyLocFilter[code] = !resupplyLocFilter[code];
-  });
-}
-function toggleOnHoldFilter(){
-  animateResupplyRowChange(()=>{
-    if(!onHoldActive){
-      onHoldPrevFilter = {...resupplyLocFilter}; // remember so we can restore it
-      onHoldActive = true;
-    }else{
-      onHoldActive = false;
-      if(onHoldPrevFilter) resupplyLocFilter = {...onHoldPrevFilter};
-      onHoldPrevFilter = null;
-    }
-  });
+  animateResupplyRowChange(()=>{ resupplyLocFilter[code] = !resupplyLocFilter[code]; });
 }
 function rotateResupplyOrder(){
   animateResupplyRowChange(()=>{
-    // On Hold is never part of resupplyRowOrder, so it's untouched by
-    // rotation and stays pinned to the end (unless it's the active filter).
     const withItems = resupplyRowOrder.filter(code => resupplyItemsForCode(code).length > 0);
     const withoutItems = resupplyRowOrder.filter(code => resupplyItemsForCode(code).length === 0);
     if(withItems.length > 1) withItems.push(withItems.shift());
@@ -1194,111 +1020,52 @@ function rotateResupplyOrder(){
   });
 }
 
-// Holds the context for whichever Resupply-tab edit popup is currently
-// open, so the stepper can live-update the On Hold preview and Done can
-// compute the same shortfall it just showed. Cleared on close/submit.
-let resupplyEditContext = null; // { id, code, requiredQty }
-
 function openResupplyItem(id, code){
   const row = rows.find(r=>sameId(r.ID,id));
   if(!row) return;
-
-  // IMPORTANT: Popup NEED is ONLY the selected location's Resupply field.
-  // Tangle -> ResupplyTangle, Parkway -> ResupplyParkway, Bears -> ResupplyBears.
-  // It must never be calculated from Min Count, Display, or On Hold.
   const field = RESUPPLY_FIELD_BY_CODE[code];
-  const requiredQty = Number(row[field] || 0);
-  const current = requiredQty;
-
-  // On Hold is the shortfall between the original location-specific
-  // Resupply requirement and the quantity currently shown in the stepper.
-  const onHoldPreview = Math.min(5, Math.max(0, requiredQty - current));
-  resupplyEditContext = { id, code, requiredQty };
-
+  const current = Number(row[field]||0);
   const photo = row.Photo ? `<img src="${esc(row.Photo)}">` : '';
   openSheetHtml(`
+    <h2>${esc(row.Name)}</h2>
+    <div class="desc">${esc(row.Type)} · ${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)} · ${esc(LOC_NAME_BY_CODE[code])}</div>
     <div class="restock-popup">
-      <div class="restock-photo-col">
-        <div class="restock-name-label">${esc(row.Name)}</div>
-        <div class="restock-meta-label">${esc(LOC_NAME_BY_CODE[code])}: ${esc(row.Type)} · ${esc(SIZE_FULL_NAMES[row.Size]||row.Size)}</div>
-        <div class="restock-photo">${photo}</div>
-        <div class="on-hold-box">
-          <div class="restock-section-label">On Hold</div>
-          <div class="on-hold-num" id="onHoldNum">${onHoldPreview}</div>
-        </div>
-      </div>
+      <div class="restock-photo-col"><div class="restock-photo">${photo}</div></div>
       <div class="restock-info-col">
-        <div class="restock-need-block">
-          <div class="restock-section-label need-label">Need</div>
-          <div class="restock-need-numbers">
-            <span class="restock-need-size">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</span>
-            <span class="restock-need-num">${requiredQty}</span>
-          </div>
-        </div>
         <div class="restock-request-section">
-          <div class="restock-request-label">Resupply for ${esc(LOC_NAME_BY_CODE[code])}</div>
-          <div class="restock-request-stepper xl">
+          <div class="restock-section-label">Resupply Quantity</div>
+          <div class="restock-request-stepper">
             <button type="button" class="rq-minus" onclick="stepResupplyEdit(-1)">−</button>
             <input type="number" id="resupplyEditQty" value="${current}" readonly>
             <button type="button" class="rq-plus" onclick="stepResupplyEdit(1)">+</button>
           </div>
-          <button class="btn-resupply" onclick="submitResupplyEdit()">Done</button>
+          <button class="btn btn-primary" style="width:100%;" onclick="submitResupplyEdit('${esc(id)}','${code}')">Done</button>
         </div>
       </div>
     </div>
   `, 'restock');
 }
-
 function stepResupplyEdit(delta){
   const el = document.getElementById('resupplyEditQty');
   el.value = Math.max(0, Number(el.value||0)+delta);
-  updateOnHoldPreview();
 }
-
-function updateOnHoldPreview(){
-  if(!resupplyEditContext) return;
+async function submitResupplyEdit(id, code){
   const value = Number(document.getElementById('resupplyEditQty').value||0);
-  // ON HOLD = location's original Resupply quantity - on-screen quantity.
-  // Never allow a negative value and cap the stored/displayed amount at 5.
-  const onHold = Math.min(5, Math.max(0, resupplyEditContext.requiredQty - value));
-  const el = document.getElementById('onHoldNum');
-  if(el) el.textContent = onHold;
-}
-
-async function submitResupplyEdit(){
-  if(!resupplyEditContext) return;
-  const { id, code, requiredQty } = resupplyEditContext;
-  const value = Number(document.getElementById('resupplyEditQty').value||0);
-  const onHold = Math.min(5, Math.max(0, requiredQty - value));
   const row = rows.find(r=>sameId(r.ID,id));
-  resupplyEditContext = null;
-  if(!row){ closeSheet(); return; }
-
+  if(!row) return;
   pushUndoSnapshot([id]);
   closeSheet();
   toast('Saving…');
-
-  // Done must not alter Resupply or any other field. Only write the
-  // selected location's On Hold field when a shortfall actually applies.
-  if(onHold > 0){
-    row[ON_HOLD_FIELD_BY_CODE[code]] = onHold;
-  }
-
-  const res = await apiPost({
-    action:'setResupplyForLocation',
-    id,
-    location:code,
-    onHold,
-    applyOnHold: onHold > 0
-  });
+  row[RESUPPLY_FIELD_BY_CODE[code]] = value;
+  const res = await apiPost({action:'setResupplyForLocation', id, location:code, value});
   toast(res.ok ? 'Saved' : 'Save failed: ' + (res.error||'unknown error'), !res.ok);
   refresh(false);
 }
 
 /* ============================= STORAGE TAB: REQUEST / RESUPPLY POPUP ============================= */
 const SIZE_FULL_NAMES = {
-  XS: 'Extra Small', S: 'Small', M: 'Medium', L: 'Large',
-  XL: 'Extra Large', XXL: 'Double X Large', XXXL: 'Triple X Large'
+  XS: 'EXTRA SMALL', S: 'SMALL', M: 'MEDIUM', L: 'LARGE',
+  XL: 'EXTRA LARGE', XXL: '2X LARGE', XXXL: '3X LARGE'
 };
 function openStorageItem(id){
   if(locationFilter==='All'){
@@ -1314,12 +1081,12 @@ function openStorageItem(id){
     <div class="restock-popup">
       <div class="restock-photo-col">
         <div class="restock-name-label">${esc(row.Name)}</div>
-        <div class="restock-meta-label">${esc(LOC_NAME_BY_CODE[locationFilter])}: ${esc(row.Type)} · ${esc(SIZE_FULL_NAMES[row.Size]||row.Size)}</div>
+        <div class="restock-meta-label">Location: ${esc(LOC_NAME_BY_CODE[locationFilter])} · ${esc(row.Type)} · ${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
         <div class="restock-photo">${photo}</div>
       </div>
       <div class="restock-info-col">
         <div class="restock-need-block">
-          <div class="restock-section-label need-label">Need</div>
+          <div class="restock-section-label">Need</div>
           <div class="restock-need-numbers">
             <span class="restock-need-size">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</span>
             <span class="restock-need-num">${need}</span>
@@ -1327,7 +1094,7 @@ function openStorageItem(id){
         </div>
         <div class="restock-request-section">
           <div class="restock-request-label">Request for ${esc(LOC_NAME_BY_CODE[locationFilter])}</div>
-          <div class="restock-request-stepper lg">
+          <div class="restock-request-stepper">
             <button type="button" class="rq-minus" onclick="stepRequest(-1)">−</button>
             <input type="number" id="requestQty" value="${need}" readonly>
             <button type="button" class="rq-plus" onclick="stepRequest(1)">+</button>
@@ -1632,47 +1399,21 @@ function openGroup(key){
 
 document.getElementById('btnSettings').addEventListener('click', openSettings);
 function openSettings(){
-  const pct = Math.round((state.uiScale || 1) * 100);
   openSheetHtml(`
     <h2>Settings</h2>
-    <div class="desc">Adjust the overall web UI size for smaller or larger screens. This scales the entire interface, including the photo-card grid, independently of the per-tab grid controls.</div>
+    <div class="desc">Paste the Apps Script web app URL from your Google Sheet. Grid zoom is now set per-tab using each tab's own +/- buttons.</div>
     <div class="field"><label>Apps Script URL</label><input type="text" id="setUrl" value="${esc(state.apiUrl)}" placeholder="https://script.google.com/macros/s/.../exec"></div>
-    <div class="field">
-      <label>UI Scale <span id="uiScaleValue">${pct}%</span></label>
-      <div style="display:flex;align-items:center;gap:12px;">
-        <button type="button" class="btn btn-ghost" onclick="adjustUiScale(-0.05)">−</button>
-        <input type="range" id="uiScaleRange" min="0.3" max="1.2" step="0.05" value="${state.uiScale || 1}" style="flex:1;" oninput="previewUiScale(this.value)">
-        <button type="button" class="btn btn-ghost" onclick="adjustUiScale(0.05)">+</button>
-      </div>
-    </div>
     <div class="sheet-actions">
       <button class="btn btn-ghost" onclick="closeSheet()">Cancel</button>
       <button class="btn btn-primary" onclick="submitSettings()">Save</button>
     </div>`);
 }
-function previewUiScale(value){
-  const v = Math.max(0.3, Math.min(1.2, Number(value)||1));
-  document.documentElement.style.setProperty('--ui-scale', String(v));
-  const label = document.getElementById('uiScaleValue');
-  if(label) label.textContent = Math.round(v*100)+'%';
-}
-function adjustUiScale(delta){
-  const range = document.getElementById('uiScaleRange');
-  const current = Number(range ? range.value : state.uiScale || 1);
-  const v = Math.max(0.3, Math.min(1.2, Math.round((current+delta)*20)/20));
-  if(range) range.value = v;
-  previewUiScale(v);
-}
 function submitSettings(){
   state.apiUrl = document.getElementById('setUrl').value.trim();
-  const range = document.getElementById('uiScaleRange');
-  if(range) state.uiScale = Math.max(0.3, Math.min(1.2, Number(range.value)||1));
-  applyUiScale();
   saveState(); closeSheet(); refresh(true);
 }
 
 /* ============================= INIT ============================= */
-applyUiScale();
 render();
 refresh(false);
 setInterval(()=>{ if(!document.hidden) refresh(false); }, 20000);
