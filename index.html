@@ -681,6 +681,8 @@ const TRANSLATIONS = {
     languageLabel:'Language', langEnglish:'English', langKorean:'한국어',
     storageTitle:'Storage', pickLocationTitle:'Pick a location',
     pickLocationBody:'Storage needs a specific location selected (top bar) — restocking requirements are tracked separately per location now.',
+  },
+  ko: {
     notConnected:'연결 안 됨', refreshSession:'세션 새로고침', newBtn:'추가', allLocs:'전체 매장',
     tabDisplay:'진열', tabStorage:'재고', tabResupply:'보충', tabEdit:'편집',
     connectTitle:'아직 연결되지 않음', connectBody:'오른쪽 위 ⚙ 아이콘을 눌러 Apps Script URL을 입력하세요.',
@@ -1192,7 +1194,7 @@ document.getElementById('btnRefreshSession').addEventListener('click', async ()=
 /* ============================= GRID SCALE ============================= */
 function adjustScale(d){
   const cur = state.gridColsByTab[currentTab] || 4;
-  state.gridColsByTab[currentTab] = Math.max(2, Math.min(10, cur+d));
+  state.gridColsByTab[currentTab] = Math.max(1, Math.min(10, cur+d));
   saveState(); render();
 }
 
