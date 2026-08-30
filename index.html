@@ -87,14 +87,19 @@
     display:flex; flex-direction:column;
     min-height:0; /* lets this flex item actually shrink+scroll instead of forcing
                      the whole page taller once there are more categories than fit */
+    padding-bottom:90px; /* matches main.grid-area's bottom padding — reserves
+                             room for the fixed bottom nav so the last category
+                             (and the Edit button) never sit hidden behind it */
   }
   .side-cat{
-    padding:28px 6px; text-align:center; font-size:36px; font-weight:600;
-    letter-spacing:0.4px; text-transform:uppercase; color:var(--ink-soft);
-    border-bottom:1.5px solid var(--line); line-height:1.25; position:relative;
+    padding:12px 6px; text-align:center; font-size:20px; font-weight:600;
+    letter-spacing:0.3px; text-transform:uppercase; color:var(--ink-soft);
+    border-bottom:1.5px solid var(--line); line-height:1.15; position:relative;
+    word-break:break-word; /* safety net so a future long/unbroken type name
+                               shrinks its wrapping instead of overflowing the box */
   }
   .side-cat.active{background:var(--thread); color:#fff;}
-  .side-cat.side-cat-all{padding:10.5px 6px;} /* was 14px — shortened to 75% of its previous height */
+  .side-cat.side-cat-all{padding:9px 6px;} /* ~75% of the regular box's vertical padding */
   .side-cat .rm{
     position:absolute; top:3px; right:3px; width:16px;height:16px;border-radius:50%;
     background:rgba(0,0,0,0.15); color:#fff; font-size:10px; line-height:16px; display:none;
@@ -847,7 +852,8 @@ function storageCardHtml(row){
 // (used for filtering/matching/onclick) is untouched either way.
 const SIDEBAR_LABEL_BREAKS = {
   'Long Sleeve': ['Long','Sleeve'],
-  'Y Hoodie Crewneck': ['Y Hoodie','Crewneck']
+  'Y Hoodie Crewneck': ['Y Hoodie','Crewneck'],
+  'K Hoodie Crewneck': ['K Hoodie','Crewneck']
 };
 function sidebarCategoryLabel(c){
   const parts = SIDEBAR_LABEL_BREAKS[c];
