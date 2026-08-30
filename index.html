@@ -12,12 +12,14 @@
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root{
+    --ui-scale:1;
     --paper:#F3EFE6; --paper-raised:#FBF9F4; --ink:#25241F; --ink-soft:#6B655A;
     --line:#DAD3C2; --thread:#3E5C76; --thread-dark:#2C4257;
     --ok:#4C7A5D; --ok-bg:#E4EEE6; --low:#C2801F; --low-bg:#F7E9D3;
     --restock:#AE4239; --restock-bg:#F5DEDA;
   }
-  *{box-sizing:border-box;} html,body{margin:0;padding:0;height:100%;} body{zoom:var(--ui-scale,1);}
+  *{box-sizing:border-box;} html,body{margin:0;padding:0;width:100%;height:100%;} body{overflow:hidden;}
+  #uiShell{width:calc(100% / var(--ui-scale));height:calc(100vh / var(--ui-scale));transform:scale(var(--ui-scale));transform-origin:top left;display:flex;flex-direction:column;}
   body{
     background:var(--paper); color:var(--ink);
     font-family:'Inter',system-ui,-apple-system,sans-serif;
@@ -27,6 +29,8 @@
   h1,h2,.tab-label,.side-cat,.stamp{font-family:'Oswald',system-ui,sans-serif;}
   ::-webkit-scrollbar{width:0;height:0;}
 
+  /* The UI shell is scaled as one unit so the photo grid, its columns, and all controls
+     shrink/grow together instead of browser zoom expanding the CSS viewport. */
   /* ---------- Top bar ---------- */
   header.topbar{
     background:var(--thread-dark); color:#fff; flex-shrink:0;
@@ -362,6 +366,7 @@
 </style>
 </head>
 <body>
+<div id="uiShell">
 
 <header class="topbar">
   <div class="brand">
@@ -400,6 +405,7 @@
 <div class="overlay" id="overlay"><div class="sheet" id="sheetContent"></div></div>
 <div class="toast" id="toast"></div>
 <input type="file" accept="image/*" id="fileInput" style="display:none;">
+</div>
 
 <script>
 /* ============================= STATE ============================= */
@@ -422,7 +428,10 @@ const SIZE_COLORS = {
 const SIZE_SHORT_LABEL = { XS:'XS', S:'S', M:'M', L:'L', XL:'XL', XXL:'2XL', XXXL:'3XL' };
 
 let state = loadState();
-function applyUiScale(){ document.body.style.zoom = String(state.uiScale || 1); }
+function applyUiScale(){
+  const v = Math.max(0.6, Math.min(1.2, Number(state.uiScale) || 1));
+  document.documentElement.style.setProperty('--ui-scale', String(v));
+}
 let rows = [];              // flat rows from the sheet
 let currentTab = 'display';
 let locationFilter = state.deviceLocation || 'All'; // 'All' | 'T' | 'P' | 'B' — persisted per device, see pickLocationFilter
@@ -1546,7 +1555,7 @@ function openSettings(){
   const pct = Math.round((state.uiScale || 1) * 100);
   openSheetHtml(`
     <h2>Settings</h2>
-    <div class="desc">Adjust the overall web UI size for smaller or larger screens. This scales the entire interface, independently of the per-tab grid controls.</div>
+    <div class="desc">Adjust the overall web UI size for smaller or larger screens. This scales the entire interface, including the photo-card grid, independently of the per-tab grid controls.</div>
     <div class="field"><label>Apps Script URL</label><input type="text" id="setUrl" value="${esc(state.apiUrl)}" placeholder="https://script.google.com/macros/s/.../exec"></div>
     <div class="field">
       <label>UI Scale <span id="uiScaleValue">${pct}%</span></label>
@@ -1563,7 +1572,7 @@ function openSettings(){
 }
 function previewUiScale(value){
   const v = Math.max(0.6, Math.min(1.2, Number(value)||1));
-  document.body.style.zoom = String(v);
+  document.documentElement.style.setProperty('--ui-scale', String(v));
   const label = document.getElementById('uiScaleValue');
   if(label) label.textContent = Math.round(v*100)+'%';
 }
