@@ -1398,6 +1398,21 @@ function onHoldItems(){
 }
 function renderResupplyTab(main, list){
   const catFiltered = list.filter(r=>categoryFilter==='All' || r.Type===categoryFilter);
+
+  // FLIP: capture each currently-rendered card's on-screen position (plus
+  // its row's own scroll offset) BEFORE rebuilding the HTML below. When an
+  // item disappears after Done/Resupply/Stock, the cards after it shift
+  // left to fill the gap — without this, that shift is an instant snap and
+  // it's genuinely hard to tell "the item moved" from "the item changed",
+  // especially with similar-looking product photos. Keyed by row ID +
+  // location so the same physical row is tracked correctly even though it
+  // can appear in different location rows.
+  const cardsBefore = {};
+  document.querySelectorAll('#resupplyRows [data-card-key]').forEach(el=>{
+    const strip = el.closest('.resupply-row-strip');
+    cardsBefore[el.dataset.cardKey] = el.getBoundingClientRect().left + (strip ? strip.scrollLeft : 0);
+  });
+
   main.innerHTML = `
     <div class="toolbar-top resupply-toolbar-default">
       <div class="chiprow" style="flex:1;">
@@ -1444,6 +1459,28 @@ function renderResupplyTab(main, list){
     const items = catFiltered.filter(r=>Number(r[RESUPPLY_FIELD_BY_CODE[code]]||0)>0 && r.Location.indexOf(code)!==-1);
     return resupplyRowHtml(code, items, onHoldActive || !resupplyLocFilter[code]);
   }).join('');
+
+  // FLIP animate: measure surviving cards' new positions and slide them in
+  // from their old spot. Cards with no "before" entry are genuinely new
+  // (or their row was previously collapsed/hidden) and just appear as-is —
+  // only cards that were already visible and moved get the slide.
+  requestAnimationFrame(()=>{
+    const uiScale = state.uiScale || 1;
+    document.querySelectorAll('#resupplyRows [data-card-key]').forEach(el=>{
+      const key = el.dataset.cardKey;
+      if(cardsBefore[key]===undefined) return;
+      const strip = el.closest('.resupply-row-strip');
+      const nowLeft = el.getBoundingClientRect().left + (strip ? strip.scrollLeft : 0);
+      const delta = (cardsBefore[key] - nowLeft) / uiScale;
+      if(Math.abs(delta) < 1) return;
+      el.style.transition = 'none';
+      el.style.transform = `translateX(${delta}px)`;
+      requestAnimationFrame(()=>{
+        el.style.transition = 'transform 0.32s cubic-bezier(0.4,0,0.2,1)';
+        el.style.transform = 'translateX(0)';
+      });
+    });
+  });
 }
 function resupplyRowHtml(code, items, collapsed){
   const name = code===ON_HOLD_CODE ? 'ON HOLD' : LOC_NAME_BY_CODE[code].toUpperCase();
@@ -1467,7 +1504,7 @@ function resupplyCardHtml(row, code, field){
   const w = Math.max(90, Math.round(900/(state.gridColsByTab.resupply||4)));
   const pending = pendingSubmitIds.has(String(row.ID));
   return `
-    <div class="card resupply-card${pending?' card-pending':''}" style="width:${w}px; border-color:${color}; box-shadow:0 0 0 3px ${color}55;" ${pending?'':`onclick="openResupplyItem('${esc(row.ID)}','${code}')"`}>
+    <div class="card resupply-card${pending?' card-pending':''}" data-card-key="${esc(row.ID)}_${code}" style="width:${w}px; border-color:${color}; box-shadow:0 0 0 3px ${color}55;" ${pending?'':`onclick="openResupplyItem('${esc(row.ID)}','${code}')"`}>
       <div class="photo">${photo}</div>
       <div class="size-badge" style="background:${color}CC; border:2px solid #fff;">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
       <div class="qty-badge">${qty}</div>
@@ -1484,7 +1521,7 @@ function onHoldCardHtml(row){
   const w = Math.max(90, Math.round(900/(state.gridColsByTab.resupply||4)));
   const pending = pendingSubmitIds.has(String(row.ID));
   return `
-    <div class="card resupply-card${pending?' card-pending':''}" style="width:${w}px; border-color:${color}; box-shadow:0 0 0 3px ${color}55;" ${pending?'':`onclick="openOnHoldItem('${esc(row.ID)}')"`}>
+    <div class="card resupply-card${pending?' card-pending':''}" data-card-key="onhold_${esc(row.ID)}" style="width:${w}px; border-color:${color}; box-shadow:0 0 0 3px ${color}55;" ${pending?'':`onclick="openOnHoldItem('${esc(row.ID)}')"`}>
       <div class="photo">${photo}</div>
       <div class="size-badge" style="background:${color}CC; border:2px solid #fff;">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
       <div class="qty-badge">${onHold}</div>
