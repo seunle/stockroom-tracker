@@ -524,8 +524,12 @@ let filePickerTarget = null; // 'add' | 'edit'
 let editingGroupKey = null;
 let undoStack = [];
 let pendingHapticsEnabled = null; // draft value while Settings sheet is open; null = unchanged
-let sessionCheckedKeys = new Set(); // group keys touched via the Display tab this session
+let sessionCheckedKeys = new Set(); // composite "<locationCode>::<groupKey>" entries — see sessionCheckKey()
 let checkedFilter = 'all'; // 'all' | 'checked' | 'unchecked' — Display tab only
+// "Checked" is scoped to whichever location was being reviewed, not just
+// the item — checking an item's Bears count shouldn't show it as checked
+// when someone then looks at its Parkway count on the same device/session.
+function sessionCheckKey(locCode, groupKey){ return locCode+'::'+groupKey; }
 let storageSizeFilter = 'All'; // 'All' | 'XS' | ... — Storage tab only
 // Storage entries are only eligible when the current Display value matches a value
 // that was explicitly changed through the Display popup on this device. This prevents
@@ -634,9 +638,10 @@ function editFilteredRows(){
   return rows.slice();
 }
 function categoriesList(){
-  const source = currentTab==='edit' ? rows : activeRows();
-  const set = new Set(source.map(r=>r.Type).filter(Boolean));
-  return Array.from(set).sort();
+  // Always the full fixed set (same list the New/Edit item dropdowns use),
+  // not just whichever types currently have items — so an empty type like
+  // "Kids" still shows up in the sidebar instead of disappearing.
+  return FIXED_TYPES.slice();
 }
 function matchesFilters(g, ignoreLocation){
   if(categoryFilter!=='All' && g.type!==categoryFilter) return false;
@@ -764,7 +769,7 @@ function render(){
   const grid = document.getElementById('photoGrid');
 
   if(currentTab==='display' && checkedFilter!=='all'){
-    groups = groups.filter(g => checkedFilter==='checked' ? sessionCheckedKeys.has(g.key) : !sessionCheckedKeys.has(g.key));
+    groups = groups.filter(g => checkedFilter==='checked' ? sessionCheckedKeys.has(sessionCheckKey(locationFilter,g.key)) : !sessionCheckedKeys.has(sessionCheckKey(locationFilter,g.key)));
   }
 
   if(groups.length===0){
@@ -803,7 +808,7 @@ function emptyState(){
 function cardHtml(g){
   const status = groupStatus(g);
   const inactive = !groupIsActive(g);
-  const checked = currentTab==='display' && sessionCheckedKeys.has(g.key);
+  const checked = currentTab==='display' && locationFilter!=='All' && sessionCheckedKeys.has(sessionCheckKey(locationFilter,g.key));
   const locBadge = locationFilter==='All' ? `<div class="loc-tag">${esc(g.location)}</div>` : '';
   const photo = g.photo ? `<img src="${esc(g.photo)}" loading="lazy">` : '👕';
   return `
@@ -940,6 +945,7 @@ document.getElementById('overlay').addEventListener('click', e=>{ if(e.target.id
 // Pressing X or tapping outside discards everything — nothing is sent.
 let displayDraft = null;      // { rowId: { original, current, minCount } }
 let displayDraftGroupKey = null;
+let displayDraftLocation = null; // location code the popup was opened for — used for the location-scoped checked key
 function openDisplayCheck(key){
   if(locationFilter==='All'){
     toast('Select a specific location (top bar) before checking Display counts', true);
@@ -950,6 +956,7 @@ function openDisplayCheck(key){
   const g = groups.find(x=>x.key===key);
   if(!g) return;
   displayDraftGroupKey = key;
+  displayDraftLocation = locationFilter;
   displayDraft = {};
   Object.values(g.rows).forEach(row=>{
     displayDraft[row.ID] = { original:Number(row[displayField]||0), current:Number(row[displayField]||0), minCount:Number(row.MinCount||0) };
@@ -983,13 +990,16 @@ function openDisplayCheck(key){
       <button class="btn btn-primary" onclick="commitDisplayCheck(false)">Done</button>
     </div>
   `, 'display');
-  // Opens scrolled to the bottom (Done/Checked buttons) instead of the top —
-  // on phone the size grid can run taller than the popup, and the buttons
-  // you actually tap live at the bottom, not the sizes at the top.
-  // Double rAF: right after the overlay switches from display:none to
-  // flex, layout/paint hasn't happened yet, so scrollHeight can still read
-  // as the old (collapsed) size. Waiting two animation frames guarantees
-  // the browser has laid out and painted the new content first.
+  scrollSheetToBottom();
+}
+// Opens a popup already scrolled to the bottom instead of the top — used
+// where the actionable buttons sit at the bottom and content above them
+// can run taller than the popup on phone. Double rAF: right after the
+// overlay switches from display:none to flex, layout/paint hasn't happened
+// yet, so scrollHeight can still read as the old (collapsed) size. Waiting
+// two animation frames guarantees the browser has laid out and painted the
+// new content first.
+function scrollSheetToBottom(){
   requestAnimationFrame(()=>{
     requestAnimationFrame(()=>{
       const scrollEl = document.querySelector('#sheetContent .sheet-scroll');
@@ -1005,9 +1015,9 @@ function stepDisplayDraft(id, delta){
   if(el){ el.textContent = d.current; el.classList.toggle('low', d.current < d.minCount); }
 }
 async function commitDisplayCheck(forceChecked){
-  const draft = displayDraft, groupKeyForDraft = displayDraftGroupKey;
-  const displayField = DISPLAY_FIELD_BY_CODE[locationFilter];
-  displayDraft = null; displayDraftGroupKey = null;
+  const draft = displayDraft, groupKeyForDraft = displayDraftGroupKey, locForDraft = displayDraftLocation;
+  const displayField = DISPLAY_FIELD_BY_CODE[locForDraft];
+  displayDraft = null; displayDraftGroupKey = null; displayDraftLocation = null;
   closeSheet();
   if(!draft) return;
   const changedIds = Object.keys(draft).filter(id => draft[id].current !== draft[id].original);
@@ -1018,7 +1028,7 @@ async function commitDisplayCheck(forceChecked){
       const newVal = draft[id].current;
       const row = rows.find(r=>sameId(r.ID,id));
       if(row) row[displayField] = newVal;
-      await apiPost({action:'setDisplayCount', id, value:newVal, location:locationFilter});
+      await apiPost({action:'setDisplayCount', id, value:newVal, location:locForDraft});
     }
   }
   // Pressing Done/Checked is an explicit review of EVERY size shown in this
@@ -1029,11 +1039,13 @@ async function commitDisplayCheck(forceChecked){
   // there even though you looked right at it.
   Object.keys(draft).forEach(id=>{
     const finalVal = draft[id].current;
-    if(finalVal >= Number(draft[id].minCount||0)){ clearStorageDisplayTrigger(locationFilter, id); }
-    else { markStorageDisplayTrigger(locationFilter, id, finalVal); }
+    if(finalVal >= Number(draft[id].minCount||0)){ clearStorageDisplayTrigger(locForDraft, id); }
+    else { markStorageDisplayTrigger(locForDraft, id, finalVal); }
   });
   if(changedIds.length>0 || forceChecked){
-    sessionCheckedKeys.add(groupKeyForDraft);
+    // Scoped to the location this popup was actually reviewing — checking
+    // Bears' count doesn't mark the item checked for Parkway too.
+    sessionCheckedKeys.add(sessionCheckKey(locForDraft, groupKeyForDraft));
     toast(forceChecked ? 'Marked checked' : 'Checked');
   }
   refresh(false);
@@ -1045,7 +1057,8 @@ const DISPLAY_FIELD_BY_CODE = { T:'DisplayTangle', P:'DisplayParkway', B:'Displa
 const ON_HOLD_FIELD_BY_CODE = { T:'OnHoldTangle', P:'OnHoldParkway', B:'OnHoldBears' };
 const LOC_NAME_BY_CODE = { T:'Tangle', P:'Parkway', B:'Bears' };
 const ON_HOLD_CODE = 'H'; // not a real location — a pseudo-row/filter pinned to the end
-let resupplyRowOrder = ['T','P','B']; // rotated by the rotate button (On Hold never joins this array)
+let resupplyRowOrder = ['T','P','B']; // rotated by the rotate button (On Hold never joins this array) — governs ROW order only
+const LOC_FILTER_CHIP_ORDER = ['T','P','B']; // filter chip order — deliberately never reordered by Rotate, always Tangle/Parkway/Bears
 let resupplyLocFilter = { T:true, P:true, B:true }; // which location rows are expanded
 let onHoldActive = false; // On Hold filter selected — shows only On Hold items
 let onHoldPrevFilter = null; // snapshot of resupplyLocFilter to restore when On Hold is deselected
@@ -1064,7 +1077,7 @@ function renderResupplyTab(main, list){
   main.innerHTML = `
     <div class="toolbar-top">
       <div class="chiprow" style="flex:1;">
-        ${resupplyRowOrder.map(code=>`<div class="chip ${(!onHoldActive && resupplyLocFilter[code])?'on':''}" data-loc-chip="${code}" onclick="toggleResupplyLocFilter('${code}')">${LOC_NAME_BY_CODE[code]}</div>`).join('')}
+        ${LOC_FILTER_CHIP_ORDER.map(code=>`<div class="chip ${(!onHoldActive && resupplyLocFilter[code])?'on':''}" data-loc-chip="${code}" onclick="toggleResupplyLocFilter('${code}')">${LOC_NAME_BY_CODE[code]}</div>`).join('')}
         <div class="chip on-hold-chip ${onHoldActive?'on':''}" data-loc-chip="${ON_HOLD_CODE}" onclick="toggleOnHoldFilter()">On Hold</div>
       </div>
       <button class="rotate-btn" onclick="rotateResupplyOrder()" title="Cycle row order">
@@ -1150,12 +1163,22 @@ function animateResupplyRowChange(mutateFn){
   mutateFn();
   render();
   requestAnimationFrame(()=>{
+    // getBoundingClientRect() measures on-screen (post-scale) pixels, but
+    // these rows/chips live inside #uiShell, which is visually scaled via
+    // CSS transform for the UI Scale setting. A transform applied to a
+    // descendant of a scaled ancestor is interpreted in LOCAL (pre-scale)
+    // units, then gets scaled again on top when rendered — so a raw
+    // screen-pixel delta ends up displayed at roughly (delta × scale) of
+    // its intended distance. Dividing by the current scale here corrects
+    // for that, so the slide animation covers the actual visual gap
+    // instead of over/undershooting it at any UI Scale other than 100%.
+    const uiScale = state.uiScale || 1;
     const newContainer = document.getElementById('resupplyRows');
     if(newContainer){
       newContainer.querySelectorAll('[data-loc-row]').forEach(el=>{
         const code = el.dataset.locRow;
         if(before[code]===undefined) return;
-        const delta = before[code] - el.getBoundingClientRect().top;
+        const delta = (before[code] - el.getBoundingClientRect().top) / uiScale;
         if(Math.abs(delta) < 1) return;
         el.style.transition = 'none';
         el.style.transform = `translateY(${delta}px)`;
@@ -1168,7 +1191,7 @@ function animateResupplyRowChange(mutateFn){
     document.querySelectorAll('[data-loc-chip]').forEach(el=>{
       const code = el.dataset.locChip;
       if(chipsBefore[code]===undefined) return;
-      const delta = chipsBefore[code] - el.getBoundingClientRect().left;
+      const delta = (chipsBefore[code] - el.getBoundingClientRect().left) / uiScale;
       if(Math.abs(delta) < 1) return;
       el.style.transition = 'none';
       el.style.transform = `translateX(${delta}px)`;
@@ -1181,13 +1204,14 @@ function animateResupplyRowChange(mutateFn){
 }
 function toggleResupplyLocFilter(code){
   animateResupplyRowChange(()=>{
-    // While On Hold is active, a location click switches into location mode
-    // and selects that location; it does not toggle that location off.
+    // While On Hold is active, clicking any location box just deselects
+    // On Hold — same as clicking the On Hold chip itself — restoring
+    // whatever location filter was active before. The tapped location is
+    // NOT also applied; it takes a second, separate tap once On Hold is off.
     if(onHoldActive){
       onHoldActive = false;
+      if(onHoldPrevFilter) resupplyLocFilter = {...onHoldPrevFilter};
       onHoldPrevFilter = null;
-      resupplyLocFilter = {T:false, P:false, B:false};
-      resupplyLocFilter[code] = true;
       return;
     }
     resupplyLocFilter[code] = !resupplyLocFilter[code];
@@ -1359,6 +1383,7 @@ function openStorageItem(id){
       </div>
     </div>
   `, 'restock');
+  scrollSheetToBottom();
 }
 function stepRequest(delta){
   const el = document.getElementById('requestQty');
