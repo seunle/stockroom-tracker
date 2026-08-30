@@ -274,14 +274,18 @@
      or "phone size" with nothing in between. */
   .detail-photo{width:clamp(110px, 45cqw, 220px); aspect-ratio:4/5; border-radius:10px; overflow:hidden; background:var(--line); flex-shrink:0;}
   .detail-photo img{width:100%;height:100%;object-fit:cover;}
-  /* Plain 1fr columns only — always divides whatever width the popup
-     actually has, so this can never force the grid wider than its
-     container and push columns off-screen. A forced minimum column
-     width was tried here twice before and both times caused real
-     overflow once combined with the popup's zoom scaling, so the
-     "generous on desktop" goal is handled by the popup's own width
-     (below) instead of by a floor on the grid. */
-  .size-grid{flex:1; min-width:0; display:grid; grid-template-columns:repeat(7,1fr); gap:4px;}
+  /* IMPORTANT: minmax(0,1fr), not bare 1fr. A bare "1fr" track is really
+     shorthand for minmax(auto,1fr) — the "auto" floor means a column
+     won't shrink below the natural width of its own content (e.g. the
+     "2XL"/"3XL" labels), so on a narrow popup the grid could still end
+     up wider than its container and get clipped/require scrolling, even
+     though every column was nominally "equal". minmax(0,1fr) removes
+     that floor so the grid always divides whatever width it actually
+     has and can never force itself wider than its container. (A forced
+     minimum was previously tried here and reverted for the same
+     overflow reason — that's a different thing: an intentional min
+     added on top, not this implicit content-based one.) */
+  .size-grid{flex:1; min-width:0; display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:4px;}
   .detail-wrap .size-grid{gap:2px;}
   .detail-wrap .size-col{border-right:1.5px solid var(--line); padding:0 6px;}
   .detail-wrap .size-col:last-child{border-right:none;}
@@ -321,6 +325,18 @@
        because it sets the container's OWN width — a box can't query its
        own size to decide its own size, only its children can query it. */
     .sheet.display-wide{max-width:calc(100vw - 32px);}
+    /* zoom:1.5 (set above) inflates the ENTIRE rendered popup by 50%
+       AFTER its width is calculated — deliberate on desktop, where
+       there's spare viewport to absorb it. On a phone, the popup is
+       already sized to nearly the full screen width, so that extra 50%
+       pushes the rendered box wider than the screen itself and cuts
+       content off at the edge (needing a horizontal scroll to see the
+       rest) regardless of how well everything inside was sized to fit.
+       Dropping zoom back to 1 on phones makes the popup's rendered size
+       match its calculated size exactly, so nothing can overflow the
+       screen this way. The clamp()-based sizing elsewhere already scales
+       everything down for a phone-width container on its own. */
+    .sheet{zoom:1;}
   }
 
   /* Storage tab's Request/Resupply popup */
