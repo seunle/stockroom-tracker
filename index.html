@@ -144,6 +144,7 @@
     border:2px solid var(--paper-raised);
   }
   .card.inactive-card{opacity:0.5;}
+  .card.card-pending{opacity:0.35; pointer-events:none;}
   .card.session-checked{filter:grayscale(1); opacity:0.55;}
   .card.session-checked::after{
     content:'✓ Checked'; position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
@@ -257,6 +258,12 @@
   .sheet-scroll{
     padding:18px; max-height:82vh; overflow-y:auto; overflow-x:hidden;
   }
+  /* Optional fixed footer (currently used by Settings): sits as its own
+     sibling to .sheet-scroll — same trick as .sheet-close — so its
+     buttons never scroll away, while .sheet-scroll's own max-height
+     shrinks to leave it room instead of the two competing for space. */
+  .sheet.has-fixed-footer .sheet-scroll{max-height:60vh;}
+  .sheet-fixed-footer{padding:0 18px 18px;}
   .sheet.wide{max-width:560px;}
   .sheet.narrow{max-width:620px;}
   .sheet.display-wide{max-width:min(900px, 60vw);}
@@ -464,7 +471,8 @@
   .onhold-size-badge{
     flex:1; display:flex; align-items:center; justify-content:center;
     background:var(--line); border-radius:9px;
-    font-family:'Oswald'; font-weight:800; font-size:clamp(26px, 9cqw, 40px); color:var(--ink);
+    font-family:'Oswald'; font-weight:800; color:var(--ink);
+    padding:0 4px; overflow:hidden;
   }
   /* The non-adjustable value box above is the important number for at-a-
      glance understanding, so it gets size priority — the adjustable
@@ -622,7 +630,134 @@ let filePickerTarget = null; // 'add' | 'edit'
 let editingGroupKey = null;
 let undoStack = [];
 let pendingHapticsEnabled = null; // draft value while Settings sheet is open; null = unchanged
+/* ============================= LANGUAGE / TRANSLATIONS ============================= */
+// Only app CHROME text is translated here — buttons, labels, headings,
+// toasts, filter chips, tab titles. Actual sheet DATA is deliberately
+// NEVER translated: item Names, Types (Men/Women/Youth/Kids/.../Cap),
+// Sizes (XS...XXXL), the sidebar's category "All", and location names
+// (Tangle/Parkway/Bears) always display exactly as entered/coded,
+// regardless of language.
+const TRANSLATIONS = {
+  en: {
+    notConnected:'Not connected', refreshSession:'Refresh Session', newBtn:'New', allLocs:'All Locs',
+    tabDisplay:'Display', tabStorage:'Storage', tabResupply:'Resupply', tabEdit:'Edit',
+    connectTitle:'Not connected yet', connectBody:'Tap the ⚙ icon in the top-right to enter your Apps Script URL.',
+    connectEmptyTitle:'Connect your sheet', connectEmptyBody:'Once connected, all three locations will share the same live inventory.',
+    tabTitleDisplay:'On Display', tabTitleStorage:'Needs a Check', tabTitleResupply:'Needs Attention', tabTitleEdit:'All Items',
+    emptyResupply:'No location rows are shown — toggle one on above.',
+    emptyStorage:'Everything on display is at or above its minimum count.',
+    emptyEdit:'No items match this filter.', emptyDefault:'Tap "+ New" up top to add your first item.',
+    emptyNothingTitle:'Nothing here yet',
+    filterAll:'All', filterActive:'Active', filterInactive:'Inactive', filterChecked:'Checked', filterUnchecked:'Unchecked',
+    sidebarEdit:'Edit', sidebarDone:'Done',
+    filterByLocation:'Filter by location', locAll:'All',
+    nothingToUndo:'Nothing to undo', undoing:'Undoing…', undone:'Undone',
+    sessionRefreshed:'Session refreshed — resyncing…', refreshed:'Refreshed', couldNotReach:'Could not reach the sheet', syncFailed:'Sync failed', synced:'Synced ',
+    removeCategoryTitle:'Remove', removeCategoryBody1:'item/size row(s) use this category. Removing it will deactivate them (not delete) — you can restore from the sheet\'s Active column anytime.',
+    cancel:'Cancel', deactivateAll:'Deactivate all', categoryRemoved:'Category removed',
+    newItemTitle:'New item', editItemTitle:'Edit item', deactivatedNotice:'This item is currently deactivated — hidden from Display/Storage/Resupply.',
+    fieldName:'Name', fieldType:'Type', fieldLocation:'Location', chooseEllipsis:'Choose…',
+    fieldSizesCheck:'Sizes check (minimum on display)', upload:'Upload',
+    addItem:'Add item', save:'Save', enterName:'Enter a name', chooseType:'Choose a type', pickLocation:'Pick at least one location',
+    adding:'Adding…', itemAdded:'Item added', addFailed:'Add failed: ', saving:'Saving…', saved:'Saved', saveFailed:'Save failed: ', unknownError:'unknown error',
+    deactivate:'Deactivate', reactivate:'Reactivate', reactivateTitle:'Reactivate', reactivateBody:'This brings it back into Display/Storage/Resupply.',
+    deactivateTitle:'Deactivate', deactivateBody:'Hides it from Display/Storage/Resupply. Nothing is deleted from the sheet — you can reactivate it here anytime, or flip the Active column back to 1 directly in Sheets.',
+    reactivating:'Reactivating…', deactivating:'Deactivating…', reactivated:'Reactivated', deactivatedToast:'Deactivated',
+    selectLocationDisplay:'Select a specific location (top bar) before checking Display counts',
+    editingDisplay:'editing Display -', checkedBtn:'✓ Checked', doneBtn:'Done', markedChecked:'Marked checked', checkedToast:'Checked', minLabel:'min',
+    photoReady:'Photo ready — tap Save/Add to finish', photoError:'Could not read that photo (', photoErrorSuffix:'). Try a JPG or PNG, not HEIC.', processingPhoto:'Processing photo…',
+    connectFirst:'Connect your sheet first',
+    need:'Need', hold:'Hold', onHold:'On Hold', resupplyFor:'Resupply for', requestFor:'Request for', resupplyBtn:'Resupply', stockBtn:'Stock',
+    selectLocationResupply:'Select a specific location (top bar) before requesting a resupply',
+    requesting:'Requesting…', resupplyRequestedFor:'Resupply requested for', displayPlus:'— display +',
+    couldNotSubmit:'Could not submit request: ', addingToHold:'Adding to On Hold…', onHoldForNowIs:'On Hold for', isNow:'is now',
+    couldNotUpdateHold:'Could not update On Hold: ', updated:'Updated',
+    rotate:'Rotate',
+    settingsTitle:'Settings', settingsDesc:'Adjust the overall web UI size for smaller or larger screens. This scales the entire interface, including the photo-card grid, independently of the per-tab grid controls.',
+    apiUrlLabel:'Apps Script URL', uiScaleLabel:'UI Scale', hapticsLabel:'Haptic feedback (buzz on tap)',
+    hapticsOn:'On', hapticsOff:'Off',
+    hapticsDescSupported:'Vibrates briefly on button/card taps. Android only — iPhones don\'t support this.',
+    hapticsDescUnsupported:'This device/browser doesn\'t support vibration, so this setting won\'t do anything here.',
+    languageLabel:'Language', langEnglish:'English', langKorean:'한국어',
+    storageTitle:'Storage', pickLocationTitle:'Pick a location',
+    pickLocationBody:'Storage needs a specific location selected (top bar) — restocking requirements are tracked separately per location now.',
+    notConnected:'연결 안 됨', refreshSession:'세션 새로고침', newBtn:'추가', allLocs:'전체 매장',
+    tabDisplay:'진열', tabStorage:'재고', tabResupply:'보충', tabEdit:'편집',
+    connectTitle:'아직 연결되지 않음', connectBody:'오른쪽 위 ⚙ 아이콘을 눌러 Apps Script URL을 입력하세요.',
+    connectEmptyTitle:'시트 연결하기', connectEmptyBody:'연결하면 세 매장이 동일한 실시간 재고를 공유합니다.',
+    tabTitleDisplay:'진열 중', tabTitleStorage:'확인 필요', tabTitleResupply:'조치 필요', tabTitleEdit:'전체 품목',
+    emptyResupply:'표시된 매장 행이 없습니다 — 위에서 하나를 켜세요.',
+    emptyStorage:'진열된 모든 품목이 최소 수량 이상입니다.',
+    emptyEdit:'이 필터에 맞는 품목이 없습니다.', emptyDefault:'위쪽 "+ 추가"를 눌러 첫 품목을 추가하세요.',
+    emptyNothingTitle:'아직 항목이 없습니다',
+    filterAll:'전체', filterActive:'활성', filterInactive:'비활성', filterChecked:'확인함', filterUnchecked:'미확인',
+    sidebarEdit:'편집', sidebarDone:'완료',
+    filterByLocation:'매장별 필터', locAll:'전체',
+    nothingToUndo:'되돌릴 작업 없음', undoing:'되돌리는 중…', undone:'되돌림',
+    sessionRefreshed:'세션 새로고침됨 — 다시 동기화 중…', refreshed:'새로고침됨', couldNotReach:'시트에 연결할 수 없습니다', syncFailed:'동기화 실패', synced:'동기화됨 ',
+    removeCategoryTitle:'삭제', removeCategoryBody1:'개의 품목/사이즈 행이 이 카테고리를 사용 중입니다. 삭제하면 비활성화됩니다(삭제 아님) — 시트의 Active 열에서 언제든 복원할 수 있습니다.',
+    cancel:'취소', deactivateAll:'모두 비활성화', categoryRemoved:'카테고리가 삭제되었습니다',
+    newItemTitle:'새 품목', editItemTitle:'품목 편집', deactivatedNotice:'이 품목은 현재 비활성화되어 진열/재고/보충 탭에서 숨겨져 있습니다.',
+    fieldName:'이름', fieldType:'종류', fieldLocation:'매장', chooseEllipsis:'선택…',
+    fieldSizesCheck:'사이즈 확인 (진열 최소 수량)', upload:'업로드',
+    addItem:'품목 추가', save:'저장', enterName:'이름을 입력하세요', chooseType:'종류를 선택하세요', pickLocation:'매장을 하나 이상 선택하세요',
+    adding:'추가 중…', itemAdded:'품목이 추가되었습니다', addFailed:'추가 실패: ', saving:'저장 중…', saved:'저장됨', saveFailed:'저장 실패: ', unknownError:'알 수 없는 오류',
+    deactivate:'비활성화', reactivate:'재활성화', reactivateTitle:'재활성화', reactivateBody:'진열/재고/보충 탭에 다시 표시됩니다.',
+    deactivateTitle:'비활성화', deactivateBody:'진열/재고/보충 탭에서 숨겨집니다. 시트에서 삭제되지는 않으며, 언제든 여기서 재활성화하거나 시트의 Active 열을 직접 1로 바꿀 수 있습니다.',
+    reactivating:'재활성화 중…', deactivating:'비활성화 중…', reactivated:'재활성화됨', deactivatedToast:'비활성화됨',
+    selectLocationDisplay:'진열 수량을 확인하려면 상단에서 매장을 선택하세요',
+    editingDisplay:'진열 수정 -', checkedBtn:'✓ 확인함', doneBtn:'완료', markedChecked:'확인 완료로 표시함', checkedToast:'확인함', minLabel:'최소',
+    photoReady:'사진 준비 완료 — 저장/추가를 눌러 마무리하세요', photoError:'사진을 읽을 수 없습니다 (', photoErrorSuffix:'). HEIC 대신 JPG나 PNG를 사용해 보세요.', processingPhoto:'사진 처리 중…',
+    connectFirst:'먼저 시트를 연결하세요',
+    need:'필요', hold:'보류', onHold:'보류 중', resupplyFor:'보충 대상:', requestFor:'요청 대상:', resupplyBtn:'보충', stockBtn:'입고',
+    selectLocationResupply:'보충을 요청하려면 상단에서 매장을 선택하세요',
+    requesting:'요청 중…', resupplyRequestedFor:'보충 요청됨:', displayPlus:'— 진열 +',
+    couldNotSubmit:'요청을 제출할 수 없습니다: ', addingToHold:'보류로 추가 중…', onHoldForNowIs:'', isNow:'보류 수량:',
+    couldNotUpdateHold:'보류 수량을 업데이트할 수 없습니다: ', updated:'업데이트됨',
+    rotate:'회전',
+    settingsTitle:'설정', settingsDesc:'화면 크기에 맞게 전체 UI 크기를 조정합니다. 탭별 그리드 크기와는 별도로 사진 그리드를 포함한 전체 화면 크기가 조정됩니다.',
+    apiUrlLabel:'Apps Script URL', uiScaleLabel:'UI 크기', hapticsLabel:'진동 피드백 (탭 시 진동)',
+    hapticsOn:'켜짐', hapticsOff:'꺼짐',
+    hapticsDescSupported:'버튼/카드를 탭하면 짧게 진동합니다. Android 전용 — iPhone은 지원하지 않습니다.',
+    hapticsDescUnsupported:'이 기기/브라우저는 진동을 지원하지 않아 이 설정은 효과가 없습니다.',
+    languageLabel:'언어', langEnglish:'English', langKorean:'한국어',
+    storageTitle:'재고', pickLocationTitle:'매장을 선택하세요',
+    pickLocationBody:'재고 확인에는 특정 매장 선택이 필요합니다 (상단) — 이제 매장별로 보충 필요 수량이 따로 관리됩니다.',
+  }
+};
+function t(key){
+  const lang = state.language || 'en';
+  return (TRANSLATIONS[lang] && TRANSLATIONS[lang][key] !== undefined) ? TRANSLATIONS[lang][key] : (TRANSLATIONS.en[key] !== undefined ? TRANSLATIONS.en[key] : key);
+}
+// Updates static HTML (not regenerated by render()) to the current
+// language — bottom nav labels, top bar buttons/sync text, etc.
+function applyLanguage(){
+  const setText = (id, key) => { const el=document.getElementById(id); if(el) el.textContent = t(key); };
+  document.querySelectorAll('.nav-item').forEach(el=>{
+    const tab = el.dataset.tab;
+    const key = tab==='display'?'tabDisplay':tab==='storage'?'tabStorage':tab==='resupply'?'tabResupply':'tabEdit';
+    const label = el.querySelector('.tab-label');
+    if(label) label.textContent = t(key);
+  });
+  const refreshBtn = document.getElementById('btnRefreshSession');
+  if(refreshBtn){
+    const arrow = refreshBtn.querySelector('.refresh-arrow');
+    refreshBtn.textContent = ' ' + t('refreshSession');
+    if(arrow) refreshBtn.prepend(arrow);
+  }
+  const newBtn = document.getElementById('btnNew');
+  if(newBtn) newBtn.textContent = '+ ' + t('newBtn');
+  if(!state.apiUrl){ const sync=document.getElementById('lastSync'); if(sync) sync.textContent = t('notConnected'); }
+}
+
 let sessionCheckedKeys = new Set(); // composite "<locationCode>::<groupKey>" entries — see sessionCheckKey()
+// IDs currently mid-submission (Storage's Resupply button, Resupply tab's
+// Done button) — there's a real delay between pressing the button and the
+// item actually disappearing once refresh() completes, and re-clicking the
+// still-visible card in that window opens a popup for data that's about to
+// change out from under it. Cards for these IDs render disabled/dimmed
+// until refresh() clears them from this set.
+let pendingSubmitIds = new Set();
 let checkedFilter = 'all'; // 'all' | 'checked' | 'unchecked' — Display tab only
 // "Checked" is scoped to whichever location was being reviewed, not just
 // the item — checking an item's Bears count shouldn't show it as checked
@@ -659,6 +794,7 @@ function loadState(){
       const s = JSON.parse(raw);
       if(s.apiUrl){
         s.uiScale = Math.max(0.3, Math.min(1.2, Number(s.uiScale) || 1));
+        s.language = s.language || 'en';
         if(!s.gridColsByTab){
           const legacy = s.gridCols || 4; // migrate old shared value
           s.gridColsByTab = { display:legacy, storage:legacy, resupply:legacy, edit:legacy };
@@ -686,15 +822,15 @@ async function apiPost(body){
 }
 
 async function refresh(showToast){
-  if(!state.apiUrl){ document.getElementById('lastSync').textContent='Not connected'; render(); return; }
+  if(!state.apiUrl){ document.getElementById('lastSync').textContent=t('notConnected'); render(); return; }
   const res = await apiGet();
   if(res.ok){
     rows = res.items||[];
-    document.getElementById('lastSync').textContent = 'Synced '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-    if(showToast) toast('Refreshed');
+    document.getElementById('lastSync').textContent = t('synced')+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    if(showToast) toast(t('refreshed'));
   }else{
-    document.getElementById('lastSync').textContent = 'Sync failed';
-    if(showToast) toast('Could not reach the sheet');
+    document.getElementById('lastSync').textContent = t('syncFailed');
+    if(showToast) toast(t('couldNotReach'));
   }
   render();
 }
@@ -772,15 +908,15 @@ function groupIsActive(g){
 function render(){
   renderSidebar();
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active', n.dataset.tab===currentTab));
-  document.getElementById('btnLocation').textContent = locationFilter==='All' ? 'All Locs' : LOCS.find(l=>l.code===locationFilter).name;
+  document.getElementById('btnLocation').textContent = locationFilter==='All' ? t('allLocs') : LOCS.find(l=>l.code===locationFilter).name;
 
   const main = document.getElementById('main');
   main.classList.toggle('edit-mode-bg', currentTab==='edit');
   if(!state.apiUrl){
     main.innerHTML = `
-      <div class="connect-banner"><b>Not connected yet</b>Tap the ⚙ icon in the top-right to enter your Apps Script URL.</div>
-      <div class="empty-state"><div class="ic">⚙</div><div class="big">Connect your sheet</div>
-      <p>Once connected, all three locations will share the same live inventory.</p></div>`;
+      <div class="connect-banner"><b>${t('connectTitle')}</b>${t('connectBody')}</div>
+      <div class="empty-state"><div class="ic">⚙</div><div class="big">${t('connectEmptyTitle')}</div>
+      <p>${t('connectEmptyBody')}</p></div>`;
     return;
   }
 
@@ -793,9 +929,9 @@ function render(){
   if(currentTab==='storage'){
     if(locationFilter==='All'){
       main.innerHTML = `
-        <div class="grid-toolbar"><div class="grid-title">Storage</div></div>
-        <div class="empty-state"><div class="ic">📍</div><div class="big">Pick a location</div>
-        <p>Storage needs a specific location selected (top bar) — restocking requirements are tracked separately per location now.</p></div>`;
+        <div class="grid-toolbar"><div class="grid-title">${t('storageTitle')}</div></div>
+        <div class="empty-state"><div class="ic">📍</div><div class="big">${t('pickLocationTitle')}</div>
+        <p>${t('pickLocationBody')}</p></div>`;
       return;
     }
     const displayField = DISPLAY_FIELD_BY_CODE[locationFilter];
@@ -881,14 +1017,14 @@ function render(){
   grid.innerHTML = groups.map(g=>cardHtml(g)).join('');
 }
 function editFilterChipsHtml(){
-  const opts = [['all','All'],['active','Active'],['inactive','Inactive']];
+  const opts = [['all',t('filterAll')],['active',t('filterActive')],['inactive',t('filterInactive')]];
   return `<div class="chiprow">
     ${opts.map(([v,label])=>`<div class="chip ${editFilter===v?'on':''}" onclick="setEditFilter('${v}')">${label}</div>`).join('')}
   </div>`;
 }
 function setEditFilter(v){ editFilter=v; render(); }
 function checkedFilterChipsHtml(){
-  const opts = [['all','All'],['checked','Checked'],['unchecked','Unchecked']];
+  const opts = [['all',t('filterAll')],['checked',t('filterChecked')],['unchecked',t('filterUnchecked')]];
   return `<div class="chiprow">
     ${opts.map(([v,label])=>`<div class="chip ${checkedFilter===v?'on':''}" onclick="setCheckedFilter('${v}')">${label}</div>`).join('')}
   </div>`;
@@ -897,14 +1033,14 @@ function setCheckedFilter(v){ checkedFilter=v; render(); }
 function setStorageSizeFilter(v){ storageSizeFilter=v; render(); }
 
 function tabTitle(){
-  return currentTab==='display' ? 'On Display' : currentTab==='storage' ? 'Needs a Check'
-       : currentTab==='resupply' ? 'Needs Attention' : 'All Items';
+  return currentTab==='display' ? t('tabTitleDisplay') : currentTab==='storage' ? t('tabTitleStorage')
+       : currentTab==='resupply' ? t('tabTitleResupply') : t('tabTitleEdit');
 }
 function emptyState(){
-  return `<div class="empty-state"><div class="ic">🏷️</div><div class="big">Nothing here yet</div>
-    <p>${currentTab==='resupply' ? 'No location rows are shown — toggle one on above.'
-       : currentTab==='storage' ? 'Everything on display is at or above its minimum count.'
-       : currentTab==='edit' ? 'No items match this filter.' : 'Tap "+ New" up top to add your first item.'}</p></div>`;
+  return `<div class="empty-state"><div class="ic">🏷️</div><div class="big">${t('emptyNothingTitle')}</div>
+    <p>${currentTab==='resupply' ? t('emptyResupply')
+       : currentTab==='storage' ? t('emptyStorage')
+       : currentTab==='edit' ? t('emptyEdit') : t('emptyDefault')}</p></div>`;
 }
 function cardHtml(g){
   const status = groupStatus(g);
@@ -912,8 +1048,9 @@ function cardHtml(g){
   const checked = currentTab==='display' && locationFilter!=='All' && sessionCheckedKeys.has(sessionCheckKey(locationFilter,g.key));
   const locBadge = locationFilter==='All' ? `<div class="loc-tag">${esc(g.location)}</div>` : '';
   const photo = g.photo ? `<img src="${esc(g.photo)}" loading="lazy">` : '👕';
+  const pending = Object.values(g.rows).some(r=>pendingSubmitIds.has(String(r.ID)));
   return `
-    <div class="card${inactive?' inactive-card':''}${checked?' session-checked':''}" onclick="openGroup('${esc(g.key)}')">
+    <div class="card${inactive?' inactive-card':''}${checked?' session-checked':''}${pending?' card-pending':''}" ${pending?'':`onclick="openGroup('${esc(g.key)}')"`}>
       <div class="photo">${photo}</div>
       <div class="status-dot ${status}"></div>
       ${locBadge}
@@ -926,8 +1063,9 @@ function storageCardHtml(row){
   const photo = row.Photo ? `<img src="${esc(row.Photo)}" loading="lazy">` : '👕';
   const displayField = DISPLAY_FIELD_BY_CODE[locationFilter];
   const need = Math.max(0, Number(row.MinCount||0) - Number(row[displayField]||0) - Number(row[ON_HOLD_FIELD_BY_CODE[locationFilter]]||0));
+  const pending = pendingSubmitIds.has(String(row.ID));
   return `
-    <div class="card storage-card" style="border-color:${color}; box-shadow:0 0 0 3px ${color}55;" onclick="openStorageItem('${esc(row.ID)}')">
+    <div class="card storage-card${pending?' card-pending':''}" style="border-color:${color}; box-shadow:0 0 0 3px ${color}55;" ${pending?'':`onclick="openStorageItem('${esc(row.ID)}')"`}>
       <div class="photo" style="background:${color}33;">${photo}</div>
       <div class="size-badge" style="background:${color}CC;">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
       <div class="qty-badge">${need}</div>
@@ -974,7 +1112,7 @@ function renderSidebar(){
     <div class="side-cat ${categoryFilter===c?'active':''}" style="font-size:${sidebarFontSize(c)}px;" onclick="${sidebarEditMode?'':`setCategory('${esc(c)}')`}">
       ${sidebarCategoryLabel(c)}${sidebarEditMode?`<div class="rm" onclick="event.stopPropagation();removeCategory('${esc(c)}')">×</div>`:''}
     </div>`).join('');
-  html += `<div class="side-editbtn" onclick="sidebarEditMode=!sidebarEditMode;render();">${sidebarEditMode?'Done':'Edit'}</div>`;
+  html += `<div class="side-editbtn" onclick="sidebarEditMode=!sidebarEditMode;render();">${sidebarEditMode?t('sidebarDone'):t('sidebarEdit')}</div>`;
   el.innerHTML = html;
 }
 function setCategory(c){ categoryFilter=c; render(); }
@@ -984,29 +1122,32 @@ function removeCategory(c){
   const affected = activeRows().filter(r=>r.Type===c);
   if(affected.length===0){ render(); return; }
   openSheetHtml(`
-    <h2>Remove "${esc(c)}"?</h2>
-    <div class="desc">${affected.length} item/size row(s) use this category. Removing it will deactivate them (not delete) — you can restore from the sheet's Active column anytime.</div>
+    <h2>${t('removeCategoryTitle')} "${esc(c)}"?</h2>
+    <div class="desc">${affected.length} ${t('removeCategoryBody1')}</div>
     <div class="sheet-actions">
-      <button class="btn btn-ghost" onclick="closeSheet()">Cancel</button>
-      <button class="btn btn-danger" onclick="confirmRemoveCategory('${esc(c)}')">Deactivate all</button>
+      <button class="btn btn-ghost" onclick="closeSheet()">${t('cancel')}</button>
+      <button class="btn btn-danger" onclick="confirmRemoveCategory('${esc(c)}')">${t('deactivateAll')}</button>
     </div>`);
 }
 async function confirmRemoveCategory(c){
   closeSheet();
   const ids = activeRows().filter(r=>r.Type===c).map(r=>r.ID);
   pushUndoSnapshot(ids);
+  ids.forEach(id=>pendingSubmitIds.add(String(id)));
+  render(); // immediately dims/disables every affected card on the now-visible grid
   for(const id of ids){ await apiPost({action:'setActive', id, active:false}); }
-  toast('Category removed');
+  toast(t('categoryRemoved'));
   if(categoryFilter===c) categoryFilter='All';
+  ids.forEach(id=>pendingSubmitIds.delete(String(id)));
   refresh(false);
 }
 
 /* ============================= LOCATION FILTER ============================= */
 document.getElementById('btnLocation').addEventListener('click', ()=>{
   openSheetHtml(`
-    <h2>Filter by location</h2>
+    <h2>${t('filterByLocation')}</h2>
     <div class="chiprow">
-      <div class="chip ${locationFilter==='All'?'on':''}" onclick="pickLocationFilter('All')">All</div>
+      <div class="chip ${locationFilter==='All'?'on':''}" onclick="pickLocationFilter('All')">${t('locAll')}</div>
       ${LOCS.map(l=>`<div class="chip ${locationFilter===l.code?'on':''}" onclick="pickLocationFilter('${l.code}')">${l.name}</div>`).join('')}
     </div>`);
 });
@@ -1032,19 +1173,19 @@ function pushUndoSnapshot(ids){
 }
 document.getElementById('btnUndo').addEventListener('click', async ()=>{
   const snap = undoStack.pop();
-  if(!snap){ toast('Nothing to undo'); return; }
-  toast('Undoing…');
+  if(!snap){ toast(t('nothingToUndo')); return; }
+  toast(t('undoing'));
   for(const s of snap){
     if(s.__wasNew){ await apiPost({action:'deleteRow', id:s.ID}); }
     else{ await apiPost({action:'restoreRow', ...s}); }
   }
-  toast('Undone');
+  toast(t('undone'));
   refresh(false);
 });
 
 document.getElementById('btnRefreshSession').addEventListener('click', async ()=>{
   sessionCheckedKeys.clear();
-  toast('Session refreshed — resyncing…');
+  toast(t('sessionRefreshed'));
   await refresh(true);
 });
 
@@ -1056,12 +1197,13 @@ function adjustScale(d){
 }
 
 /* ============================= SHEET (MODAL) HELPERS ============================= */
-function openSheetHtml(html, widthMode){
+function openSheetHtml(html, widthMode, footerHtml){
   const sheetEl = document.getElementById('sheetContent');
   sheetEl.classList.toggle('wide', widthMode===true);
   sheetEl.classList.toggle('narrow', widthMode==='restock');
   sheetEl.classList.toggle('display-wide', widthMode==='display');
-  sheetEl.innerHTML = `<button class="sheet-close" onclick="closeSheet()">×</button><div class="sheet-scroll">${html}</div>`;
+  sheetEl.classList.toggle('has-fixed-footer', !!footerHtml);
+  sheetEl.innerHTML = `<button class="sheet-close" onclick="closeSheet()">×</button><div class="sheet-scroll">${html}</div>${footerHtml ? `<div class="sheet-fixed-footer">${footerHtml}</div>` : ''}`;
   document.getElementById('overlay').classList.add('show');
 }
 function closeSheet(){ document.getElementById('overlay').classList.remove('show'); pendingPhotoBase64=null; resupplyEditContext=null; onHoldResolveContext=null; }
@@ -1077,7 +1219,7 @@ let displayDraftGroupKey = null;
 let displayDraftLocation = null; // location code the popup was opened for — used for the location-scoped checked key
 function openDisplayCheck(key){
   if(locationFilter==='All'){
-    toast('Select a specific location (top bar) before checking Display counts', true);
+    toast(t('selectLocationDisplay'), true);
     return;
   }
   const displayField = DISPLAY_FIELD_BY_CODE[locationFilter];
@@ -1093,7 +1235,7 @@ function openDisplayCheck(key){
   openSheetHtml(`
     <div style="margin-bottom:4px; padding-right:34px;">
       <h2 style="margin:0 0 1px 0;">${esc(g.name)}</h2>
-      <div class="desc" style="margin:0;">${esc(g.type)} · ${esc(g.location)} · editing <b>Display - ${esc(LOC_NAME_BY_CODE[locationFilter])}</b></div>
+      <div class="desc" style="margin:0;">${esc(g.type)} · ${esc(g.location)} · ${t('editingDisplay')} <b>${esc(LOC_NAME_BY_CODE[locationFilter])}</b></div>
     </div>
     <div class="detail-wrap">
       <div class="detail-photo">${g.photo?`<img src="${esc(g.photo)}">`:''}</div>
@@ -1109,14 +1251,14 @@ function openDisplayCheck(key){
               <button class="size-plus" onclick="stepDisplayDraft('${row.ID}',1)">+</button>
               <div class="size-count ${belowMin?'low':''}" id="cnt-${row.ID}">${d.current}</div>
               <button class="size-minus" onclick="stepDisplayDraft('${row.ID}',-1)">−</button>
-              <div class="size-min">min ${d.minCount}</div>
+              <div class="size-min">${t('minLabel')} ${d.minCount}</div>
             </div>`;
         }).join('')}
       </div>
     </div>
     <div class="sheet-actions" style="margin-top:16px;">
-      <button class="btn btn-ghost" onclick="commitDisplayCheck(true)">✓ Checked</button>
-      <button class="btn btn-primary" onclick="commitDisplayCheck(false)">Done</button>
+      <button class="btn btn-ghost" onclick="commitDisplayCheck(true)">${t('checkedBtn')}</button>
+      <button class="btn btn-primary" onclick="commitDisplayCheck(false)">${t('doneBtn')}</button>
     </div>
   `, 'display');
   scrollSheetToBottom();
@@ -1189,7 +1331,7 @@ async function commitDisplayCheck(forceChecked){
   const affectedIds = Array.from(new Set([...changedIds, ...Object.keys(onHoldUpdates), ...Object.keys(resupplyIncrements)]));
   if(affectedIds.length>0){
     pushUndoSnapshot(affectedIds); // one batch undo covering Display, On Hold, and Resupply changes from this check
-    toast('Saving…');
+    toast(t('saving'));
     for(const id of changedIds){
       const newVal = draft[id].current;
       const row = rows.find(r=>sameId(r.ID,id));
@@ -1226,7 +1368,7 @@ async function commitDisplayCheck(forceChecked){
     // Scoped to the location this popup was actually reviewing — checking
     // Bears' count doesn't mark the item checked for Parkway too.
     sessionCheckedKeys.add(sessionCheckKey(locForDraft, groupKeyForDraft));
-    toast(forceChecked ? 'Marked checked' : 'Checked');
+    toast(forceChecked ? t('markedChecked') : t('checkedToast'));
   }
   refresh(false);
 }
@@ -1258,10 +1400,10 @@ function renderResupplyTab(main, list){
     <div class="toolbar-top resupply-toolbar-default">
       <div class="chiprow" style="flex:1;">
         ${LOC_FILTER_CHIP_ORDER.map(code=>`<div class="chip ${(!onHoldActive && resupplyLocFilter[code])?'on':''}" data-loc-chip="${code}" onclick="toggleResupplyLocFilter('${code}')">${LOC_NAME_BY_CODE[code]}</div>`).join('')}
-        <div class="chip on-hold-chip ${onHoldActive?'on':''}" data-loc-chip="${ON_HOLD_CODE}" onclick="toggleOnHoldFilter()">On Hold</div>
+        <div class="chip on-hold-chip ${onHoldActive?'on':''}" data-loc-chip="${ON_HOLD_CODE}" onclick="toggleOnHoldFilter()">${t('onHold')}</div>
       </div>
       <button class="rotate-btn" onclick="rotateResupplyOrder()" title="Cycle row order">
-        <span class="rotate-arrow">⟳</span><span class="rotate-text">Rotate</span>
+        <span class="rotate-arrow">⟳</span><span class="rotate-text">${t('rotate')}</span>
       </button>
       <div class="scale-ctrl">
         <button class="scale-btn" onclick="adjustScale(1)">−</button>
@@ -1275,14 +1417,14 @@ function renderResupplyTab(main, list){
       <div class="rtp-right">
         <div class="rtp-actions">
           <button class="rotate-btn" onclick="rotateResupplyOrder()" title="Cycle row order">
-            <span class="rotate-arrow">⟳</span><span class="rotate-text">Rotate</span>
+            <span class="rotate-arrow">⟳</span><span class="rotate-text">${t('rotate')}</span>
           </button>
           <div class="scale-ctrl">
             <button class="scale-btn" onclick="adjustScale(1)">−</button>
             <button class="scale-btn" onclick="adjustScale(-1)">+</button>
           </div>
         </div>
-        <div class="chip on-hold-chip ${onHoldActive?'on':''}" onclick="toggleOnHoldFilter()">On Hold</div>
+        <div class="chip on-hold-chip ${onHoldActive?'on':''}" onclick="toggleOnHoldFilter()">${t('onHold')}</div>
       </div>
     </div>
     <div id="resupplyRows"></div>
@@ -1321,8 +1463,9 @@ function resupplyCardHtml(row, code, field){
   // Card width still follows grid zoom (+/-), but the badges are now a
   // fixed size (like the Storage tab) instead of scaling with it.
   const w = Math.max(90, Math.round(900/(state.gridColsByTab.resupply||4)));
+  const pending = pendingSubmitIds.has(String(row.ID));
   return `
-    <div class="card resupply-card" style="width:${w}px; border-color:${color}; box-shadow:0 0 0 3px ${color}55;" onclick="openResupplyItem('${esc(row.ID)}','${code}')">
+    <div class="card resupply-card${pending?' card-pending':''}" style="width:${w}px; border-color:${color}; box-shadow:0 0 0 3px ${color}55;" ${pending?'':`onclick="openResupplyItem('${esc(row.ID)}','${code}')"`}>
       <div class="photo">${photo}</div>
       <div class="size-badge" style="background:${color}CC; border:2px solid #fff;">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
       <div class="qty-badge">${qty}</div>
@@ -1337,8 +1480,9 @@ function onHoldCardHtml(row){
   const photo = row.Photo ? `<img src="${esc(row.Photo)}" loading="lazy">` : '👕';
   const color = SIZE_COLORS[row.Size] || '#DDD';
   const w = Math.max(90, Math.round(900/(state.gridColsByTab.resupply||4)));
+  const pending = pendingSubmitIds.has(String(row.ID));
   return `
-    <div class="card resupply-card" style="width:${w}px; border-color:${color}; box-shadow:0 0 0 3px ${color}55;" onclick="openOnHoldItem('${esc(row.ID)}')">
+    <div class="card resupply-card${pending?' card-pending':''}" style="width:${w}px; border-color:${color}; box-shadow:0 0 0 3px ${color}55;" ${pending?'':`onclick="openOnHoldItem('${esc(row.ID)}')"`}>
       <div class="photo">${photo}</div>
       <div class="size-badge" style="background:${color}CC; border:2px solid #fff;">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
       <div class="qty-badge">${onHold}</div>
@@ -1451,6 +1595,18 @@ function rotateResupplyOrder(){
 // This is a completely separate popup from openResupplyItem — it never
 // touches the regular per-location Resupply popup used elsewhere in this tab.
 let onHoldResolveContext = null; // { id, original: {T,P,B} }
+// Adaptive font size for the On Hold popup's size badge — short labels
+// (S, M, L) get a big font since there's plenty of room; longer ones
+// (2XL, 3XL) get progressively smaller so they never clip the box.
+// Uses clamp() so it still scales with the popup's own width on top of
+// the length-based tier, same responsive approach used elsewhere.
+function onHoldBadgeFontSize(sizeKey){
+  const label = SIZE_SHORT_LABEL[sizeKey] || sizeKey || '';
+  const len = label.length;
+  if(len<=1) return 'clamp(30px, 11cqw, 46px)';
+  if(len===2) return 'clamp(24px, 9cqw, 36px)';
+  return 'clamp(18px, 6.5cqw, 27px)'; // 3+ chars, e.g. 2XL / 3XL
+}
 function openOnHoldItem(id){
   const row = rows.find(r=>sameId(r.ID,id));
   if(!row) return;
@@ -1463,12 +1619,12 @@ function openOnHoldItem(id){
   const photo = row.Photo ? `<img src="${esc(row.Photo)}">` : '';
   openSheetHtml(`
     <h2 style="margin:0 0 2px;">${esc(row.Name)}</h2>
-    <div class="desc" style="margin:0 0 12px;">${esc(row.Type)} · On Hold</div>
+    <div class="desc" style="margin:0 0 12px;">${esc(row.Type)} · ${t('onHold')}</div>
     <div class="onhold-photo-full">${photo}</div>
     <div class="onhold-resolve-cols">
       <div class="onhold-col onhold-size-col">
         <div class="onhold-col-label" style="visibility:hidden;">T</div>
-        <div class="onhold-size-badge">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
+        <div class="onhold-size-badge" style="font-size:${onHoldBadgeFontSize(row.Size)};">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
       </div>
       ${['T','P','B'].map(code=>`
         <div class="onhold-col">
@@ -1479,7 +1635,7 @@ function openOnHoldItem(id){
           <button type="button" class="size-minus" onclick="stepOnHoldResolve('${code}',-1)">−</button>
         </div>`).join('')}
     </div>
-    <button class="btn-resupply" onclick="submitOnHoldResolve()">Stock</button>
+    <button class="btn-resupply" onclick="submitOnHoldResolve()">${t('stockBtn')}</button>
   `, 'restock');
   scrollSheetToBottom();
 }
@@ -1514,13 +1670,16 @@ async function submitOnHoldResolve(){
   const changedCodes = Object.keys(updates);
   if(changedCodes.length===0){ closeSheet(); return; }
   pushUndoSnapshot([id]);
+  pendingSubmitIds.add(String(id));
   closeSheet();
-  toast('Saving…');
+  render(); // immediately dims/disables the card on the now-visible On Hold row
+  toast(t('saving'));
   for(const code of changedCodes){
     row[ON_HOLD_FIELD_BY_CODE[code]] = updates[code];
     await apiPost({action:'setResupplyForLocation', id, location:code, onHold:updates[code]});
   }
-  toast('Updated');
+  toast(t('updated'));
+  pendingSubmitIds.delete(String(id));
   refresh(false);
 }
 // open, so the stepper can live-update the On Hold preview and Done can
@@ -1549,20 +1708,20 @@ function openResupplyItem(id, code){
     <div class="resupply-edit-meta">${esc(LOC_NAME_BY_CODE[code])}: ${esc(row.Type)} · ${esc(SIZE_FULL_NAMES[row.Size]||row.Size)}</div>
     <div class="resupply-edit-photo">${photo}</div>
     <div class="resupply-edit-nh-grid">
-      <div class="resupply-edit-nh-label" style="grid-column:span 2;">Need</div>
-      <div class="resupply-edit-nh-label resupply-edit-hold-label">Hold</div>
+      <div class="resupply-edit-nh-label" style="grid-column:span 2;">${t('need')}</div>
+      <div class="resupply-edit-nh-label resupply-edit-hold-label">${t('hold')}</div>
       <div class="resupply-edit-nh-box">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
       <div class="resupply-edit-nh-box">${requiredQty}</div>
       <div class="resupply-edit-nh-box resupply-edit-hold-box" id="onHoldNum">${onHoldPreview}</div>
     </div>
     <div class="resupply-edit-divider"></div>
-    <div class="restock-request-label">Resupply for ${esc(LOC_NAME_BY_CODE[code])}</div>
+    <div class="restock-request-label">${t('resupplyFor')} ${esc(LOC_NAME_BY_CODE[code])}</div>
     <div class="restock-request-stepper xl">
       <button type="button" class="rq-minus" onclick="stepResupplyEdit(-1)">−</button>
       <input type="number" id="resupplyEditQty" value="${current}" readonly>
       <button type="button" class="rq-plus" onclick="stepResupplyEdit(1)">+</button>
     </div>
-    <button class="btn-resupply" onclick="submitResupplyEdit()">Done</button>
+    <button class="btn-resupply" onclick="submitResupplyEdit()">${t('doneBtn')}</button>
   `, 'restock');
   scrollSheetToBottom();
 }
@@ -1593,8 +1752,10 @@ async function submitResupplyEdit(){
   if(!row){ closeSheet(); return; }
 
   pushUndoSnapshot([id]);
+  pendingSubmitIds.add(String(id));
   closeSheet();
-  toast('Saving…');
+  render(); // immediately dims/disables the card on the now-visible grid, before the API round-trip even starts
+  toast(t('saving'));
 
   // Done must not alter Resupply or any other field. Only write the
   // selected location's On Hold field when a shortfall actually applies.
@@ -1609,7 +1770,8 @@ async function submitResupplyEdit(){
     onHold,
     applyOnHold: onHold > 0
   });
-  toast(res.ok ? 'Saved' : 'Save failed: ' + (res.error||'unknown error'), !res.ok);
+  toast(res.ok ? t('saved') : t('saveFailed') + (res.error||t('unknownError')), !res.ok);
+  pendingSubmitIds.delete(String(id));
   refresh(false);
 }
 
@@ -1620,7 +1782,7 @@ const SIZE_FULL_NAMES = {
 };
 function openStorageItem(id){
   if(locationFilter==='All'){
-    toast('Select a specific location (top bar) before requesting a resupply', true);
+    toast(t('selectLocationResupply'), true);
     return;
   }
   const displayField = DISPLAY_FIELD_BY_CODE[locationFilter];
@@ -1638,20 +1800,20 @@ function openStorageItem(id){
       </div>
       <div class="restock-info-col">
         <div class="restock-need-block">
-          <div class="restock-section-label need-label">Need</div>
+          <div class="restock-section-label need-label">${t('need')}</div>
           <div class="restock-need-numbers">
             <span class="restock-need-size">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</span>
             <span class="restock-need-num">${need}</span>
           </div>
         </div>
         <div class="restock-request-section">
-          <div class="restock-request-label">Request for ${esc(LOC_NAME_BY_CODE[locationFilter])}</div>
+          <div class="restock-request-label">${t('requestFor')} ${esc(LOC_NAME_BY_CODE[locationFilter])}</div>
           <div class="restock-request-stepper lg">
             <button type="button" class="rq-minus" onclick="stepRequest(-1)">−</button>
             <input type="number" id="requestQty" value="${requestStart}" readonly>
             <button type="button" class="rq-plus" onclick="stepRequest(1)">+</button>
           </div>
-          <button class="btn-resupply" onclick="submitResupply('${esc(row.ID)}')">Resupply</button>
+          <button class="btn-resupply" onclick="submitResupply('${esc(row.ID)}')">${t('resupplyBtn')}</button>
         </div>
       </div>
     </div>
@@ -1664,7 +1826,7 @@ function stepRequest(delta){
 }
 async function submitResupply(id){
   if(locationFilter==='All'){
-    toast('Select a specific location (top bar) before requesting a resupply', true);
+    toast(t('selectLocationResupply'), true);
     return;
   }
   const row = rows.find(r=>sameId(r.ID,id));
@@ -1673,7 +1835,9 @@ async function submitResupply(id){
   const onHoldField = ON_HOLD_FIELD_BY_CODE[locationFilter];
   const currentOnHold = Number(row[onHoldField]||0);
   pushUndoSnapshot([id]); // so a premature press can be undone (reverts Display/Resupply/On Hold)
+  pendingSubmitIds.add(String(id));
   closeSheet();
+  render(); // immediately dims/disables the card on the now-visible grid, before the API round-trip even starts
 
   if(currentOnHold > 0){
     // This item is already On Hold for this location — a resupply request
@@ -1681,22 +1845,25 @@ async function submitResupply(id){
     // Resupply column write). It just adds the requested quantity onto
     // the existing On Hold amount for this location, capped at 5 (matching
     // the backend's own cap on the On Hold column).
-    toast('Adding to On Hold…');
+    toast(t('addingToHold'));
     const newOnHold = Math.min(5, currentOnHold + requestQty);
     row[onHoldField] = newOnHold;
     const res = await apiPost({action:'setResupplyForLocation', id, location:locationFilter, onHold:newOnHold});
-    toast(res.ok ? `On Hold for ${LOC_NAME_BY_CODE[locationFilter]} is now ${newOnHold}` : 'Could not update On Hold: ' + (res.error||'unknown error'), !res.ok);
+    toast(res.ok ? `${t('onHoldForNowIs')} ${LOC_NAME_BY_CODE[locationFilter]} ${t('isNow')} ${newOnHold}` : t('couldNotUpdateHold') + (res.error||t('unknownError')), !res.ok);
+    pendingSubmitIds.delete(String(id));
     refresh(false);
     return;
   }
 
-  toast('Requesting…');
+  toast(t('requesting'));
   const res = await apiPost({action:'requestResupply', id, requestQty, location:locationFilter});
   if(res.ok){
-    toast(`Resupply requested for ${LOC_NAME_BY_CODE[locationFilter]} — display +${res.increase}`);
+    toast(`${t('resupplyRequestedFor')} ${LOC_NAME_BY_CODE[locationFilter]} ${t('displayPlus')}${res.increase}`);
+    pendingSubmitIds.delete(String(id));
     refresh(false);
   }else{
-    toast('Could not submit request: ' + (res.error||'unknown error'), true);
+    pendingSubmitIds.delete(String(id));
+    toast(t('couldNotSubmit') + (res.error||t('unknownError')), true);
   }
 }
 
@@ -1716,34 +1883,34 @@ function stepFormSize(id, delta){
   el.classList.toggle('zero-val', Number(el.value)===0);
 }
 document.getElementById('btnNew').addEventListener('click', ()=>{
-  if(!state.apiUrl){ toast('Connect your sheet first'); return; }
+  if(!state.apiUrl){ toast(t('connectFirst')); return; }
   openSheetHtml(`
-    <h2>New item</h2>
+    <h2>${t('newItemTitle')}</h2>
     <div class="item-form">
       <div class="item-form-photo">
         <div class="upload-box" id="uploadBox" onclick="triggerFilePick('add')">
-          <span id="uploadHint">Upload</span>
+          <span id="uploadHint">${t('upload')}</span>
         </div>
       </div>
       <div class="item-form-fields">
         <div class="row2">
-          <div class="field name-field"><label>Name</label><input type="text" id="newName"></div>
+          <div class="field name-field"><label>${t('fieldName')}</label><input type="text" id="newName"></div>
           <div class="field type-field">
-            <label>Type</label>
+            <label>${t('fieldType')}</label>
             <select id="newType">
-              <option value="" disabled selected>Choose…</option>
-              ${FIXED_TYPES.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('')}
+              <option value="" disabled selected>${t('chooseEllipsis')}</option>
+              ${FIXED_TYPES.map(ty=>`<option value="${esc(ty)}">${esc(ty)}</option>`).join('')}
             </select>
           </div>
         </div>
         <div class="field">
-          <label>Location</label>
+          <label>${t('fieldLocation')}</label>
           <div class="loc-picker" id="newLocPicker" style="flex-direction:row;">
             ${LOCS.map(l=>`<div class="loc-row" data-code="${l.code}" onclick="toggleLocRow(this)" style="flex:1;justify-content:center;gap:6px;"><span>${l.name}</span></div>`).join('')}
           </div>
         </div>
         <div class="field item-form-sizes">
-          <label>Sizes check (minimum on display)</label>
+          <label>${t('fieldSizesCheck')}</label>
           <div class="size-grid">
             ${SIZES.map(s=>sizeStepperFormHtml(s, 0, 'newSize')).join('')}
           </div>
@@ -1751,8 +1918,8 @@ document.getElementById('btnNew').addEventListener('click', ()=>{
       </div>
     </div>
     <div class="sheet-actions">
-      <button class="btn btn-ghost" onclick="closeSheet()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitNewItem()">Add item</button>
+      <button class="btn btn-ghost" onclick="closeSheet()">${t('cancel')}</button>
+      <button class="btn btn-primary" onclick="submitNewItem()">${t('addItem')}</button>
     </div>
   `, 'display');
 });
@@ -1760,24 +1927,24 @@ function toggleLocRow(el){ el.classList.toggle('on'); }
 async function submitNewItem(){
   const name = document.getElementById('newName').value.trim();
   const type = document.getElementById('newType').value.trim();
-  if(!name){ toast('Enter a name'); return; }
-  if(!type){ toast('Choose a type'); return; }
+  if(!name){ toast(t('enterName')); return; }
+  if(!type){ toast(t('chooseType')); return; }
   const locCodes = Array.from(document.querySelectorAll('#newLocPicker .loc-row.on')).map(el=>el.dataset.code);
-  if(locCodes.length===0){ toast('Pick at least one location'); return; }
+  if(locCodes.length===0){ toast(t('pickLocation')); return; }
   const location = LOCS.filter(l=>locCodes.includes(l.code)).map(l=>l.code).join('');
   const sizes = {};
   SIZES.forEach(s=>{ sizes[s] = Number(document.getElementById('newSize-'+s).value||0); });
   const photoToSend = pendingPhotoBase64; // capture before closeSheet() clears it
   closeSheet();
-  toast('Adding…');
+  toast(t('adding'));
   const body = { action:'saveItem', matchIds:[], name, type, location, sizes };
   if(photoToSend) body.photoBase64 = photoToSend;
   const res = await apiPost(body);
   if(res.ok){
     if(res.newIds) pushUndoSnapshot(res.newIds); // marks them as "new" for undo (rows not in local cache yet)
-    toast('Item added');
+    toast(t('itemAdded'));
     refresh(false);
-  }else{ toast('Add failed: ' + (res.error||'unknown error'), true); }
+  }else{ toast(t('addFailed') + (res.error||t('unknownError')), true); }
 }
 
 /* ============================= EDIT TAB ============================= */
@@ -1789,32 +1956,32 @@ function openEditGroup(key){
   const isActive = groupIsActive(g);
   const locCodesOn = LOCS.filter(l=>g.location.indexOf(l.code)!==-1).map(l=>l.code);
   openSheetHtml(`
-    <h2>Edit item</h2>
-    ${isActive?'':'<div class="desc" style="color:var(--restock);font-weight:600;">This item is currently deactivated — hidden from Display/Storage/Resupply.</div>'}
+    <h2>${t('editItemTitle')}</h2>
+    ${isActive?'':`<div class="desc" style="color:var(--restock);font-weight:600;">${t('deactivatedNotice')}</div>`}
     <div class="item-form">
       <div class="item-form-photo">
         <div class="upload-box" id="uploadBox" onclick="triggerFilePick('edit')">
-          ${g.photo?`<img src="${esc(g.photo)}">`:'<span id="uploadHint">Upload</span>'}
+          ${g.photo?`<img src="${esc(g.photo)}">`:`<span id="uploadHint">${t('upload')}</span>`}
         </div>
       </div>
       <div class="item-form-fields">
         <div class="row2">
-          <div class="field name-field"><label>Name</label><input type="text" id="editName" value="${esc(g.name)}"></div>
+          <div class="field name-field"><label>${t('fieldName')}</label><input type="text" id="editName" value="${esc(g.name)}"></div>
           <div class="field type-field">
-            <label>Type</label>
+            <label>${t('fieldType')}</label>
             <select id="editType">
-              ${FIXED_TYPES.map(t=>`<option value="${esc(t)}" ${g.type===t?'selected':''}>${esc(t)}</option>`).join('')}
+              ${FIXED_TYPES.map(ty=>`<option value="${esc(ty)}" ${g.type===ty?'selected':''}>${esc(ty)}</option>`).join('')}
             </select>
           </div>
         </div>
         <div class="field">
-          <label>Location</label>
+          <label>${t('fieldLocation')}</label>
           <div class="loc-picker" id="editLocPicker" style="flex-direction:row;">
             ${LOCS.map(l=>`<div class="loc-row ${locCodesOn.includes(l.code)?'on':''}" data-code="${l.code}" onclick="toggleLocRow(this)" style="flex:1;justify-content:center;gap:6px;"><span>${l.name}</span></div>`).join('')}
           </div>
         </div>
         <div class="field item-form-sizes">
-          <label>Sizes check (minimum on display)</label>
+          <label>${t('fieldSizesCheck')}</label>
           <div class="size-grid">
             ${SIZES.map(s=>sizeStepperFormHtml(s, g.rows[s]?g.rows[s].MinCount:0, 'editSize')).join('')}
           </div>
@@ -1823,9 +1990,9 @@ function openEditGroup(key){
     </div>
     <div class="sheet-actions">
       ${isActive
-        ? `<button class="btn btn-danger" onclick="confirmSetActive('${esc(key)}',false)">Deactivate</button>`
-        : `<button class="btn btn-ok" onclick="confirmSetActive('${esc(key)}',true)">Reactivate</button>`}
-      <button class="btn btn-primary" onclick="submitEditGroup()">Save</button>
+        ? `<button class="btn btn-danger" onclick="confirmSetActive('${esc(key)}',false)">${t('deactivate')}</button>`
+        : `<button class="btn btn-ok" onclick="confirmSetActive('${esc(key)}',true)">${t('reactivate')}</button>`}
+      <button class="btn btn-primary" onclick="submitEditGroup()">${t('save')}</button>
     </div>
   `, 'display');
 }
@@ -1842,12 +2009,15 @@ async function submitEditGroup(){
   const sizes = {};
   SIZES.forEach(s=>{ sizes[s] = Number(document.getElementById('editSize-'+s).value||0); });
   const photoToSend = pendingPhotoBase64; // capture before closeSheet() clears it
+  matchIds.forEach(id=>pendingSubmitIds.add(String(id)));
   closeSheet();
-  toast('Saving…');
+  render(); // immediately dims/disables the card(s) — a Type/Location change here can move them out of the current filtered view
+  toast(t('saving'));
   const body = { action:'saveItem', matchIds, name, type, location, sizes };
   if(photoToSend) body.photoBase64 = photoToSend;
   const res = await apiPost(body);
-  if(res.ok) toast('Saved'); else toast('Save failed: ' + (res.error||'unknown error'), true);
+  if(res.ok) toast(t('saved')); else toast(t('saveFailed') + (res.error||t('unknownError')), true);
+  matchIds.forEach(id=>pendingSubmitIds.delete(String(id)));
   refresh(false);
 }
 // Deactivating/reactivating only ever flips the Active column — the sheet
@@ -1857,17 +2027,17 @@ function confirmSetActive(key, makeActive){
   const g = groups.find(x=>x.key===key);
   if(!g) return;
   openSheetHtml(makeActive ? `
-    <h2>Reactivate "${esc(g.name)}"?</h2>
-    <div class="desc">This brings it back into Display/Storage/Resupply.</div>
+    <h2>${t('reactivateTitle')} "${esc(g.name)}"?</h2>
+    <div class="desc">${t('reactivateBody')}</div>
     <div class="sheet-actions">
-      <button class="btn btn-ghost" onclick="closeSheet()">Cancel</button>
-      <button class="btn btn-ok" onclick="submitSetActive('${esc(key)}',true)">Reactivate</button>
+      <button class="btn btn-ghost" onclick="closeSheet()">${t('cancel')}</button>
+      <button class="btn btn-ok" onclick="submitSetActive('${esc(key)}',true)">${t('reactivate')}</button>
     </div>` : `
-    <h2>Deactivate "${esc(g.name)}"?</h2>
-    <div class="desc">Hides it from Display/Storage/Resupply. Nothing is deleted from the sheet — you can reactivate it here anytime, or flip the Active column back to 1 directly in Sheets.</div>
+    <h2>${t('deactivateTitle')} "${esc(g.name)}"?</h2>
+    <div class="desc">${t('deactivateBody')}</div>
     <div class="sheet-actions">
-      <button class="btn btn-ghost" onclick="closeSheet()">Cancel</button>
-      <button class="btn btn-danger" onclick="submitSetActive('${esc(key)}',false)">Deactivate</button>
+      <button class="btn btn-ghost" onclick="closeSheet()">${t('cancel')}</button>
+      <button class="btn btn-danger" onclick="submitSetActive('${esc(key)}',false)">${t('deactivate')}</button>
     </div>`);
 }
 async function submitSetActive(key, makeActive){
@@ -1876,10 +2046,13 @@ async function submitSetActive(key, makeActive){
   if(!g) return;
   const ids = Object.values(g.rows).map(r=>r.ID);
   pushUndoSnapshot(ids);
+  ids.forEach(id=>pendingSubmitIds.add(String(id)));
   closeSheet();
-  toast(makeActive ? 'Reactivating…' : 'Deactivating…');
+  render(); // immediately dims/disables the card(s) on the now-visible grid
+  toast(makeActive ? t('reactivating') : t('deactivating'));
   for(const id of ids){ await apiPost({action:'setActive', id, active:makeActive}); }
-  toast(makeActive ? 'Reactivated' : 'Deactivated');
+  toast(makeActive ? t('reactivated') : t('deactivatedToast'));
+  ids.forEach(id=>pendingSubmitIds.delete(String(id)));
   refresh(false);
 }
 
@@ -1891,16 +2064,16 @@ function triggerFilePick(target){
 document.getElementById('fileInput').addEventListener('change', async (e)=>{
   const file = e.target.files[0];
   if(!file) return;
-  toast('Processing photo…');
+  toast(t('processingPhoto'));
   try{
     const dataUrl = await compressImage(file, 900, 0.72);
     pendingPhotoBase64 = dataUrl;
     const box = document.getElementById('uploadBox');
     if(box) box.innerHTML = `<img src="${dataUrl}">`;
-    toast('Photo ready — tap Save/Add to finish');
+    toast(t('photoReady'));
   }catch(err){
     pendingPhotoBase64 = null;
-    toast('Could not read that photo (' + err + '). Try a JPG or PNG, not HEIC.', true);
+    toast(t('photoError') + err + t('photoErrorSuffix'), true);
   }
   e.target.value = '';
 });
@@ -1971,12 +2144,19 @@ function openGroup(key){
 document.getElementById('btnSettings').addEventListener('click', openSettings);
 function openSettings(){
   const pct = Math.round((state.uiScale || 1) * 100);
-  openSheetHtml(`
-    <h2>Settings</h2>
-    <div class="desc">Adjust the overall web UI size for smaller or larger screens. This scales the entire interface, including the photo-card grid, independently of the per-tab grid controls.</div>
-    <div class="field"><label>Apps Script URL</label><input type="text" id="setUrl" value="${esc(state.apiUrl)}" placeholder="https://script.google.com/macros/s/.../exec"></div>
+  const lang = state.language || 'en';
+  const body = `
+    <h2>${t('settingsTitle')}</h2>
+    <div class="desc">${t('settingsDesc')}</div>
     <div class="field">
-      <label>UI Scale <span id="uiScaleValue">${pct}%</span></label>
+      <label>${t('languageLabel')}</label>
+      <div class="chiprow">
+        <div class="chip ${lang==='en'?'on':''}" onclick="setLanguage('en')">${t('langEnglish')}</div>
+        <div class="chip ${lang==='ko'?'on':''}" onclick="setLanguage('ko')">${t('langKorean')}</div>
+      </div>
+    </div>
+    <div class="field">
+      <label>${t('uiScaleLabel')} <span id="uiScaleValue">${pct}%</span></label>
       <div style="display:flex;align-items:center;gap:12px;">
         <button type="button" class="btn btn-ghost" onclick="adjustUiScale(-0.05)">−</button>
         <input type="range" id="uiScaleRange" min="0.3" max="1.2" step="0.05" value="${state.uiScale || 1}" style="flex:1;" oninput="previewUiScale(this.value)">
@@ -1984,17 +2164,28 @@ function openSettings(){
       </div>
     </div>
     <div class="field">
-      <label>Haptic feedback (buzz on tap)</label>
+      <label>${t('hapticsLabel')}</label>
       <div class="chiprow">
-        <div class="chip ${state.hapticsEnabled!==false?'on':''}" onclick="setHapticsPreview(true)" id="hapticsOnChip">On</div>
-        <div class="chip ${state.hapticsEnabled===false?'on':''}" onclick="setHapticsPreview(false)" id="hapticsOffChip">Off</div>
+        <div class="chip ${state.hapticsEnabled!==false?'on':''}" onclick="setHapticsPreview(true)" id="hapticsOnChip">${t('hapticsOn')}</div>
+        <div class="chip ${state.hapticsEnabled===false?'on':''}" onclick="setHapticsPreview(false)" id="hapticsOffChip">${t('hapticsOff')}</div>
       </div>
-      <div class="desc" style="margin-top:6px;margin-bottom:0;">${navigator.vibrate ? 'Vibrates briefly on button/card taps. Android only — iPhones don\'t support this.' : 'This device/browser doesn\'t support vibration, so this setting won\'t do anything here.'}</div>
+      <div class="desc" style="margin-top:6px;margin-bottom:0;">${navigator.vibrate ? t('hapticsDescSupported') : t('hapticsDescUnsupported')}</div>
     </div>
+    <div class="field"><label>${t('apiUrlLabel')}</label><input type="text" id="setUrl" value="${esc(state.apiUrl)}" placeholder="https://script.google.com/macros/s/.../exec"></div>
+  `;
+  const footer = `
     <div class="sheet-actions">
-      <button class="btn btn-ghost" onclick="closeSheet()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitSettings()">Save</button>
-    </div>`);
+      <button class="btn btn-ghost" onclick="closeSheet()">${t('cancel')}</button>
+      <button class="btn btn-primary" onclick="submitSettings()">${t('save')}</button>
+    </div>`;
+  openSheetHtml(body, undefined, footer);
+}
+function setLanguage(lang){
+  state.language = lang;
+  saveState();
+  applyLanguage();
+  render();
+  openSettings(); // rebuild the Settings popup itself, now in the new language
 }
 function setHapticsPreview(on){
   pendingHapticsEnabled = on;
@@ -2058,6 +2249,7 @@ document.addEventListener('click', (e)=>{
 
 /* ============================= INIT ============================= */
 applyUiScale();
+applyLanguage();
 updateToastPosition();
 render();
 refresh(false);
