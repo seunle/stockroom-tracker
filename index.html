@@ -419,7 +419,8 @@
   .restock-request-stepper input::-webkit-outer-spin-button,.restock-request-stepper input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
   /* On Hold resolve popup (Resupply tab → tapping an On Hold card only) */
   .onhold-photo-full{
-    width:100%; aspect-ratio:16/7; border-radius:12px; overflow:hidden; background:var(--line);
+    width:100%; aspect-ratio:4/5; border-radius:12px; overflow:hidden; background:var(--line);
+    margin-bottom:16px;
   }
   .onhold-photo-full img{width:100%;height:100%;object-fit:cover;display:block;}
   .onhold-resolve-cols{display:flex; gap:8px; justify-content:center; align-items:stretch; margin-bottom:16px;}
@@ -433,17 +434,23 @@
     border-radius:9px; padding:8px 0; margin-bottom:10px;
   }
   /* Size box sits as its own column, leftmost, in line with the T/P/B
-     columns — stretched to match their full height (label + value box +
-     stepper) via align-items:stretch on the row above, with its own
-     content centered inside that height. */
-  .onhold-size-col{justify-content:center; align-items:center; background:var(--line); border-radius:12px;}
-  .onhold-size-badge{font-family:'Oswald'; font-weight:800; font-size:clamp(26px, 9cqw, 40px); color:var(--ink);}
-  /* Taller, easier-to-tap +/- buttons and a bigger count specifically in
-     this popup — scoped to .onhold-col so the Display popup's own size
-     grid (which reuses the same .size-plus/.size-minus/.size-count
-     classes) is completely unaffected. */
+     columns. Its top edge lines up with their VALUE BOX (not the T/P/B
+     letters above it) via a hidden label spacer of identical height, so
+     the visible box itself starts exactly where the real value boxes do. */
+  .onhold-size-badge{
+    flex:1; display:flex; align-items:center; justify-content:center;
+    background:var(--line); border-radius:9px;
+    font-family:'Oswald'; font-weight:800; font-size:clamp(26px, 9cqw, 40px); color:var(--ink);
+  }
+  /* Taller, easier-to-tap +/- buttons, a bigger count, and a lighter count
+     background matching the Storage popup's own stepper box — scoped to
+     .onhold-col so the Display popup's identical-looking size grid (which
+     reuses the same .size-plus/.size-minus/.size-count classes) is
+     completely unaffected. */
   .onhold-col .size-plus, .onhold-col .size-minus{height:52px;}
-  .onhold-col .size-count{font-size:26px; padding:10px 0;}
+  .onhold-col .size-count{
+    font-size:26px; padding:10px 0; background:var(--paper); border:1.5px solid var(--line);
+  }
   /* As with the Display popup above: the photo column and info column
      can only shrink so far side by side before the stepper/Need numbers
      start overlapping. That's the one thing here that still needs a hard
@@ -1423,11 +1430,12 @@ function openOnHoldItem(id){
   onHoldResolveContext = { id, original };
   const photo = row.Photo ? `<img src="${esc(row.Photo)}">` : '';
   openSheetHtml(`
+    <h2 style="margin:0 0 2px;">${esc(row.Name)}</h2>
+    <div class="desc" style="margin:0 0 12px;">${esc(row.Type)} · On Hold</div>
     <div class="onhold-photo-full">${photo}</div>
-    <h2 style="margin:10px 0 2px;">${esc(row.Name)}</h2>
-    <div class="desc" style="margin:0 0 14px;">${esc(row.Type)} · On Hold</div>
     <div class="onhold-resolve-cols">
       <div class="onhold-col onhold-size-col">
+        <div class="onhold-col-label" style="visibility:hidden;">T</div>
         <div class="onhold-size-badge">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
       </div>
       ${['T','P','B'].map(code=>`
@@ -1441,6 +1449,7 @@ function openOnHoldItem(id){
     </div>
     <button class="btn-resupply" onclick="submitOnHoldResolve()">Stock</button>
   `, 'restock');
+  scrollSheetToBottom();
 }
 function stepOnHoldResolve(code, delta){
   if(!onHoldResolveContext) return;
