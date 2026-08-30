@@ -986,8 +986,16 @@ function openDisplayCheck(key){
   // Opens scrolled to the bottom (Done/Checked buttons) instead of the top —
   // on phone the size grid can run taller than the popup, and the buttons
   // you actually tap live at the bottom, not the sizes at the top.
-  const scrollEl = document.querySelector('#sheetContent .sheet-scroll');
-  if(scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
+  // Double rAF: right after the overlay switches from display:none to
+  // flex, layout/paint hasn't happened yet, so scrollHeight can still read
+  // as the old (collapsed) size. Waiting two animation frames guarantees
+  // the browser has laid out and painted the new content first.
+  requestAnimationFrame(()=>{
+    requestAnimationFrame(()=>{
+      const scrollEl = document.querySelector('#sheetContent .sheet-scroll');
+      if(scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
+    });
+  });
 }
 function stepDisplayDraft(id, delta){
   const d = displayDraft && displayDraft[id];
