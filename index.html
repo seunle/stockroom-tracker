@@ -705,18 +705,21 @@ function render(){
     let storageRows = list.filter(r=>matchesFilters({type:r.Type, location:r.Location}))
                            .filter(r=>{
                              // Storage is driven only by an explicit Display-tab change.
-                             // The selected location's On Hold reduces the remaining need.
-                             // If a resupply has been requested for this location, hide the
-                             // item from Storage until that request is cleared. A below-min
+                             // If this location has ANY On Hold quantity for this item, it's
+                             // excluded from Storage entirely — On Hold now fully supersedes
+                             // the old "min - display - onHold" math, which no longer applies.
+                             // If a resupply has already been requested for this location, hide
+                             // the item from Storage until that request is cleared. A below-min
                              // value entered directly in Sheets is not a Storage trigger.
-                             const effectiveNeed = Math.max(0, Number(r.MinCount||0) - Number(r[displayField]||0) - Number(r[ON_HOLD_FIELD_BY_CODE[locationFilter]]||0));
+                             const belowMin = Number(r[displayField]||0) < Number(r.MinCount||0);
+                             const onHold = Number(r[ON_HOLD_FIELD_BY_CODE[locationFilter]]||0) > 0;
                              const resupplyRequested = Number(r[resupplyField]||0) > 0;
                              // A below-minimum Display value alone is not enough. The
                              // item must have reached this state through an explicit
                              // Display-tab change on this device, and the Sheet value
                              // must still match that recorded Display value.
                              const displayWasChanged = hasCurrentStorageDisplayTrigger(r, locationFilter);
-                             return effectiveNeed > 0 && displayWasChanged && !resupplyRequested;
+                             return belowMin && displayWasChanged && !resupplyRequested && !onHold;
                            })
                            .sort((a,b)=>SIZES.indexOf(a.Size)-SIZES.indexOf(b.Size));
     if(storageSizeFilter!=='All'){
@@ -1397,8 +1400,25 @@ async function submitResupply(id){
   const row = rows.find(r=>sameId(r.ID,id));
   if(!row) return;
   const requestQty = Number(document.getElementById('requestQty').value||0);
-  pushUndoSnapshot([id]); // so a premature press can be undone (reverts Display and the resupply column)
+  const onHoldField = ON_HOLD_FIELD_BY_CODE[locationFilter];
+  const currentOnHold = Number(row[onHoldField]||0);
+  pushUndoSnapshot([id]); // so a premature press can be undone (reverts Display/Resupply/On Hold)
   closeSheet();
+
+  if(currentOnHold > 0){
+    // This item is already On Hold for this location — a resupply request
+    // here does NOT go to Storage/Display at all (no Display bump, no
+    // Resupply column write). It just adds the requested quantity onto
+    // the existing On Hold amount for this location.
+    toast('Adding to On Hold…');
+    const newOnHold = currentOnHold + requestQty;
+    row[onHoldField] = newOnHold;
+    const res = await apiPost({action:'setResupplyForLocation', id, location:locationFilter, onHold:newOnHold, applyOnHold:true});
+    toast(res.ok ? `On Hold for ${LOC_NAME_BY_CODE[locationFilter]} is now ${newOnHold}` : 'Could not update On Hold: ' + (res.error||'unknown error'), !res.ok);
+    refresh(false);
+    return;
+  }
+
   toast('Requesting…');
   const res = await apiPost({action:'requestResupply', id, requestQty, location:locationFilter});
   if(res.ok){
