@@ -436,6 +436,28 @@ let undoStack = [];
 let sessionCheckedKeys = new Set(); // group keys touched via the Display tab this session
 let checkedFilter = 'all'; // 'all' | 'checked' | 'unchecked' — Display tab only
 let storageSizeFilter = 'All'; // 'All' | 'XS' | ... — Storage tab only
+// Storage entries are only eligible when the current Display value matches a value
+// that was explicitly changed through the Display popup on this device. This prevents
+// arbitrary below-minimum values entered directly in Sheets from appearing in Storage.
+let storageDisplayTriggers = {}; // { '<location>:<id>': displayValue }
+function loadStorageDisplayTriggers(){
+  try{ storageDisplayTriggers = JSON.parse(localStorage.getItem('storageDisplayTriggers')||'{}') || {}; }catch(e){ storageDisplayTriggers = {}; }
+}
+function saveStorageDisplayTriggers(){ localStorage.setItem('storageDisplayTriggers', JSON.stringify(storageDisplayTriggers)); }
+function storageTriggerKey(code,id){ return code+':'+String(id); }
+function markStorageDisplayTrigger(code,id,value){
+  const key=storageTriggerKey(code,id);
+  if(Number(value||0) > 0){ storageDisplayTriggers[key]=Number(value||0); }
+  else { storageDisplayTriggers[key]=0; }
+  saveStorageDisplayTriggers();
+}
+function clearStorageDisplayTrigger(code,id){ delete storageDisplayTriggers[storageTriggerKey(code,id)]; saveStorageDisplayTriggers(); }
+function hasCurrentStorageDisplayTrigger(row,code){
+  const key=storageTriggerKey(code,row.ID);
+  return Object.prototype.hasOwnProperty.call(storageDisplayTriggers,key)
+    && Number(storageDisplayTriggers[key]) === Number(row[DISPLAY_FIELD_BY_CODE[code]]||0);
+}
+loadStorageDisplayTriggers();
 
 function loadState(){
   try{
@@ -585,9 +607,19 @@ function render(){
     const resupplyField = RESUPPLY_FIELD_BY_CODE[locationFilter];
     let storageRows = list.filter(r=>matchesFilters({type:r.Type, location:r.Location}))
                            .filter(r=>{
+                             // Storage is driven only by an explicit Display-tab change.
+                             // The selected location's On Hold reduces the remaining need.
+                             // If a resupply has been requested for this location, hide the
+                             // item from Storage until that request is cleared. A below-min
+                             // value entered directly in Sheets is not a Storage trigger.
                              const effectiveNeed = Math.max(0, Number(r.MinCount||0) - Number(r[displayField]||0) - Number(r[ON_HOLD_FIELD_BY_CODE[locationFilter]]||0));
-                             if(effectiveNeed <= 0) return false;
-                             return Number(r[resupplyField]||0)===0;
+                             const resupplyRequested = Number(r[resupplyField]||0) > 0;
+                             // A below-minimum Display value alone is not enough. The
+                             // item must have reached this state through an explicit
+                             // Display-tab change on this device, and the Sheet value
+                             // must still match that recorded Display value.
+                             const displayWasChanged = hasCurrentStorageDisplayTrigger(r, locationFilter);
+                             return effectiveNeed > 0 && displayWasChanged && !resupplyRequested;
                            })
                            .sort((a,b)=>SIZES.indexOf(a.Size)-SIZES.indexOf(b.Size));
     if(storageSizeFilter!=='All'){
@@ -881,6 +913,9 @@ async function commitDisplayCheck(forceChecked){
       const newVal = draft[id].current;
       const row = rows.find(r=>sameId(r.ID,id));
       if(row) row[displayField] = newVal;
+      // Only Display-tab changes can create Storage eligibility. Record the exact
+      // value written so a direct Sheet edit cannot accidentally create a Storage item.
+      if(newVal >= Number(draft[id].minCount||0)){ clearStorageDisplayTrigger(locationFilter, id); } else { markStorageDisplayTrigger(locationFilter, id, newVal); }
       await apiPost({action:'setDisplayCount', id, value:newVal, location:locationFilter});
     }
   }
@@ -1033,13 +1068,14 @@ function animateResupplyRowChange(mutateFn){
 }
 function toggleResupplyLocFilter(code){
   animateResupplyRowChange(()=>{
-    // Interacting with a location chip while viewing On Hold exits that
-    // exclusive view first, restoring whatever was selected before it,
-    // then applies the toggle on top of that.
+    // While On Hold is active, a location click switches into location mode
+    // and selects that location; it does not toggle that location off.
     if(onHoldActive){
       onHoldActive = false;
-      if(onHoldPrevFilter) resupplyLocFilter = {...onHoldPrevFilter};
       onHoldPrevFilter = null;
+      resupplyLocFilter = {T:false, P:false, B:false};
+      resupplyLocFilter[code] = true;
+      return;
     }
     resupplyLocFilter[code] = !resupplyLocFilter[code];
   });
@@ -1151,17 +1187,18 @@ async function submitResupplyEdit(){
   closeSheet();
   toast('Saving…');
 
-  // Update the local row immediately using the same location-specific fields
-  // that the backend writes.
-  row[RESUPPLY_FIELD_BY_CODE[code]] = 0;
-  row[ON_HOLD_FIELD_BY_CODE[code]] = onHold;
+  // Done must not alter Resupply or any other field. Only write the
+  // selected location's On Hold field when a shortfall actually applies.
+  if(onHold > 0){
+    row[ON_HOLD_FIELD_BY_CODE[code]] = onHold;
+  }
 
   const res = await apiPost({
     action:'setResupplyForLocation',
     id,
     location:code,
-    value:0,
-    onHold
+    onHold,
+    applyOnHold: onHold > 0
   });
   toast(res.ok ? 'Saved' : 'Save failed: ' + (res.error||'unknown error'), !res.ok);
   refresh(false);
