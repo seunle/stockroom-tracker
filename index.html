@@ -85,6 +85,8 @@
     width:130px; flex-shrink:0; background:var(--paper-raised);
     border-right:1.5px solid var(--line); overflow-y:auto;
     display:flex; flex-direction:column;
+    min-height:0; /* lets this flex item actually shrink+scroll instead of forcing
+                     the whole page taller once there are more categories than fit */
   }
   .side-cat{
     padding:28px 6px; text-align:center; font-size:36px; font-weight:600;
@@ -92,7 +94,7 @@
     border-bottom:1.5px solid var(--line); line-height:1.25; position:relative;
   }
   .side-cat.active{background:var(--thread); color:#fff;}
-  .side-cat.side-cat-all{padding:14px 6px;}
+  .side-cat.side-cat-all{padding:10.5px 6px;} /* was 14px — shortened to 75% of its previous height */
   .side-cat .rm{
     position:absolute; top:3px; right:3px; width:16px;height:16px;border-radius:50%;
     background:rgba(0,0,0,0.15); color:#fff; font-size:10px; line-height:16px; display:none;
@@ -518,7 +520,7 @@ let locationFilter = state.deviceLocation || 'All'; // 'All' | 'T' | 'P' | 'B' �
 let categoryFilter = 'All';
 let sidebarEditMode = false;
 let editFilter = 'all'; // 'all' | 'active' | 'inactive' — Edit tab only
-const FIXED_TYPES = ['Adult','Women','Youth','Kids'];
+const FIXED_TYPES = ['Men','Women','Youth','Kids','Baby','TankTop','Long Sleeve','Hoodie','Crewneck','Y Hoodie Crewneck','K Hoodie Crewneck','Cap'];
 let pendingPhotoBase64 = null;
 let filePickerTarget = null; // 'add' | 'edit'
 let editingGroupKey = null;
@@ -839,6 +841,18 @@ function storageCardHtml(row){
 }
 
 /* ============================= SIDEBAR ============================= */
+// Sidebar-only display labels — forces a line break at a specific word for
+// types whose full name is long enough to look cluttered as a single
+// wrapped block at the sidebar's big font size. The underlying Type string
+// (used for filtering/matching/onclick) is untouched either way.
+const SIDEBAR_LABEL_BREAKS = {
+  'Long Sleeve': ['Long','Sleeve'],
+  'Y Hoodie Crewneck': ['Y Hoodie','Crewneck']
+};
+function sidebarCategoryLabel(c){
+  const parts = SIDEBAR_LABEL_BREAKS[c];
+  return parts ? parts.map(esc).join('<br>') : esc(c);
+}
 function renderSidebar(){
   const el = document.getElementById('sidebar');
   el.classList.toggle('edit-mode', sidebarEditMode);
@@ -846,7 +860,7 @@ function renderSidebar(){
   let html = `<div class="side-cat side-cat-all ${categoryFilter==='All'?'active':''}" onclick="setCategory('All')">All</div>`;
   html += cats.map(c=>`
     <div class="side-cat ${categoryFilter===c?'active':''}" onclick="${sidebarEditMode?'':`setCategory('${esc(c)}')`}">
-      ${esc(c)}${sidebarEditMode?`<div class="rm" onclick="event.stopPropagation();removeCategory('${esc(c)}')">×</div>`:''}
+      ${sidebarCategoryLabel(c)}${sidebarEditMode?`<div class="rm" onclick="event.stopPropagation();removeCategory('${esc(c)}')">×</div>`:''}
     </div>`).join('');
   html += `<div class="side-editbtn" onclick="sidebarEditMode=!sidebarEditMode;render();">${sidebarEditMode?'Done':'Edit'}</div>`;
   el.innerHTML = html;
@@ -1020,12 +1034,31 @@ function stepDisplayDraft(id, delta){
 async function commitDisplayCheck(forceChecked){
   const draft = displayDraft, groupKeyForDraft = displayDraftGroupKey, locForDraft = displayDraftLocation;
   const displayField = DISPLAY_FIELD_BY_CODE[locForDraft];
+  const onHoldField = ON_HOLD_FIELD_BY_CODE[locForDraft];
   displayDraft = null; displayDraftGroupKey = null; displayDraftLocation = null;
   closeSheet();
   if(!draft) return;
   const changedIds = Object.keys(draft).filter(id => draft[id].current !== draft[id].original);
-  if(changedIds.length>0){
-    pushUndoSnapshot(changedIds); // one batch undo for every size changed in this check
+
+  // For every size in this popup, check whether it's already On Hold for
+  // this location. If it is, any shortfall (Min Count - Display) created
+  // by this check is folded straight into the On Hold count instead of
+  // ever flagging Storage — once On Hold has started on an item/location
+  // (from the Resupply tab), it fully owns that item until resolved there;
+  // the Display popup must never re-surface it in Storage on its own.
+  const onHoldUpdates = {}; // id -> new On Hold value for this location
+  Object.keys(draft).forEach(id=>{
+    const row = rows.find(r=>sameId(r.ID,id));
+    if(!row) return;
+    const currentOnHold = Number(row[onHoldField]||0);
+    if(currentOnHold <= 0) return; // not on hold — normal Storage-trigger logic applies below
+    const need = Math.max(0, Number(draft[id].minCount||0) - draft[id].current);
+    if(need > 0) onHoldUpdates[id] = currentOnHold + need;
+  });
+
+  const affectedIds = Array.from(new Set([...changedIds, ...Object.keys(onHoldUpdates)]));
+  if(affectedIds.length>0){
+    pushUndoSnapshot(affectedIds); // one batch undo covering both Display and On Hold changes from this check
     toast('Saving…');
     for(const id of changedIds){
       const newVal = draft[id].current;
@@ -1033,14 +1066,22 @@ async function commitDisplayCheck(forceChecked){
       if(row) row[displayField] = newVal;
       await apiPost({action:'setDisplayCount', id, value:newVal, location:locForDraft});
     }
+    for(const id of Object.keys(onHoldUpdates)){
+      const newOnHold = onHoldUpdates[id];
+      const row = rows.find(r=>sameId(r.ID,id));
+      if(row) row[onHoldField] = newOnHold;
+      await apiPost({action:'setResupplyForLocation', id, location:locForDraft, onHold:newOnHold, applyOnHold:true});
+    }
   }
   // Pressing Done/Checked is an explicit review of EVERY size shown in this
   // popup, not just the ones adjusted with +/-. A size already sitting at 0
   // that you simply confirmed (no change needed) still needs to register as
   // reviewed so it can appear in Storage — otherwise an untouched
   // below-minimum size never gets a trigger recorded and stays invisible
-  // there even though you looked right at it.
+  // there even though you looked right at it. Sizes folded into On Hold
+  // above must NEVER get a Storage trigger.
   Object.keys(draft).forEach(id=>{
+    if(onHoldUpdates[id] !== undefined){ clearStorageDisplayTrigger(locForDraft, id); return; }
     const finalVal = draft[id].current;
     if(finalVal >= Number(draft[id].minCount||0)){ clearStorageDisplayTrigger(locForDraft, id); }
     else { markStorageDisplayTrigger(locForDraft, id, finalVal); }
