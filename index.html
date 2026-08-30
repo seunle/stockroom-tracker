@@ -216,7 +216,7 @@
   .overlay.show{display:flex;}
   .sheet{
     background:var(--paper-raised); width:100%; max-width:420px; border-radius:16px;
-    padding:18px; max-height:60vh; overflow-y:auto; overflow-x:hidden; position:relative;
+    position:relative; overflow:hidden;
     zoom:1.5; /* scales the whole popup uniformly, so every element keeps its exact relative layout */
     /* Lets descendants use @container queries + cqw units keyed to THIS
        box's own rendered width, rather than guessing from the device's
@@ -227,12 +227,18 @@
     container-type: inline-size;
     container-name: popup;
   }
+  /* The actual scrolling happens in here, not on .sheet itself — .sheet-close
+     is a direct child of .sheet (outside this div), so it never scrolls out
+     of reach no matter how far you scroll the content underneath it. */
+  .sheet-scroll{
+    padding:18px; max-height:82vh; overflow-y:auto; overflow-x:hidden;
+  }
   .sheet.wide{max-width:560px;}
   .sheet.narrow{max-width:620px;}
   .sheet.display-wide{max-width:min(900px, 60vw);}
   .sheet-close{
     position:absolute; top:12px; right:12px; width:30px;height:30px;border-radius:50%;
-    background:var(--restock); color:#fff; font-size:16px; font-weight:700; border:none;
+    background:var(--restock); color:#fff; font-size:16px; font-weight:700; border:none; z-index:5;
   }
   .sheet h2{font-size:16px;margin:0 0 4px;text-transform:uppercase;letter-spacing:0.5px;padding-right:34px;}
   .sheet .desc{font-size:12.5px;color:var(--ink-soft);margin-bottom:14px;line-height:1.5;}
@@ -297,7 +303,7 @@
     display:flex; align-items:center; justify-content:center;
   }
   .size-plus{color:var(--ok); border-color:var(--ok);}
-  .size-minus{color:var(--restock); border-color:var(--restock); margin-top:26px;}
+  .size-minus{color:var(--restock); border-color:var(--restock); margin-top:4px;}
   .size-count{
     font-family:'Oswald'; font-size:clamp(14px, 3cqw, 29px); font-weight:800; text-align:center;
     background:var(--line); border-radius:10px; padding:8px 0; margin:6px 0; color:var(--ink);
@@ -314,7 +320,10 @@
      a tablet, a foldable, etc. — not just "is this a phone or not." */
   @container popup (max-width: 420px){
     .detail-wrap{flex-direction:column;}
-    .detail-photo{width:100%; max-width:200px; margin:0 auto 8px;}
+    /* Photo gets to use nearly the popup's full width now that it's no
+       longer sharing a row with the size grid — bigger, more prominent
+       image instead of a small one leaving the box looking sparse. */
+    .detail-photo{width:100%; max-width:340px; margin:0 auto 8px;}
   }
   @media (max-width:699px){
     /* The 60vw desktop-widening rule above computes to well under a
@@ -917,7 +926,7 @@ function openSheetHtml(html, widthMode){
   sheetEl.classList.toggle('wide', widthMode===true);
   sheetEl.classList.toggle('narrow', widthMode==='restock');
   sheetEl.classList.toggle('display-wide', widthMode==='display');
-  sheetEl.innerHTML = `<button class="sheet-close" onclick="closeSheet()">×</button>` + html;
+  sheetEl.innerHTML = `<button class="sheet-close" onclick="closeSheet()">×</button><div class="sheet-scroll">${html}</div>`;
   document.getElementById('overlay').classList.add('show');
 }
 function closeSheet(){ document.getElementById('overlay').classList.remove('show'); pendingPhotoBase64=null; resupplyEditContext=null; }
@@ -945,8 +954,8 @@ function openDisplayCheck(key){
     displayDraft[row.ID] = { original:Number(row[displayField]||0), current:Number(row[displayField]||0), minCount:Number(row.MinCount||0) };
   });
   openSheetHtml(`
-    <div style="display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:10px; padding-right:34px;">
-      <h2 style="margin:0; padding-right:0;">${esc(g.name)}</h2>
+    <div style="margin-bottom:4px; padding-right:34px;">
+      <h2 style="margin:0 0 1px 0;">${esc(g.name)}</h2>
       <div class="desc" style="margin:0;">${esc(g.type)} · ${esc(g.location)} · editing <b>Display - ${esc(LOC_NAME_BY_CODE[locationFilter])}</b></div>
     </div>
     <div class="detail-wrap">
