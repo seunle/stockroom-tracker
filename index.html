@@ -190,6 +190,11 @@
   .rotate-btn .rotate-text{font-family:'Oswald'; font-weight:700; font-size:28px; letter-spacing:0.5px; text-transform:uppercase;}
   .rotate-btn:active{opacity:0.8;}
   .resupply-row{margin-bottom:20px;}
+  .resupply-row.onhold-glow{
+    border-radius:18px; padding:12px 12px 4px;
+    background:rgba(174,66,57,0.07);
+    box-shadow:0 0 0 2px rgba(174,66,57,0.35), 0 0 26px 4px rgba(174,66,57,0.25);
+  }
   .resupply-row-label{
     font-family:'Oswald'; font-weight:600; font-size:26px; letter-spacing:0.6px; text-transform:uppercase;
     color:var(--ink-soft); background:none; padding:0 4px 6px; margin:0 4px 10px; border-bottom:1.5px solid var(--line);
@@ -413,12 +418,12 @@
   }
   .restock-request-stepper input::-webkit-outer-spin-button,.restock-request-stepper input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
   /* On Hold resolve popup (Resupply tab → tapping an On Hold card only) */
-  .onhold-resolve-size{
-    font-family:'Oswald'; font-weight:800; font-size:34px; text-align:center;
-    background:var(--line); border-radius:12px; padding:10px 0; margin-bottom:16px; color:var(--ink);
+  .onhold-photo-full{
+    width:100%; aspect-ratio:16/7; border-radius:12px; overflow:hidden; background:var(--line);
   }
-  .onhold-resolve-cols{display:flex; gap:10px; justify-content:center; margin-bottom:16px;}
-  .onhold-col{flex:1; max-width:130px; min-width:0; text-align:center;}
+  .onhold-photo-full img{width:100%;height:100%;object-fit:cover;display:block;}
+  .onhold-resolve-cols{display:flex; gap:8px; justify-content:center; align-items:stretch; margin-bottom:16px;}
+  .onhold-col{flex:1; min-width:0; text-align:center; display:flex; flex-direction:column;}
   .onhold-col-label{
     font-family:'Oswald'; font-weight:700; font-size:18px; letter-spacing:0.5px;
     color:var(--ink-soft); text-transform:uppercase; margin-bottom:6px;
@@ -427,6 +432,18 @@
     font-family:'Oswald'; font-size:22px; font-weight:800; background:var(--line); color:var(--ink);
     border-radius:9px; padding:8px 0; margin-bottom:10px;
   }
+  /* Size box sits as its own column, leftmost, in line with the T/P/B
+     columns — stretched to match their full height (label + value box +
+     stepper) via align-items:stretch on the row above, with its own
+     content centered inside that height. */
+  .onhold-size-col{justify-content:center; align-items:center; background:var(--line); border-radius:12px;}
+  .onhold-size-badge{font-family:'Oswald'; font-weight:800; font-size:clamp(26px, 9cqw, 40px); color:var(--ink);}
+  /* Taller, easier-to-tap +/- buttons and a bigger count specifically in
+     this popup — scoped to .onhold-col so the Display popup's own size
+     grid (which reuses the same .size-plus/.size-minus/.size-count
+     classes) is completely unaffected. */
+  .onhold-col .size-plus, .onhold-col .size-minus{height:52px;}
+  .onhold-col .size-count{font-size:26px; padding:10px 0;}
   /* As with the Display popup above: the photo column and info column
      can only shrink so far side by side before the stepper/Need numbers
      start overlapping. That's the one thing here that still needs a hard
@@ -1248,8 +1265,12 @@ function renderResupplyTab(main, list){
 function resupplyRowHtml(code, items, collapsed){
   const name = code===ON_HOLD_CODE ? 'ON HOLD' : LOC_NAME_BY_CODE[code].toUpperCase();
   const collapsedClass = (collapsed || items.length===0) ? ' collapsed' : '';
+  // On Hold gets a red glow specifically while it's the active filter (i.e.
+  // right after tapping the On Hold chip) — a visual cue that this section
+  // behaves differently from the plain Tangle/Parkway/Bears rows.
+  const onHoldGlowClass = (code===ON_HOLD_CODE && onHoldActive) ? ' onhold-glow' : '';
   const cardsHtml = items.map(r => code===ON_HOLD_CODE ? onHoldCardHtml(r) : resupplyCardHtml(r, code, RESUPPLY_FIELD_BY_CODE[code])).join('');
-  return `<div class="resupply-row" data-loc-row="${code}">
+  return `<div class="resupply-row${onHoldGlowClass}" data-loc-row="${code}">
     <div class="resupply-row-label">${esc(name)} <span class="resupply-row-count">${items.length}</span></div>
     <div class="resupply-row-strip${collapsedClass}">${cardsHtml}</div>
   </div>`;
@@ -1402,15 +1423,13 @@ function openOnHoldItem(id){
   onHoldResolveContext = { id, original };
   const photo = row.Photo ? `<img src="${esc(row.Photo)}">` : '';
   openSheetHtml(`
-    <div style="display:flex; gap:14px; align-items:flex-start; margin-bottom:14px; padding-right:34px;">
-      <div class="restock-photo" style="width:90px; flex-shrink:0;">${photo}</div>
-      <div style="flex:1; min-width:0;">
-        <h2 style="margin:0 0 2px; padding-right:0;">${esc(row.Name)}</h2>
-        <div class="desc" style="margin:0;">${esc(row.Type)} · On Hold</div>
-      </div>
-    </div>
-    <div class="onhold-resolve-size">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
+    <div class="onhold-photo-full">${photo}</div>
+    <h2 style="margin:10px 0 2px;">${esc(row.Name)}</h2>
+    <div class="desc" style="margin:0 0 14px;">${esc(row.Type)} · On Hold</div>
     <div class="onhold-resolve-cols">
+      <div class="onhold-col onhold-size-col">
+        <div class="onhold-size-badge">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
+      </div>
       ${['T','P','B'].map(code=>`
         <div class="onhold-col">
           <div class="onhold-col-label">${code}</div>
