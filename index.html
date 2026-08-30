@@ -293,6 +293,7 @@
   .btn-ghost{background:transparent;color:var(--thread);border:1.5px solid var(--thread);}
   .btn-danger{background:var(--restock);color:#fff;}
   .btn-ok{background:var(--ok);color:#fff;}
+  .btn-confirm{background:#B7D9C2; color:#2E7D32; border:1.5px solid #2E7D32;}
   .btn:active{opacity:0.75;}
 
   .upload-box{
@@ -667,7 +668,7 @@ const TRANSLATIONS = {
     editingDisplay:'editing Display -', checkedBtn:'✓ Checked', doneBtn:'Done', markedChecked:'Marked checked', checkedToast:'Checked', minLabel:'min',
     photoReady:'Photo ready — tap Save/Add to finish', photoError:'Could not read that photo (', photoErrorSuffix:'). Try a JPG or PNG, not HEIC.', processingPhoto:'Processing photo…',
     connectFirst:'Connect your sheet first',
-    need:'Need', hold:'Hold', onHold:'On Hold', resupplyFor:'Resupply for', requestFor:'Request for', resupplyBtn:'Resupply', stockBtn:'Stock',
+    need:'Need', hold:'Hold', onHold:'On Hold', resupplyFor:'Resupply for', requestFor:'Request for', resupplyBtn:'Resupply', requestBtn:'Request', stockBtn:'Stock',
     selectLocationResupply:'Select a specific location (top bar) before requesting a resupply',
     requesting:'Requesting…', resupplyRequestedFor:'Resupply requested for', displayPlus:'— display +',
     couldNotSubmit:'Could not submit request: ', addingToHold:'Adding to On Hold…', onHoldForNowIs:'On Hold for', isNow:'is now',
@@ -711,7 +712,7 @@ const TRANSLATIONS = {
     editingDisplay:'진열 수정 -', checkedBtn:'✓ 확인함', doneBtn:'완료', markedChecked:'확인 완료로 표시함', checkedToast:'확인함', minLabel:'최소',
     photoReady:'사진 준비 완료 — 저장/추가를 눌러 마무리하세요', photoError:'사진을 읽을 수 없습니다 (', photoErrorSuffix:'). HEIC 대신 JPG나 PNG를 사용해 보세요.', processingPhoto:'사진 처리 중…',
     connectFirst:'먼저 시트를 연결하세요',
-    need:'필요', hold:'보류', onHold:'보류 중', resupplyFor:'보충 대상:', requestFor:'요청 대상:', resupplyBtn:'보충', stockBtn:'입고',
+    need:'필요', hold:'보류', onHold:'보류 중', resupplyFor:'보충 대상:', requestFor:'요청 대상:', resupplyBtn:'보충', requestBtn:'요청', stockBtn:'입고',
     selectLocationResupply:'보충을 요청하려면 상단에서 매장을 선택하세요',
     requesting:'요청 중…', resupplyRequestedFor:'보충 요청됨:', displayPlus:'— 진열 +',
     couldNotSubmit:'요청을 제출할 수 없습니다: ', addingToHold:'보류로 추가 중…', onHoldForNowIs:'', isNow:'보류 수량:',
@@ -961,6 +962,18 @@ function render(){
     if(storageSizeFilter!=='All'){
       storageRows = storageRows.filter(r=>r.Size===storageSizeFilter);
     }
+    // FLIP: capture each currently-rendered card's position before the grid
+    // is rebuilt below. When an item disappears (Request button, or an
+    // On Hold/Resupply redirect), the cards after it reflow into new grid
+    // cells — without this it's an instant snap, and with a multi-column
+    // wrapping grid that reshuffle can move cards in both X and Y at once,
+    // making it genuinely hard to tell what moved where. This slides
+    // survivors from their old cell to their new one instead.
+    const storageCardsBefore = {};
+    document.querySelectorAll('#photoGrid [data-card-key]').forEach(el=>{
+      const r = el.getBoundingClientRect();
+      storageCardsBefore[el.dataset.cardKey] = { left:r.left, top:r.top };
+    });
     main.innerHTML = `
       <div class="toolbar-top">
         <div class="chiprow">
@@ -980,6 +993,23 @@ function render(){
     const grid = document.getElementById('photoGrid');
     if(storageRows.length===0){ grid.outerHTML = emptyState(); return; }
     grid.innerHTML = storageRows.map(r=>storageCardHtml(r)).join('');
+    requestAnimationFrame(()=>{
+      const uiScale = state.uiScale || 1;
+      document.querySelectorAll('#photoGrid [data-card-key]').forEach(el=>{
+        const before = storageCardsBefore[el.dataset.cardKey];
+        if(!before) return;
+        const r = el.getBoundingClientRect();
+        const dx = (before.left - r.left) / uiScale;
+        const dy = (before.top - r.top) / uiScale;
+        if(Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+        el.style.transition = 'none';
+        el.style.transform = `translate(${dx}px, ${dy}px)`;
+        requestAnimationFrame(()=>{
+          el.style.transition = 'transform 0.32s cubic-bezier(0.4,0,0.2,1)';
+          el.style.transform = 'translate(0,0)';
+        });
+      });
+    });
     return;
   }
 
@@ -1067,7 +1097,7 @@ function storageCardHtml(row){
   const need = Math.max(0, Number(row.MinCount||0) - Number(row[displayField]||0) - Number(row[ON_HOLD_FIELD_BY_CODE[locationFilter]]||0));
   const pending = pendingSubmitIds.has(String(row.ID));
   return `
-    <div class="card storage-card${pending?' card-pending':''}" style="border-color:${color}; box-shadow:0 0 0 3px ${color}55;" ${pending?'':`onclick="openStorageItem('${esc(row.ID)}')"`}>
+    <div class="card storage-card${pending?' card-pending':''}" data-card-key="${esc(row.ID)}" style="border-color:${color}; box-shadow:0 0 0 3px ${color}55;" ${pending?'':`onclick="openStorageItem('${esc(row.ID)}')"`}>
       <div class="photo" style="background:${color}33;">${photo}</div>
       <div class="size-badge" style="background:${color}CC;">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
       <div class="qty-badge">${need}</div>
@@ -1260,7 +1290,7 @@ function openDisplayCheck(key){
     </div>
     <div class="sheet-actions" style="margin-top:16px;">
       <button class="btn btn-ghost" onclick="commitDisplayCheck(true)">${t('checkedBtn')}</button>
-      <button class="btn btn-primary" onclick="commitDisplayCheck(false)">${t('doneBtn')}</button>
+      <button class="btn btn-confirm" onclick="commitDisplayCheck(false)">${t('doneBtn')}</button>
     </div>
   `, 'display');
   scrollSheetToBottom();
@@ -1760,7 +1790,7 @@ function openResupplyItem(id, code){
       <input type="number" id="resupplyEditQty" value="${current}" readonly>
       <button type="button" class="rq-plus" onclick="stepResupplyEdit(1)">+</button>
     </div>
-    <button class="btn-resupply" onclick="submitResupplyEdit()">${t('doneBtn')}</button>
+    <button class="btn-resupply" onclick="submitResupplyEdit()">${t('resupplyBtn')}</button>
   `, 'restock');
   scrollSheetToBottom();
 }
@@ -1852,7 +1882,7 @@ function openStorageItem(id){
             <input type="number" id="requestQty" value="${requestStart}" readonly>
             <button type="button" class="rq-plus" onclick="stepRequest(1)">+</button>
           </div>
-          <button class="btn-resupply" onclick="submitResupply('${esc(row.ID)}')">${t('resupplyBtn')}</button>
+          <button class="btn-resupply" onclick="submitResupply('${esc(row.ID)}')">${t('requestBtn')}</button>
         </div>
       </div>
     </div>
