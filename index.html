@@ -209,15 +209,20 @@
     background:rgba(174,66,57,0.13);
     box-shadow:0 0 0 3px rgba(174,66,57,0.55), 0 0 40px 10px rgba(174,66,57,0.45);
   }
-  .resupply-collapsed-row{cursor:pointer; margin-bottom:14px;}
+  .resupply-collapsed-row{margin-bottom:14px;}
   .resupply-row-label{
     font-family:'Oswald'; font-weight:600; font-size:26px; letter-spacing:0.6px; text-transform:uppercase;
     color:var(--ink-soft); background:none; padding:0 4px 6px; margin:0 4px 10px; border-bottom:1.5px solid var(--line);
   }
+  /* The active section's label/count are deliberately much bigger and
+     bolder than the collapsed rows' — makes it unmistakable at a glance
+     which location you're currently looking at. */
+  .resupply-row-label.active-label{font-size:52px; font-weight:800;}
   .resupply-row-count{
     display:inline-block; vertical-align:middle; background:var(--line); color:var(--ink); font-weight:800;
     font-size:15px; padding:2px 12px; border-radius:12px; margin-left:8px;
   }
+  .resupply-row-count.active-count{font-size:30px; padding:4px 20px; border-radius:16px; margin-left:12px;}
   .resupply-card{cursor:pointer;}
   .qty-badge{
     position:absolute; top:6px; right:6px; background:rgba(255,255,255,0.8); color:#000;
@@ -719,7 +724,7 @@ const TRANSLATIONS = {
     requesting:'Requesting…', resupplyRequestedFor:'Resupply requested for', displayPlus:'— display +',
     couldNotSubmit:'Could not submit request: ', addingToHold:'Adding to On Hold…', onHoldForNowIs:'On Hold for', isNow:'is now',
     couldNotUpdateHold:'Could not update On Hold: ', updated:'Updated',
-    next:'Next',
+    next:'Change',
     settingsTitle:'Settings', settingsDesc:'Adjust the overall web UI size for smaller or larger screens. This scales the entire interface, including the photo-card grid, independently of the per-tab grid controls.',
     apiUrlLabel:'Apps Script URL', uiScaleLabel:'UI Scale', hapticsLabel:'Haptic feedback (buzz on tap)',
     hapticsOn:'On', hapticsOff:'Off',
@@ -764,7 +769,7 @@ const TRANSLATIONS = {
     requesting:'요청 중…', resupplyRequestedFor:'보충 요청됨:', displayPlus:'— 진열 +',
     couldNotSubmit:'요청을 제출할 수 없습니다: ', addingToHold:'보류로 추가 중…', onHoldForNowIs:'', isNow:'보류 수량:',
     couldNotUpdateHold:'보류 수량을 업데이트할 수 없습니다: ', updated:'업데이트됨',
-    next:'다음',
+    next:'변경',
     settingsTitle:'설정', settingsDesc:'화면 크기에 맞게 전체 UI 크기를 조정합니다. 탭별 그리드 크기와는 별도로 사진 그리드를 포함한 전체 화면 크기가 조정됩니다.',
     apiUrlLabel:'Apps Script URL', uiScaleLabel:'UI 크기', hapticsLabel:'진동 피드백 (탭 시 진동)',
     hapticsOn:'켜짐', hapticsOff:'꺼짐',
@@ -1511,10 +1516,14 @@ const ON_HOLD_CODE = 'H'; // not a real location — a pseudo-row/filter, treate
 let resupplyRowOrder = ['T','P','B',ON_HOLD_CODE]; // rotated by the rotate button — governs the COLLAPSED rows' order (the active one is excluded from that list, shown as the main grid instead)
 const LOC_FILTER_CHIP_ORDER = ['T','P','B']; // filter chip order — deliberately never reordered by Rotate, always Tangle/Parkway/Bears
 // Only one location (or On Hold) is ever expanded at a time — clicking a
-// chip or a collapsed row makes it the sole active one; every other
-// location collapses to a simple label+count row below. All four are
-// treated identically now — no more special-cased On Hold behavior.
+// chip makes it the sole active one; every other location collapses to a
+// simple label+count row below (those rows are now display-only — see
+// resupplyRowHtml, clicking them no longer switches location).
 let activeResupplyLocation = 'T';
+// Remembers the last REAL (non On Hold) location that was active, so
+// pressing the On Hold chip again while it's already active can toggle
+// back to wherever you actually were, instead of just staying on hold.
+let resupplyPrevLocation = 'T';
 
 function resupplyItemsForCode(code){
   const field = RESUPPLY_FIELD_BY_CODE[code];
@@ -1554,8 +1563,8 @@ function renderResupplyTab(main, list){
         ${LOC_FILTER_CHIP_ORDER.map(code=>`<div class="chip ${activeCode===code?'on':''}" data-loc-chip="${code}" onclick="selectResupplyLocation('${code}')">${LOC_NAME_BY_CODE[code]}</div>`).join('')}
         <div class="chip on-hold-chip ${activeCode===ON_HOLD_CODE?'on':''}" data-loc-chip="${ON_HOLD_CODE}" onclick="selectResupplyLocation('${ON_HOLD_CODE}')">${t('onHold')}</div>
       </div>
-      <button class="rotate-btn" onclick="nextResupplyLocation()" title="Show next location with items">
-        <span class="rotate-arrow">→</span><span class="rotate-text">${t('next')}</span>
+      <button class="rotate-btn" onclick="nextResupplyLocation()" title="Change to the next location with items">
+        <span class="rotate-arrow">⟳</span><span class="rotate-text">${t('next')}</span>
       </button>
       <div class="scale-ctrl">
         <button class="scale-btn" onclick="adjustScale(1)">−</button>
@@ -1568,8 +1577,8 @@ function renderResupplyTab(main, list){
       </div>
       <div class="rtp-right">
         <div class="rtp-actions">
-          <button class="rotate-btn" onclick="nextResupplyLocation()" title="Show next location with items">
-            <span class="rotate-arrow">→</span><span class="rotate-text">${t('next')}</span>
+          <button class="rotate-btn" onclick="nextResupplyLocation()" title="Change to the next location with items">
+            <span class="rotate-arrow">⟳</span><span class="rotate-text">${t('next')}</span>
           </button>
           <div class="scale-ctrl">
             <button class="scale-btn" onclick="adjustScale(1)">−</button>
@@ -1580,7 +1589,7 @@ function renderResupplyTab(main, list){
       </div>
     </div>
     <div class="resupply-active-section${activeCode===ON_HOLD_CODE?' onhold-glow':''}">
-      <div class="resupply-row-label">${esc(activeName).toUpperCase()} <span class="resupply-row-count">${activeItems.length}</span></div>
+      <div class="resupply-row-label active-label">${esc(activeName).toUpperCase()} <span class="resupply-row-count active-count">${activeItems.length}</span></div>
       <div class="photo-grid" id="resupplyGrid" style="--cols:${state.gridColsByTab.resupply};"></div>
     </div>
     <div id="resupplyCollapsedRows"></div>
@@ -1593,10 +1602,13 @@ function renderResupplyTab(main, list){
     grid.innerHTML = activeItems.map(r => activeCode===ON_HOLD_CODE ? onHoldCardHtml(r) : resupplyCardHtml(r, activeCode, RESUPPLY_FIELD_BY_CODE[activeCode])).join('');
   }
 
+  // Collapsed rows are display-only now — no onclick. Clicking a location
+  // row used to switch to it, but that made it too easy to accidentally
+  // change location with a stray tap; use the chips or Change button instead.
   document.getElementById('resupplyCollapsedRows').innerHTML = collapsedCodes.map(code=>{
     const count = resupplyItemsFor(code).length;
     const name = code===ON_HOLD_CODE ? t('onHold') : LOC_NAME_BY_CODE[code];
-    return `<div class="resupply-collapsed-row" data-loc-row="${code}" onclick="selectResupplyLocation('${code}')">
+    return `<div class="resupply-collapsed-row" data-loc-row="${code}">
       <div class="resupply-row-label">${esc(name.toUpperCase())} <span class="resupply-row-count">${count}</span></div>
     </div>`;
   }).join('');
@@ -1717,16 +1729,29 @@ function animateResupplyRowChange(mutateFn){
 // whatever was previously active collapses back down into the label+count
 // row list below.
 function selectResupplyLocation(code){
+  if(code===ON_HOLD_CODE){
+    if(activeResupplyLocation===ON_HOLD_CODE){
+      // Already on On Hold — pressing it again toggles back to wherever
+      // you actually were before switching to On Hold.
+      const back = resupplyPrevLocation;
+      animateResupplyRowChange(()=>{ activeResupplyLocation = back; });
+      return;
+    }
+    animateResupplyRowChange(()=>{ activeResupplyLocation = ON_HOLD_CODE; });
+    return;
+  }
   if(activeResupplyLocation===code) return;
+  resupplyPrevLocation = code; // remember this as the "back" target for the next On Hold toggle
   animateResupplyRowChange(()=>{
     activeResupplyLocation = code;
   });
 }
-// "Next" jumps the active selection straight to the next location (or On
-// Hold) that actually has items — cycling back and forth between however
-// many are populated. Reuses selectResupplyLocation() so the chip
-// highlight, the FLIP slide, and everything else stays exactly consistent
-// with tapping a chip or a collapsed row directly.
+// "Change" jumps the active selection straight to the next location that
+// actually has items (On Hold never included — this only ever swaps
+// between real locations) — cycling back and forth between however many
+// are populated. Reuses selectResupplyLocation() so the chip highlight,
+// the FLIP slide, and everything else stays exactly consistent with
+// tapping a chip directly.
 function nextResupplyLocation(){
   const withItems = resupplyRowOrder.filter(code => code!==ON_HOLD_CODE && resupplyItemsFor(code).length > 0);
   if(withItems.length === 0) return; // no location (excluding On Hold) has items right now
@@ -2703,7 +2728,7 @@ function hapticTap(){
 document.addEventListener('click', (e)=>{
   const el = e.target.closest(
     'button, .card, .chip, .nav-item, .top-btn, .side-cat, .loc-row, ' +
-    '.rotate-btn, .session-refresh-btn, .size-plus, .size-minus, .rq-minus, .rq-plus, .scale-btn, .resupply-collapsed-row'
+    '.rotate-btn, .session-refresh-btn, .size-plus, .size-minus, .rq-minus, .rq-plus, .scale-btn'
   );
   if(el) hapticTap();
 }, true);
