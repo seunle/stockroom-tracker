@@ -166,25 +166,25 @@
   }
   .card.inactive-card{opacity:0.5;}
   .card.card-pending{opacity:0.35; pointer-events:none;}
-  .card.dragging{cursor:grabbing; box-shadow:0 10px 28px rgba(0,0,0,0.35); z-index:50;}
-  /* A dedicated drag handle (not the whole card) is what actually needs
-     touch-action:none, so the rest of the card — photo, name, everything
-     — keeps normal touch behavior and the grid scrolls like any other tab.
-     touch-action:none on the WHOLE card (an earlier attempt) reliably
-     fixed dragging but broke scrolling everywhere on the grid, since
-     there was no card-sized gap left to swipe from. A small dedicated
-     handle avoids that trade-off entirely — you scroll from anywhere
-     except this one small icon. */
-  .card-drag-handle{
-    position:absolute; bottom:6px; left:6px; z-index:10;
-    width:34px; height:34px; border-radius:8px;
-    background:rgba(37,36,31,0.6); color:#fff;
-    display:flex; align-items:center; justify-content:center;
-    font-size:18px; line-height:1;
+  .card.dragging{cursor:grabbing; box-shadow:0 10px 28px rgba(0,0,0,0.35); z-index:50; animation:none !important;} /* dragging overrides jiggle — a card being actively dragged shouldn't ALSO wobble */
+  /* Reorder mode is now an explicit, deliberate toggle (tap Edit again
+     while already on the Edit tab) rather than something live on every
+     card all the time — so touch-action:none only applies while it's ON,
+     and normal scrolling works the rest of the time without any
+     trade-off. Getting to items further down/up the grid while a drag is
+     in progress is handled by auto-scroll near the edges instead of
+     needing normal swipe-scroll during an active drag. */
+  main.grid-area.reorder-mode .card[data-group-key]{
     touch-action:none;
-    -webkit-touch-callout:none; -webkit-user-select:none; user-select:none;
+    -webkit-touch-callout:none;
+    -webkit-user-select:none; user-select:none;
+    animation:cardJiggle 0.26s ease-in-out infinite;
   }
-  .card-drag-handle:active{background:rgba(37,36,31,0.8);}
+  @keyframes cardJiggle{
+    0%{transform:rotate(-1deg);}
+    50%{transform:rotate(1.2deg);}
+    100%{transform:rotate(-1deg);}
+  }
   main.grid-area.edit-mode-bg .card[data-group-key] img{
     -webkit-user-drag:none; pointer-events:none; /* the image itself should never intercept a drag or offer its own native save/drag behavior */
   }
@@ -291,6 +291,7 @@
   .nav-item .tab-label{font-size:39px; font-weight:600; letter-spacing:0.6px; text-transform:uppercase;}
   .nav-item.active{color:#fff; background:var(--thread); border-radius:10px; font-weight:700;}
   .nav-item[data-tab="edit"].active{background:var(--ink-soft);} /* Edit gets its own distinct grey instead of the shared blue */
+  .nav-item[data-tab="edit"].active.reorder-active{background:var(--restock);} /* red while reorder mode is on — unmistakable that something's different */
 
   /* ---------- Overlay / sheet ---------- */
   .overlay{position:fixed;inset:0;background:rgba(37,36,31,0.5);display:none;align-items:center;justify-content:center;z-index:50;padding:16px;overflow:auto;}
@@ -790,7 +791,7 @@ const TRANSLATIONS = {
     hapticsDescUnsupported:'This device/browser doesn\'t support vibration, so this setting won\'t do anything here.',
     languageLabel:'Language', langEnglish:'English', langKorean:'한국어',
     defaultTabLabel:'Default Tab', defaultTabDesc:'Which tab the app opens to by default.',
-    pickLocationForOrder:'Select a specific location (top bar) before reordering', savingOrder:'Saving order…', orderSaved:'Order saved', dragHint:'Press and hold the ⠿ handle on a card to reorder for',
+    pickLocationForOrder:'Select a specific location (top bar) before reordering', savingOrder:'Saving order…', orderSaved:'Order saved', dragHintOff:'Tap Edit again to turn on reorder mode for', dragHintOn:'Reorder mode is on — press and hold a card to drag it, for',
     storageTitle:'Storage', pickLocationTitle:'Pick a location',
     pickLocationBody:'Storage needs a specific location selected (top bar) — restocking requirements are tracked separately per location now.',
   },
@@ -836,7 +837,7 @@ const TRANSLATIONS = {
     hapticsDescUnsupported:'이 기기/브라우저는 진동을 지원하지 않아 이 설정은 효과가 없습니다.',
     languageLabel:'언어', langEnglish:'English', langKorean:'한국어',
     defaultTabLabel:'기본 탭', defaultTabDesc:'앱을 열었을 때 기본으로 표시할 탭입니다.',
-    pickLocationForOrder:'순서를 변경하려면 상단에서 매장을 선택하세요', savingOrder:'순서 저장 중…', orderSaved:'순서가 저장되었습니다', dragHint:'카드의 ⠿ 손잡이를 길게 눌러 순서를 변경하세요 —',
+    pickLocationForOrder:'순서를 변경하려면 상단에서 매장을 선택하세요', savingOrder:'순서 저장 중…', orderSaved:'순서가 저장되었습니다', dragHintOff:'편집을 다시 눌러 순서 변경 모드를 켜세요 —', dragHintOn:'순서 변경 모드 켜짐 — 카드를 길게 눌러 드래그하세요 —',
     storageTitle:'재고', pickLocationTitle:'매장을 선택하세요',
     pickLocationBody:'재고 확인에는 특정 매장 선택이 필요합니다 (상단) — 이제 매장별로 보충 필요 수량이 따로 관리됩니다.',
   }
@@ -1074,10 +1075,12 @@ function groupIsActive(g){
 function render(){
   renderSidebar();
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active', n.dataset.tab===currentTab));
+  document.querySelector('.nav-item[data-tab="edit"]').classList.toggle('reorder-active', editReorderMode);
   document.getElementById('btnLocation').textContent = locationFilter==='All' ? t('allLocs') : LOCS.find(l=>l.code===locationFilter).name;
 
   const main = document.getElementById('main');
   main.classList.toggle('edit-mode-bg', currentTab==='edit');
+  main.classList.toggle('reorder-mode', currentTab==='edit' && editReorderMode);
   if(!state.apiUrl){
     main.innerHTML = `
       <div class="connect-banner"><b>${t('connectTitle')}</b>${t('connectBody')}</div>
@@ -1197,7 +1200,7 @@ function render(){
     <div class="grid-toolbar">
       <div class="grid-title${currentTab==='display'?' loc-title-big':''}">${tabTitle()} <span class="loc-title-count">${groups.length}</span></div>
     </div>
-    ${currentTab==='edit' && locationFilter!=='All' ? `<div class="desc" style="margin:0 4px 8px;">${t('dragHint')} ${esc(LOC_NAME_BY_CODE[locationFilter])}</div>` : ''}
+    ${currentTab==='edit' && locationFilter!=='All' ? `<div class="desc" style="margin:0 4px 8px;">${t(editReorderMode?'dragHintOn':'dragHintOff')} ${esc(LOC_NAME_BY_CODE[locationFilter])}</div>` : ''}
     <div class="photo-grid" id="photoGrid" style="--cols:${state.gridColsByTab[currentTab]};"></div>
   `;
   const grid = document.getElementById('photoGrid');
@@ -1253,15 +1256,11 @@ function cardHtml(g){
   const locBadge = locationFilter==='All' ? `<div class="loc-tag">${esc(g.location)}</div>` : '';
   const photo = g.photo ? `<img src="${esc(g.photo)}" loading="lazy">` : '👕';
   const pending = Object.values(g.rows).some(r=>pendingSubmitIds.has(String(r.ID)));
-  // Edit tab only: a small dedicated drag handle, not the whole card. Only
-  // this handle has touch-action:none — the rest of the card (photo, cap,
-  // everything) keeps normal touch behavior, so swiping anywhere else on
-  // the grid still scrolls the page like normal. Long-press specifically
-  // on this handle to drag-reorder.
-  const dragHandle = (currentTab==='edit' && !pending) ? '<div class="card-drag-handle">⠿</div>' : '';
+  // Slight random negative delay so jiggling cards aren't perfectly
+  // synchronized — closer to the organic look of iOS's home screen wobble.
+  const jiggleStyle = (currentTab==='edit' && editReorderMode) ? ` style="animation-delay:-${(Math.random()*0.26).toFixed(2)}s;"` : '';
   return `
-    <div class="card${inactive?' inactive-card':''}${checked?' session-checked':''}${pending?' card-pending':''}" data-group-key="${esc(g.key)}" ${pending?'':`onclick="openGroup('${esc(g.key)}')"`}>
-      ${dragHandle}
+    <div class="card${inactive?' inactive-card':''}${checked?' session-checked':''}${pending?' card-pending':''}" data-group-key="${esc(g.key)}"${jiggleStyle} ${pending?'':`onclick="openGroup('${esc(g.key)}')"`}>
       <div class="photo">${photo}</div>
       <div class="status-dot ${status}"></div>
       ${locBadge}
@@ -1508,8 +1507,10 @@ async function commitDisplayCheck(forceChecked){
   const changedIds = Object.keys(draft).filter(id => draft[id].current !== draft[id].original);
 
   // For every size in this popup, check whether it's already On Hold for
-  // this location. If it is, any shortfall (Min Count - Display) created
-  // by this check is folded straight into the On Hold count instead of
+  // this location. If it is, any DECREASE made in THIS session (original
+  // minus current — not the total gap below Min Count, which would keep
+  // re-adding the same amount every time this popup is reopened even with
+  // no change made) is folded straight into the On Hold count instead of
   // ever flagging Storage — once On Hold has started on an item/location
   // (from the Resupply tab), it fully owns that item until resolved there;
   // the Display popup must never re-surface it in Storage on its own.
@@ -1519,16 +1520,16 @@ async function commitDisplayCheck(forceChecked){
     if(!row) return;
     const currentOnHold = Number(row[onHoldField]||0);
     if(currentOnHold <= 0) return; // not on hold — Resupply check below applies instead
-    const need = Math.max(0, Number(draft[id].minCount||0) - draft[id].current);
-    if(need > 0) onHoldUpdates[id] = Math.min(5, currentOnHold + need); // backend caps On Hold at 5
+    const decrease = Math.max(0, draft[id].original - draft[id].current);
+    if(decrease > 0) onHoldUpdates[id] = Math.min(5, currentOnHold + decrease); // backend caps On Hold at 5
   });
 
   // Same idea, one tier down: for anything NOT already On Hold, check
   // whether this location already has an outstanding Resupply request
-  // (Resupply column > 0). If so, any new shortfall gets added onto that
-  // Resupply number instead of ever flagging Storage — an item already
-  // sitting in the Resupply tab's queue for this location shouldn't also
-  // get flagged in Storage as if nobody had asked for it yet.
+  // (Resupply column > 0). If so, any DECREASE made in THIS session gets
+  // added onto that Resupply number instead of ever flagging Storage — an
+  // item already sitting in the Resupply tab's queue for this location
+  // shouldn't also get flagged in Storage as if nobody had asked for it yet.
   const resupplyIncrements = {}; // id -> amount to add to this location's Resupply value
   Object.keys(draft).forEach(id=>{
     if(onHoldUpdates[id] !== undefined) return; // On Hold already claimed this one
@@ -1536,8 +1537,8 @@ async function commitDisplayCheck(forceChecked){
     if(!row) return;
     const currentResupply = Number(row[resupplyField]||0);
     if(currentResupply <= 0) return; // no outstanding request — normal Storage-trigger logic applies below
-    const need = Math.max(0, Number(draft[id].minCount||0) - draft[id].current);
-    if(need > 0) resupplyIncrements[id] = need;
+    const decrease = Math.max(0, draft[id].original - draft[id].current);
+    if(decrease > 0) resupplyIncrements[id] = decrease;
   });
 
   // Build ONE combined update per reviewed size, covering everything —
@@ -2335,14 +2336,12 @@ async function submitNewItem(){
 // reordering while Bears is selected (top bar) only ever touches Bears'
 // own Order column — Tangle and Parkway are untouched.
 let dragReorder = null; // active drag session, or null when nothing's being dragged
-const DRAG_LONG_PRESS_MS = 380;
+const DRAG_LONG_PRESS_MS = 150;
 const DRAG_MOVE_CANCEL_PX = 8;
 
 document.addEventListener('pointerdown', (e)=>{
-  if(currentTab!=='edit') return;
-  const handle = e.target.closest('#photoGrid .card-drag-handle');
-  if(!handle) return;
-  const cardEl = handle.closest('.card[data-group-key]:not(.card-pending)');
+  if(currentTab!=='edit' || !editReorderMode) return;
+  const cardEl = e.target.closest('#photoGrid .card[data-group-key]:not(.card-pending)');
   if(!cardEl) return;
   if(e.pointerType==='mouse' && e.button!==0) return; // left-click only for mouse
 
@@ -2405,6 +2404,51 @@ function beginDragReorder(cardEl, e){
   cardEl.addEventListener('pointermove', onDragMove);
   cardEl.addEventListener('pointerup', onDragEnd);
   cardEl.addEventListener('pointercancel', onDragEnd);
+  startAutoScroll();
+}
+
+// Auto-scrolls the grid while dragging near its top or bottom edge, so an
+// item can be dragged all the way to the very start/end of a long list
+// without needing to first scroll there separately. Runs its own
+// requestAnimationFrame loop independent of pointermove — otherwise
+// holding still right at the edge (a very natural thing to do) wouldn't
+// scroll at all, since no new pointer events would be firing to drive it.
+let autoScrollRAF = null;
+function startAutoScroll(){
+  if(autoScrollRAF) return; // already running
+  function tick(){
+    if(!dragReorder){ autoScrollRAF = null; return; }
+    const scrollEl = document.querySelector('main.grid-area');
+    if(scrollEl){
+      const rect = scrollEl.getBoundingClientRect();
+      const threshold = 70; // px from the edge that starts auto-scrolling
+      const maxSpeed = 14; // px per frame at full intensity (right at the very edge)
+      const y = dragReorder.lastY;
+      let delta = 0;
+      if(y < rect.top + threshold){
+        delta = -maxSpeed * Math.min(1, (rect.top + threshold - y) / threshold);
+      }else if(y > rect.bottom - threshold){
+        delta = maxSpeed * Math.min(1, (y - (rect.bottom - threshold)) / threshold);
+      }
+      if(delta !== 0){
+        const before = scrollEl.scrollTop;
+        scrollEl.scrollTop = before + delta;
+        const actualDelta = scrollEl.scrollTop - before; // 0 once already at a scroll boundary
+        if(actualDelta !== 0){
+          // The dragged card's origin was captured via getBoundingClientRect
+          // at a specific scroll position — shift it by the same amount the
+          // container just scrolled, or the card would visibly drift away
+          // from the finger as auto-scroll continues.
+          dragReorder.originTop -= actualDelta;
+          const activeCardEl = document.querySelector('.card.dragging');
+          if(activeCardEl) positionDraggedCard(activeCardEl, dragReorder.lastX, dragReorder.lastY);
+          maybeReorderDuringDrag(); // new cards may have just scrolled into range even though the finger didn't move
+        }
+      }
+    }
+    autoScrollRAF = requestAnimationFrame(tick);
+  }
+  autoScrollRAF = requestAnimationFrame(tick);
 }
 
 function positionDraggedCard(cardEl, clientX, clientY){
@@ -2426,13 +2470,21 @@ function onDragMove(e){
   dragReorder.lastY = e.clientY;
   const cardEl = e.currentTarget;
   positionDraggedCard(cardEl, e.clientX, e.clientY); // always smooth — tracks the finger every single frame, unthrottled
+  maybeReorderDuringDrag();
+}
 
-  // Reordering the grid itself is throttled and separate from the visual
-  // follow above. pointermove can fire 60-120+ times a second — recomputing
-  // and re-rendering the WHOLE grid on every single one of those caused
-  // visible thrashing (cards jumping around rapidly). A short cooldown
-  // between reorder checks keeps the drag feeling smooth while only
-  // actually reshuffling the other cards a few times a second.
+// Reordering the grid itself is throttled and separate from the visual
+// follow above. pointermove can fire 60-120+ times a second — recomputing
+// and re-rendering the WHOLE grid on every single one of those caused
+// visible thrashing (cards jumping around rapidly). A short cooldown
+// between reorder checks keeps the drag feeling smooth while only
+// actually reshuffling the other cards a few times a second. Called from
+// BOTH onDragMove (finger actively moving) and the auto-scroll loop
+// (finger holding still at an edge while the grid scrolls underneath it)
+// — the finger not moving shouldn't mean new cards scrolled into range
+// never get picked up.
+function maybeReorderDuringDrag(){
+  if(!dragReorder) return;
   const now = performance.now();
   if(now - dragReorder.lastReorderCheck < 220) return;
   dragReorder.lastReorderCheck = now;
@@ -2449,12 +2501,14 @@ function onDragMove(e){
   // hysteresis so a slow hover near a seam doesn't cause rapid flapping.
   const grid = document.getElementById('photoGrid');
   if(!grid) return;
+  const cardEl = document.querySelector('.card.dragging');
+  if(!cardEl) return;
   let target = null;
   grid.querySelectorAll('.card[data-group-key]').forEach(el=>{
     if(el===cardEl || target) return;
     const r = el.getBoundingClientRect();
     const insetX = r.width * 0.2, insetY = r.height * 0.2;
-    if(e.clientX>=r.left+insetX && e.clientX<=r.right-insetX && e.clientY>=r.top+insetY && e.clientY<=r.bottom-insetY) target = el;
+    if(dragReorder.lastX>=r.left+insetX && dragReorder.lastX<=r.right-insetX && dragReorder.lastY>=r.top+insetY && dragReorder.lastY<=r.bottom-insetY) target = el;
   });
   if(!target) return;
   const fromIndex = dragReorder.orderedKeys.indexOf(dragReorder.key);
@@ -2774,8 +2828,21 @@ function compressImageFallback(file, maxW, quality){
 }
 
 /* ============================= NAV / SETTINGS ============================= */
+let editReorderMode = false;
 document.querySelectorAll('.nav-item').forEach(el=>{
-  el.addEventListener('click', ()=>{ currentTab = el.dataset.tab; render(); });
+  el.addEventListener('click', ()=>{
+    const tab = el.dataset.tab;
+    if(tab==='edit' && currentTab==='edit'){
+      // Already on the Edit tab — this tap toggles reorder mode instead
+      // of just re-selecting the same tab (which would otherwise be a no-op).
+      editReorderMode = !editReorderMode;
+      hapticTap();
+    }else{
+      editReorderMode = false; // always starts off when entering Edit fresh from elsewhere
+      currentTab = tab;
+    }
+    render();
+  });
 });
 // cardHtml's onclick calls openGroup() — only Display and Edit tabs ever
 // render cards through that path now (Storage and Resupply have their own
