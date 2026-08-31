@@ -70,7 +70,7 @@
      button, since item creation is really an Edit-tab task. */
   .btn-new-wide{
     display:block; width:calc(100% - 8px); margin:0 4px 10px; padding:14px 0;
-    background:var(--paper); color:var(--ink-soft); border:1.5px solid var(--line); border-radius:12px;
+    background:var(--paper); color:var(--thread-dark); border:1.5px solid var(--thread-dark); border-radius:12px;
     font-family:'Oswald'; font-weight:700; font-size:18px; letter-spacing:0.6px; text-transform:uppercase;
   }
   .btn-new-wide:active{opacity:0.8;}
@@ -1506,20 +1506,27 @@ async function commitDisplayCheck(forceChecked){
   if(!draft) return;
   const changedIds = Object.keys(draft).filter(id => draft[id].current !== draft[id].original);
 
-  // For every size in this popup, check whether it's already On Hold for
-  // this location. If it is, any DECREASE made in THIS session (original
-  // minus current — not the total gap below Min Count, which would keep
-  // re-adding the same amount every time this popup is reopened even with
-  // no change made) is folded straight into the On Hold count instead of
-  // ever flagging Storage — once On Hold has started on an item/location
-  // (from the Resupply tab), it fully owns that item until resolved there;
+  // For every size in this popup, check whether ANY location already has
+  // this item On Hold (not just the location currently being reviewed).
+  // If so, any DECREASE made in THIS session (original minus current —
+  // not the total gap below Min Count, which would keep re-adding the
+  // same amount every time this popup is reopened even with no change
+  // made) is folded straight into the CURRENTLY REVIEWED location's own
+  // On Hold count instead of ever flagging Storage or Resupply — once On
+  // Hold has started on an item ANYWHERE (from the Resupply tab), it
+  // fully owns that item at every location until resolved there;
   // the Display popup must never re-surface it in Storage on its own.
   const onHoldUpdates = {}; // id -> new On Hold value for this location
   Object.keys(draft).forEach(id=>{
     const row = rows.find(r=>sameId(r.ID,id));
     if(!row) return;
-    const currentOnHold = Number(row[onHoldField]||0);
-    if(currentOnHold <= 0) return; // not on hold — Resupply check below applies instead
+    // Once ANY location has this item on hold, the whole item is treated
+    // as on-hold-eligible — a decrease at a DIFFERENT location (even one
+    // that's never been on hold itself, still at 0) increments THAT
+    // location's own On Hold field instead of going to Resupply.
+    const anyLocationOnHold = ['T','P','B'].some(c => Number(row[ON_HOLD_FIELD_BY_CODE[c]]||0) > 0);
+    if(!anyLocationOnHold) return; // no location has this on hold yet — Resupply check below applies instead
+    const currentOnHold = Number(row[onHoldField]||0); // this location's own value — may itself still be 0
     const decrease = Math.max(0, draft[id].original - draft[id].current);
     if(decrease > 0) onHoldUpdates[id] = Math.min(5, currentOnHold + decrease); // backend caps On Hold at 5
   });
