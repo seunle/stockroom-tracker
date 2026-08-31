@@ -862,17 +862,66 @@ function loadState(){
 }
 function saveState(){ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
 
+/* ============================= DEVICE APPROVAL ============================= */
+// Each device generates its own random token once and keeps it in
+// localStorage forever after — this is what the backend's "Devices" sheet
+// tab checks on every single request. A brand-new/un-approved device gets
+// blocked immediately (see showDeviceBlockedScreen below) with its own
+// token displayed, so it can be handed to whoever manages the sheet.
+const DEVICE_TOKEN_KEY = 'stockroom_device_token';
+function getDeviceToken(){
+  let token = localStorage.getItem(DEVICE_TOKEN_KEY);
+  if(!token){
+    token = (typeof crypto!=='undefined' && crypto.randomUUID) ? crypto.randomUUID()
+      : 'dev-' + Math.random().toString(36).slice(2) + '-' + Date.now().toString(36);
+    localStorage.setItem(DEVICE_TOKEN_KEY, token);
+  }
+  return token;
+}
+let deviceBlocked = false;
+function showDeviceBlockedScreen(){
+  if(deviceBlocked) return;
+  deviceBlocked = true;
+  const token = getDeviceToken();
+  document.body.innerHTML = `
+    <div style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; text-align:center; font-family:'Inter',system-ui,sans-serif; background:#F3EFE6; box-sizing:border-box;">
+      <div style="max-width:380px;">
+        <div style="font-family:'Oswald',system-ui,sans-serif; font-weight:700; font-size:20px; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:12px; color:#25241F;">Device Not Approved</div>
+        <p style="color:#6B655A; font-size:14px; line-height:1.6; margin:0 0 20px;">This device hasn't been approved to access Stockroom Tracker yet. Show this code to whoever manages the sheet — they can approve it in the "Devices" tab.</p>
+        <div id="deviceTokenBox" style="background:#DAD3C2; border-radius:10px; padding:14px; font-family:monospace; font-size:13px; word-break:break-all; margin-bottom:16px; color:#25241F;">${esc(token)}</div>
+        <button id="deviceCopyBtn" style="background:#2C4257;color:#fff;border:none;border-radius:9px;padding:12px 20px;font-weight:600;font-size:14px;cursor:pointer;">Copy Code</button>
+        <p style="color:#6B655A; font-size:12px; line-height:1.5; margin:20px 0 0;">Once approved, just reload this page.</p>
+      </div>
+    </div>
+  `;
+  const btn = document.getElementById('deviceCopyBtn');
+  if(btn) btn.addEventListener('click', ()=>{
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(token).then(()=>{ btn.textContent = 'Copied!'; setTimeout(()=>{ btn.textContent='Copy Code'; }, 1500); });
+    }
+  });
+}
+
 /* ============================= API ============================= */
 async function apiGet(){
   if(!state.apiUrl) return {ok:false,error:'no-url'};
-  try{ const res = await fetch(state.apiUrl,{method:'GET'}); return await res.json(); }
+  try{
+    const sep = state.apiUrl.indexOf('?')!==-1 ? '&' : '?';
+    const url = state.apiUrl + sep + 'token=' + encodeURIComponent(getDeviceToken());
+    const res = await fetch(url,{method:'GET'});
+    const data = await res.json();
+    if(data && data.unauthorized) showDeviceBlockedScreen();
+    return data;
+  }
   catch(e){ return {ok:false,error:String(e)}; }
 }
 async function apiPost(body){
   if(!state.apiUrl) return {ok:false,error:'no-url'};
   try{
-    const res = await fetch(state.apiUrl,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)});
-    return await res.json();
+    const res = await fetch(state.apiUrl,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({...body, token:getDeviceToken()})});
+    const data = await res.json();
+    if(data && data.unauthorized) showDeviceBlockedScreen();
+    return data;
   }catch(e){ return {ok:false,error:String(e)}; }
 }
 
