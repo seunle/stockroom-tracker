@@ -863,16 +863,6 @@ const STORAGE_FIELD_BY_CODE = { T:'StorageTangle', P:'StorageParkway', B:'Storag
 function hasCurrentStorageDisplayTrigger(row, code){
   return Number(row[STORAGE_FIELD_BY_CODE[code]]||0) === 1;
 }
-async function markStorageDisplayTrigger(code, id){
-  const row = rows.find(r=>sameId(r.ID,id));
-  if(row) row[STORAGE_FIELD_BY_CODE[code]] = 1; // optimistic local update
-  await apiPost({action:'setStorageFlag', id, location:code, active:true});
-}
-async function clearStorageDisplayTrigger(code, id){
-  const row = rows.find(r=>sameId(r.ID,id));
-  if(row) row[STORAGE_FIELD_BY_CODE[code]] = 0; // optimistic local update
-  await apiPost({action:'setStorageFlag', id, location:code, active:false});
-}
 
 function loadState(){
   try{
@@ -1476,6 +1466,7 @@ async function commitDisplayCheck(forceChecked){
   const displayField = DISPLAY_FIELD_BY_CODE[locForDraft];
   const onHoldField = ON_HOLD_FIELD_BY_CODE[locForDraft];
   const resupplyField = RESUPPLY_FIELD_BY_CODE[locForDraft];
+  const storageField = STORAGE_FIELD_BY_CODE[locForDraft];
   displayDraft = null; displayDraftGroupKey = null; displayDraftLocation = null;
   closeSheet();
   if(!draft) return;
@@ -1514,43 +1505,41 @@ async function commitDisplayCheck(forceChecked){
     if(need > 0) resupplyIncrements[id] = need;
   });
 
-  const affectedIds = Array.from(new Set([...changedIds, ...Object.keys(onHoldUpdates), ...Object.keys(resupplyIncrements)]));
+  // Build ONE combined update per reviewed size, covering everything —
+  // Display value, Storage eligibility, On Hold redirect, Resupply
+  // redirect — and send it as a SINGLE request. This used to be up to one
+  // network round trip PER size PER concern (a 7-size item could mean
+  // 8-10+ sequential calls before the UI settled); now it's exactly one,
+  // regardless of how many sizes were reviewed.
+  const reviewUpdates = Object.keys(draft).map(id=>{
+    const u = { id };
+    if(changedIds.includes(id)) u.displayValue = draft[id].current;
+    if(onHoldUpdates[id] !== undefined){
+      u.onHold = onHoldUpdates[id];
+      u.storageActive = 0;
+    }else if(resupplyIncrements[id] !== undefined){
+      u.resupplyIncrement = resupplyIncrements[id];
+      u.storageActive = 0;
+    }else{
+      u.storageActive = (draft[id].current >= Number(draft[id].minCount||0)) ? 0 : 1;
+    }
+    return u;
+  });
+
+  const affectedIds = Object.keys(draft);
   if(affectedIds.length>0){
-    pushUndoSnapshot(affectedIds); // one batch undo covering Display, On Hold, and Resupply changes from this check
+    pushUndoSnapshot(affectedIds); // one batch undo covering Display, On Hold, Resupply, and Storage changes from this check
     toast(t('saving'));
-    for(const id of changedIds){
-      const newVal = draft[id].current;
-      const row = rows.find(r=>sameId(r.ID,id));
-      if(row) row[displayField] = newVal;
-      await apiPost({action:'setDisplayCount', id, value:newVal, location:locForDraft});
-    }
-    for(const id of Object.keys(onHoldUpdates)){
-      const newOnHold = onHoldUpdates[id];
-      const row = rows.find(r=>sameId(r.ID,id));
-      if(row) row[onHoldField] = newOnHold;
-      await apiPost({action:'setResupplyForLocation', id, location:locForDraft, onHold:newOnHold});
-    }
-    for(const id of Object.keys(resupplyIncrements)){
-      const amount = resupplyIncrements[id];
-      const row = rows.find(r=>sameId(r.ID,id));
-      if(row) row[resupplyField] = Number(row[resupplyField]||0) + amount; // optimistic — server computes the authoritative total
-      await apiPost({action:'incrementResupplyForLocation', id, location:locForDraft, amount});
-    }
-  }
-  // Pressing Done/Checked is an explicit review of EVERY size shown in this
-  // popup, not just the ones adjusted with +/-. A size already sitting at 0
-  // that you simply confirmed (no change needed) still needs to register as
-  // reviewed so it can appear in Storage — otherwise an untouched
-  // below-minimum size never gets a trigger recorded and stays invisible
-  // there even though you looked right at it. Sizes folded into On Hold or
-  // Resupply above must NEVER get a Storage trigger. This is written to
-  // the sheet's Storage column (not localStorage), so every device sees
-  // the same Storage-tab state — not just the one that did the check.
-  for(const id of Object.keys(draft)){
-    if(onHoldUpdates[id] !== undefined || resupplyIncrements[id] !== undefined){ await clearStorageDisplayTrigger(locForDraft, id); continue; }
-    const finalVal = draft[id].current;
-    if(finalVal >= Number(draft[id].minCount||0)){ await clearStorageDisplayTrigger(locForDraft, id); }
-    else { await markStorageDisplayTrigger(locForDraft, id); }
+    // Optimistic local updates, matching what the server is about to do.
+    reviewUpdates.forEach(u=>{
+      const row = rows.find(r=>sameId(r.ID,u.id));
+      if(!row) return;
+      if(u.displayValue!==undefined) row[displayField] = u.displayValue;
+      if(u.storageActive!==undefined) row[storageField] = u.storageActive;
+      if(u.onHold!==undefined) row[onHoldField] = u.onHold;
+      if(u.resupplyIncrement) row[resupplyField] = Number(row[resupplyField]||0) + u.resupplyIncrement;
+    });
+    await apiPost({action:'commitDisplayReview', location:locForDraft, updates:reviewUpdates});
   }
   if(changedIds.length>0 || forceChecked){
     // Scoped to the location this popup was actually reviewing — checking
