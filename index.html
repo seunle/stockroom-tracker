@@ -219,6 +219,7 @@
   }
 
   .empty-state{text-align:center;padding:60px 24px;color:var(--ink-soft);}
+  .empty-state.compact{padding:26px 24px;}
   .empty-state .ic{
     width:60px;height:60px;border:2.5px dashed var(--line);border-radius:50%;margin:0 auto 14px;
     display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--line);transform:rotate(-6deg);
@@ -327,6 +328,15 @@
   .detail-wrap .size-grid{gap:2px;}
   .detail-wrap .size-col{border-right:1.5px solid var(--line); padding:0 6px;}
   .detail-wrap .size-col:last-child{border-right:none;}
+  /* Display popup only (scoped via .detail-wrap, unique to this popup) —
+     "min X" forced onto one line with a shrinking font so it never wraps,
+     the label/count squeezed a little tighter, and the freed-up vertical
+     space handed to the gap between + and − so they're easier to tap
+     individually instead of sitting right on top of each other. */
+  .detail-wrap .size-label{margin-bottom:2px;}
+  .detail-wrap .size-count{padding:5px 0; margin:3px 0;}
+  .detail-wrap .size-minus{margin-top:14px;}
+  .detail-wrap .size-min{white-space:nowrap; font-size:clamp(6.5px, 1.7cqw, 9.5px); margin-top:1px;}
   .size-col{text-align:center;}
   .size-label{font-family:'Oswald';font-weight:700;font-size:clamp(15px, 4.2cqw, 39px);margin-bottom:5px;}
   .size-plus,.size-minus{
@@ -1085,8 +1095,8 @@ function tabTitle(){
   return currentTab==='display' ? t('tabTitleDisplay') : currentTab==='storage' ? t('tabTitleStorage')
        : currentTab==='resupply' ? t('tabTitleResupply') : t('tabTitleEdit');
 }
-function emptyState(){
-  return `<div class="empty-state"><div class="ic">🏷️</div><div class="big">${t('emptyNothingTitle')}</div>
+function emptyState(compact){
+  return `<div class="empty-state${compact?' compact':''}">${compact?'':'<div class="ic">🏷️</div>'}<div class="big">${t('emptyNothingTitle')}</div>
     <p>${currentTab==='resupply' ? t('emptyResupply')
        : currentTab==='storage' ? t('emptyStorage')
        : currentTab==='edit' ? t('emptyEdit') : t('emptyDefault')}</p></div>`;
@@ -1534,9 +1544,7 @@ function renderResupplyTab(main, list){
       </div>
     </div>
     <div class="resupply-active-section${activeCode===ON_HOLD_CODE?' onhold-glow':''}">
-      <div class="grid-toolbar">
-        <div class="grid-title">${esc(activeName).toUpperCase()} <span style="color:var(--ink);font-weight:800;">${activeItems.length}</span></div>
-      </div>
+      <div class="resupply-row-label">${esc(activeName).toUpperCase()} <span class="resupply-row-count">${activeItems.length}</span></div>
       <div class="photo-grid" id="resupplyGrid" style="--cols:${state.gridColsByTab.resupply};"></div>
     </div>
     <div id="resupplyCollapsedRows"></div>
@@ -1544,7 +1552,7 @@ function renderResupplyTab(main, list){
 
   const grid = document.getElementById('resupplyGrid');
   if(activeItems.length===0){
-    grid.outerHTML = emptyState();
+    grid.outerHTML = emptyState(true);
   }else{
     grid.innerHTML = activeItems.map(r => activeCode===ON_HOLD_CODE ? onHoldCardHtml(r) : resupplyCardHtml(r, activeCode, RESUPPLY_FIELD_BY_CODE[activeCode])).join('');
   }
