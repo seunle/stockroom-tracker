@@ -145,6 +145,11 @@
   }
   .card.inactive-card{opacity:0.5;}
   .card.card-pending{opacity:0.35; pointer-events:none;}
+  .card.dragging{cursor:grabbing; box-shadow:0 10px 28px rgba(0,0,0,0.35); z-index:50;}
+  /* Prevents the browser's native touch-scroll gesture from fighting the
+     custom press-and-hold drag in the Edit tab — without this, dragging a
+     finger down on a phone can simultaneously try to scroll the page. */
+  main.grid-area.edit-mode-bg .card[data-group-key]{touch-action:none;}
   .card.session-checked{filter:grayscale(1); opacity:0.55;}
   .card.session-checked::after{
     content:'✓ Checked'; position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
@@ -190,12 +195,13 @@
   .rotate-btn .rotate-arrow{font-size:42px; line-height:1;}
   .rotate-btn .rotate-text{font-family:'Oswald'; font-weight:700; font-size:28px; letter-spacing:0.5px; text-transform:uppercase;}
   .rotate-btn:active{opacity:0.8;}
-  .resupply-row{margin-bottom:20px;}
-  .resupply-row.onhold-glow{
+  .resupply-active-section{margin-bottom:16px;}
+  .resupply-active-section.onhold-glow{
     border-radius:18px; padding:12px 12px 4px;
     background:rgba(174,66,57,0.13);
     box-shadow:0 0 0 3px rgba(174,66,57,0.55), 0 0 40px 10px rgba(174,66,57,0.45);
   }
+  .resupply-collapsed-row{cursor:pointer; margin-bottom:14px;}
   .resupply-row-label{
     font-family:'Oswald'; font-weight:600; font-size:26px; letter-spacing:0.6px; text-transform:uppercase;
     color:var(--ink-soft); background:none; padding:0 4px 6px; margin:0 4px 10px; border-bottom:1.5px solid var(--line);
@@ -204,13 +210,7 @@
     display:inline-block; vertical-align:middle; background:var(--line); color:var(--ink); font-weight:800;
     font-size:15px; padding:2px 12px; border-radius:12px; margin-left:8px;
   }
-  .resupply-row-strip{
-    display:flex; gap:10px; overflow-x:auto; overflow-y:hidden; padding:0 4px 6px;
-    max-height:640px; opacity:1;
-    transition:max-height 0.32s cubic-bezier(0.4,0,0.2,1), opacity 0.22s ease, padding 0.32s ease;
-  }
-  .resupply-row-strip.collapsed{max-height:0; opacity:0; padding-top:0; padding-bottom:0; pointer-events:none;}
-  .resupply-card{flex-shrink:0; cursor:pointer;}
+  .resupply-card{cursor:pointer;}
   .qty-badge{
     position:absolute; top:6px; right:6px; background:rgba(255,255,255,0.8); color:#000;
     font-family:'Oswald'; font-size:30px; font-weight:800; letter-spacing:0.3px;
@@ -398,9 +398,12 @@
   .restock-info-col{flex:1; min-width:0; display:flex; flex-direction:column;}
   .restock-section-label{font-family:'Oswald'; font-weight:700; font-size:12px; letter-spacing:1px; text-transform:uppercase; color:var(--ink-soft); margin-bottom:8px; text-align:center;}
   .restock-request-label{font-family:'Oswald'; font-weight:700; font-size:clamp(13px, 2.2cqw, 18px); letter-spacing:1px; text-transform:uppercase; color:var(--ink-soft); margin-bottom:8px; text-align:center;}
+  /* Storage tab popup only — .restock-request-section isn't used by the
+     Resupply tab's own popup, which has its own separate classes. */
+  .restock-request-section .restock-request-label{font-size:clamp(15px, 2.6cqw, 21px);}
   .restock-section-label.need-label{font-size:clamp(17px, 3cqw, 24px);}
-  .restock-request-stepper.lg button{width:clamp(32px, 6cqw, 45px);height:clamp(32px, 6cqw, 45px);border-radius:11px;font-size:clamp(16px, 3cqw, 24px);}
-  .restock-request-stepper.lg input{flex:0 0 clamp(92px, 20cqw, 160px);width:clamp(92px, 20cqw, 160px);font-size:clamp(17px, 3.5cqw, 28px);padding:9px 0;}
+  .restock-request-stepper.lg button{width:clamp(38px, 7cqw, 54px);height:clamp(38px, 7cqw, 54px);border-radius:12px;font-size:clamp(19px, 3.6cqw, 29px);}
+  .restock-request-stepper.lg input{flex:0 0 clamp(104px, 23cqw, 180px);width:clamp(104px, 23cqw, 180px);font-size:clamp(20px, 4cqw, 33px);padding:10px 0;}
   .restock-request-stepper.xl button{width:clamp(46px, 10cqw, 88px);height:clamp(46px, 10cqw, 88px);border-radius:20px;font-size:clamp(22px, 5.5cqw, 46px);}
   .restock-request-stepper.xl input{flex:0 0 clamp(120px, 26cqw, 200px);width:clamp(120px, 26cqw, 200px);font-size:clamp(28px, 7cqw, 64px);padding:16px 0;border-radius:16px;}
   .on-hold-box{margin-top:14px; padding:0; height:clamp(44px, 8cqw, 62px); position:relative; display:block; text-align:left; background:none; border:none;}
@@ -645,7 +648,7 @@ const TRANSLATIONS = {
     connectTitle:'Not connected yet', connectBody:'Tap the ⚙ icon in the top-right to enter your Apps Script URL.',
     connectEmptyTitle:'Connect your sheet', connectEmptyBody:'Once connected, all three locations will share the same live inventory.',
     tabTitleDisplay:'On Display', tabTitleStorage:'Needs a Check', tabTitleResupply:'Needs Attention', tabTitleEdit:'All Items',
-    emptyResupply:'No location rows are shown — toggle one on above.',
+    emptyResupply:'Nothing here for this location right now — try another one above.',
     emptyStorage:'Everything on display is at or above its minimum count.',
     emptyEdit:'No items match this filter.', emptyDefault:'Tap "+ New" up top to add your first item.',
     emptyNothingTitle:'Nothing here yet',
@@ -680,6 +683,7 @@ const TRANSLATIONS = {
     hapticsDescSupported:'Vibrates briefly on button/card taps. Android only — iPhones don\'t support this.',
     hapticsDescUnsupported:'This device/browser doesn\'t support vibration, so this setting won\'t do anything here.',
     languageLabel:'Language', langEnglish:'English', langKorean:'한국어',
+    pickLocationForOrder:'Select a specific location (top bar) before reordering', savingOrder:'Saving order…', orderSaved:'Order saved', dragHint:'Press and hold a card to reorder for',
     storageTitle:'Storage', pickLocationTitle:'Pick a location',
     pickLocationBody:'Storage needs a specific location selected (top bar) — restocking requirements are tracked separately per location now.',
   },
@@ -689,7 +693,7 @@ const TRANSLATIONS = {
     connectTitle:'아직 연결되지 않음', connectBody:'오른쪽 위 ⚙ 아이콘을 눌러 Apps Script URL을 입력하세요.',
     connectEmptyTitle:'시트 연결하기', connectEmptyBody:'연결하면 세 매장이 동일한 실시간 재고를 공유합니다.',
     tabTitleDisplay:'진열 중', tabTitleStorage:'확인 필요', tabTitleResupply:'조치 필요', tabTitleEdit:'전체 품목',
-    emptyResupply:'표시된 매장 행이 없습니다 — 위에서 하나를 켜세요.',
+    emptyResupply:'이 매장에는 지금 필요한 항목이 없습니다 — 위에서 다른 매장을 선택해 보세요.',
     emptyStorage:'진열된 모든 품목이 최소 수량 이상입니다.',
     emptyEdit:'이 필터에 맞는 품목이 없습니다.', emptyDefault:'위쪽 "+ 추가"를 눌러 첫 품목을 추가하세요.',
     emptyNothingTitle:'아직 항목이 없습니다',
@@ -724,6 +728,7 @@ const TRANSLATIONS = {
     hapticsDescSupported:'버튼/카드를 탭하면 짧게 진동합니다. Android 전용 — iPhone은 지원하지 않습니다.',
     hapticsDescUnsupported:'이 기기/브라우저는 진동을 지원하지 않아 이 설정은 효과가 없습니다.',
     languageLabel:'언어', langEnglish:'English', langKorean:'한국어',
+    pickLocationForOrder:'순서를 변경하려면 상단에서 매장을 선택하세요', savingOrder:'순서 저장 중…', orderSaved:'순서가 저장되었습니다', dragHint:'길게 눌러 순서를 변경하세요 —',
     storageTitle:'재고', pickLocationTitle:'매장을 선택하세요',
     pickLocationBody:'재고 확인에는 특정 매장 선택이 필요합니다 (상단) — 이제 매장별로 보충 필요 수량이 따로 관리됩니다.',
   }
@@ -767,28 +772,27 @@ let checkedFilter = 'all'; // 'all' | 'checked' | 'unchecked' — Display tab on
 // when someone then looks at its Parkway count on the same device/session.
 function sessionCheckKey(locCode, groupKey){ return locCode+'::'+groupKey; }
 let storageSizeFilter = 'All'; // 'All' | 'XS' | ... — Storage tab only
-// Storage entries are only eligible when the current Display value matches a value
-// that was explicitly changed through the Display popup on this device. This prevents
-// arbitrary below-minimum values entered directly in Sheets from appearing in Storage.
-let storageDisplayTriggers = {}; // { '<location>:<id>': displayValue }
-function loadStorageDisplayTriggers(){
-  try{ storageDisplayTriggers = JSON.parse(localStorage.getItem('storageDisplayTriggers')||'{}') || {}; }catch(e){ storageDisplayTriggers = {}; }
+// Storage-tab eligibility is a per-location 1/0 flag stored in the sheet's
+// own Storage Tangle/Parkway/Bears columns (previously unused) — set the
+// moment a size is reviewed as below-minimum in the Display popup, cleared
+// once it's resolved. This used to live in this device's localStorage,
+// which meant a check done on one device was invisible on any other device
+// looking at the same location — reading/writing it as real sheet data
+// instead means every device sees the same Storage tab.
+const STORAGE_FIELD_BY_CODE = { T:'StorageTangle', P:'StorageParkway', B:'StorageBears' };
+function hasCurrentStorageDisplayTrigger(row, code){
+  return Number(row[STORAGE_FIELD_BY_CODE[code]]||0) === 1;
 }
-function saveStorageDisplayTriggers(){ localStorage.setItem('storageDisplayTriggers', JSON.stringify(storageDisplayTriggers)); }
-function storageTriggerKey(code,id){ return code+':'+String(id); }
-function markStorageDisplayTrigger(code,id,value){
-  const key=storageTriggerKey(code,id);
-  if(Number(value||0) > 0){ storageDisplayTriggers[key]=Number(value||0); }
-  else { storageDisplayTriggers[key]=0; }
-  saveStorageDisplayTriggers();
+async function markStorageDisplayTrigger(code, id){
+  const row = rows.find(r=>sameId(r.ID,id));
+  if(row) row[STORAGE_FIELD_BY_CODE[code]] = 1; // optimistic local update
+  await apiPost({action:'setStorageFlag', id, location:code, active:true});
 }
-function clearStorageDisplayTrigger(code,id){ delete storageDisplayTriggers[storageTriggerKey(code,id)]; saveStorageDisplayTriggers(); }
-function hasCurrentStorageDisplayTrigger(row,code){
-  const key=storageTriggerKey(code,row.ID);
-  return Object.prototype.hasOwnProperty.call(storageDisplayTriggers,key)
-    && Number(storageDisplayTriggers[key]) === Number(row[DISPLAY_FIELD_BY_CODE[code]]||0);
+async function clearStorageDisplayTrigger(code, id){
+  const row = rows.find(r=>sameId(r.ID,id));
+  if(row) row[STORAGE_FIELD_BY_CODE[code]] = 0; // optimistic local update
+  await apiPost({action:'setStorageFlag', id, location:code, active:false});
 }
-loadStorageDisplayTriggers();
 
 function loadState(){
   try{
@@ -824,9 +828,20 @@ async function apiPost(body){
   }catch(e){ return {ok:false,error:String(e)}; }
 }
 
+let refreshGeneration = 0; // guards against overlapping refresh() calls resolving out of order
 async function refresh(showToast){
   if(!state.apiUrl){ document.getElementById('lastSync').textContent=t('notConnected'); render(); return; }
+  const myGeneration = ++refreshGeneration;
   const res = await apiGet();
+  // Two refresh() calls can easily overlap — e.g. acting on two items in
+  // quick succession each triggers its own refresh(). Apps Script/network
+  // latency doesn't guarantee responses arrive in the order the requests
+  // were sent, so without this guard, an OLDER but SLOWER response can
+  // resolve after a newer one and overwrite it — silently reverting rows
+  // (including whatever the newer refresh just correctly resolved) back
+  // to stale data. Only ever apply the response from the most recently
+  // issued refresh(); anything older that arrives late is just discarded.
+  if(myGeneration !== refreshGeneration) return;
   if(res.ok){
     rows = res.items||[];
     document.getElementById('lastSync').textContent = t('synced')+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
@@ -1033,6 +1048,7 @@ function render(){
     <div class="grid-toolbar">
       <div class="grid-title">${tabTitle()} <span style="color:var(--ink);font-weight:800;">${groups.length}</span></div>
     </div>
+    ${currentTab==='edit' && locationFilter!=='All' ? `<div class="desc" style="margin:0 4px 8px;">${t('dragHint')} ${esc(LOC_NAME_BY_CODE[locationFilter])}</div>` : ''}
     <div class="photo-grid" id="photoGrid" style="--cols:${state.gridColsByTab[currentTab]};"></div>
   `;
   const grid = document.getElementById('photoGrid');
@@ -1040,6 +1056,7 @@ function render(){
   if(currentTab==='display' && checkedFilter!=='all'){
     groups = groups.filter(g => checkedFilter==='checked' ? sessionCheckedKeys.has(sessionCheckKey(locationFilter,g.key)) : !sessionCheckedKeys.has(sessionCheckKey(locationFilter,g.key)));
   }
+  groups = applyCustomOrder(groups, locationFilter); // no-op when locationFilter is 'All' — order is per-location, so there's no single order to apply
 
   if(groups.length===0){
     grid.outerHTML = emptyState();
@@ -1082,7 +1099,7 @@ function cardHtml(g){
   const photo = g.photo ? `<img src="${esc(g.photo)}" loading="lazy">` : '👕';
   const pending = Object.values(g.rows).some(r=>pendingSubmitIds.has(String(r.ID)));
   return `
-    <div class="card${inactive?' inactive-card':''}${checked?' session-checked':''}${pending?' card-pending':''}" ${pending?'':`onclick="openGroup('${esc(g.key)}')"`}>
+    <div class="card${inactive?' inactive-card':''}${checked?' session-checked':''}${pending?' card-pending':''}" data-group-key="${esc(g.key)}" ${pending?'':`onclick="openGroup('${esc(g.key)}')"`}>
       <div class="photo">${photo}</div>
       <div class="status-dot ${status}"></div>
       ${locBadge}
@@ -1280,8 +1297,8 @@ function openDisplayCheck(key){
           return `
             <div class="size-col">
               <div class="size-label">${SIZE_SHORT_LABEL[sz]}</div>
-              <button class="size-plus" onclick="stepDisplayDraft('${row.ID}',1)">+</button>
               <div class="size-count ${belowMin?'low':''}" id="cnt-${row.ID}">${d.current}</div>
+              <button class="size-plus" onclick="stepDisplayDraft('${row.ID}',1)">+</button>
               <button class="size-minus" onclick="stepDisplayDraft('${row.ID}',-1)">−</button>
               <div class="size-min">${t('minLabel')} ${d.minCount}</div>
             </div>`;
@@ -1389,13 +1406,15 @@ async function commitDisplayCheck(forceChecked){
   // reviewed so it can appear in Storage — otherwise an untouched
   // below-minimum size never gets a trigger recorded and stays invisible
   // there even though you looked right at it. Sizes folded into On Hold or
-  // Resupply above must NEVER get a Storage trigger.
-  Object.keys(draft).forEach(id=>{
-    if(onHoldUpdates[id] !== undefined || resupplyIncrements[id] !== undefined){ clearStorageDisplayTrigger(locForDraft, id); return; }
+  // Resupply above must NEVER get a Storage trigger. This is written to
+  // the sheet's Storage column (not localStorage), so every device sees
+  // the same Storage-tab state — not just the one that did the check.
+  for(const id of Object.keys(draft)){
+    if(onHoldUpdates[id] !== undefined || resupplyIncrements[id] !== undefined){ await clearStorageDisplayTrigger(locForDraft, id); continue; }
     const finalVal = draft[id].current;
-    if(finalVal >= Number(draft[id].minCount||0)){ clearStorageDisplayTrigger(locForDraft, id); }
-    else { markStorageDisplayTrigger(locForDraft, id, finalVal); }
-  });
+    if(finalVal >= Number(draft[id].minCount||0)){ await clearStorageDisplayTrigger(locForDraft, id); }
+    else { await markStorageDisplayTrigger(locForDraft, id); }
+  }
   if(changedIds.length>0 || forceChecked){
     // Scoped to the location this popup was actually reviewing — checking
     // Bears' count doesn't mark the item checked for Parkway too.
@@ -1409,13 +1428,47 @@ async function commitDisplayCheck(forceChecked){
 const RESUPPLY_FIELD_BY_CODE = { T:'ResupplyTangle', P:'ResupplyParkway', B:'ResupplyBears' };
 const DISPLAY_FIELD_BY_CODE = { T:'DisplayTangle', P:'DisplayParkway', B:'DisplayBears' };
 const ON_HOLD_FIELD_BY_CODE = { T:'OnHoldTangle', P:'OnHoldParkway', B:'OnHoldBears' };
+const ORDER_FIELD_BY_CODE = { T:'OrderTangle', P:'OrderParkway', B:'OrderBears' };
+// Custom per-location Display order, set via drag-and-drop in the Edit tab.
+// Reads any row in the group — a group's rows always carry the same order
+// value for a given location, since reordering writes it to every size row
+// in the group at once. Returns null if this group has never been
+// manually positioned for this location.
+function groupOrderValue(g, code){
+  if(!code || code==='All' || !ORDER_FIELD_BY_CODE[code]) return null;
+  const field = ORDER_FIELD_BY_CODE[code];
+  for(const r of Object.values(g.rows)){
+    const v = r[field];
+    if(v !== null && v !== undefined && v !== '') return Number(v);
+  }
+  return null;
+}
+// Sorts groups by their custom order for the given location, when at least
+// one group in the list actually has one set. Groups without an explicit
+// order sink after ones that do, but otherwise keep their original
+// relative order (stable sort) — so a location nobody has ever manually
+// arranged behaves exactly like before this feature existed.
+function applyCustomOrder(groups, code){
+  if(!code || code==='All') return groups;
+  const hasAnyOrder = groups.some(g => groupOrderValue(g, code) !== null);
+  if(!hasAnyOrder) return groups;
+  return groups.slice().sort((a,b)=>{
+    const oa = groupOrderValue(a, code), ob = groupOrderValue(b, code);
+    if(oa===null && ob===null) return 0;
+    if(oa===null) return 1;
+    if(ob===null) return -1;
+    return oa-ob;
+  });
+}
 const LOC_NAME_BY_CODE = { T:'Tangle', P:'Parkway', B:'Bears' };
-const ON_HOLD_CODE = 'H'; // not a real location — a pseudo-row/filter pinned to the end
-let resupplyRowOrder = ['T','P','B']; // rotated by the rotate button (On Hold never joins this array) — governs ROW order only
+const ON_HOLD_CODE = 'H'; // not a real location — a pseudo-row/filter, treated identically to T/P/B now
+let resupplyRowOrder = ['T','P','B',ON_HOLD_CODE]; // rotated by the rotate button — governs the COLLAPSED rows' order (the active one is excluded from that list, shown as the main grid instead)
 const LOC_FILTER_CHIP_ORDER = ['T','P','B']; // filter chip order — deliberately never reordered by Rotate, always Tangle/Parkway/Bears
-let resupplyLocFilter = { T:true, P:true, B:true }; // which location rows are expanded
-let onHoldActive = false; // On Hold filter selected — shows only On Hold items
-let onHoldPrevFilter = null; // snapshot of resupplyLocFilter to restore when On Hold is deselected
+// Only one location (or On Hold) is ever expanded at a time — clicking a
+// chip or a collapsed row makes it the sole active one; every other
+// location collapses to a simple label+count row below. All four are
+// treated identically now — no more special-cased On Hold behavior.
+let activeResupplyLocation = 'T';
 
 function resupplyItemsForCode(code){
   const field = RESUPPLY_FIELD_BY_CODE[code];
@@ -1426,28 +1479,34 @@ function onHoldItems(){
   // Show items that have On Hold units at any location.
   return activeRows().filter(r=>(categoryFilter==='All' || r.Type===categoryFilter) && ['T','P','B'].some(c=>Number(r[ON_HOLD_FIELD_BY_CODE[c]]||0)>0));
 }
+// All four codes (T/P/B/On Hold) now behave identically, so callers that
+// need "how many items does this one have" (Rotate's ordering, the
+// collapsed-row counts) can go through one function regardless of which
+// kind of code they're holding.
+function resupplyItemsFor(code){
+  return code===ON_HOLD_CODE ? onHoldItems() : resupplyItemsForCode(code);
+}
 function renderResupplyTab(main, list){
-  const catFiltered = list.filter(r=>categoryFilter==='All' || r.Type===categoryFilter);
-
-  // FLIP: capture each currently-rendered card's on-screen position (plus
-  // its row's own scroll offset) BEFORE rebuilding the HTML below. When an
-  // item disappears after Done/Resupply/Stock, the cards after it shift
-  // left to fill the gap — without this, that shift is an instant snap and
-  // it's genuinely hard to tell "the item moved" from "the item changed",
-  // especially with similar-looking product photos. Keyed by row ID +
-  // location so the same physical row is tracked correctly even though it
-  // can appear in different location rows.
+  // FLIP: capture each currently-rendered card's on-screen position BEFORE
+  // rebuilding the HTML below (2D — this is now a wrapping multi-column
+  // grid like the Storage tab, not a horizontal strip, so a card can shift
+  // in both X and Y when a neighbor disappears after Done/Resupply/Stock).
   const cardsBefore = {};
-  document.querySelectorAll('#resupplyRows [data-card-key]').forEach(el=>{
-    const strip = el.closest('.resupply-row-strip');
-    cardsBefore[el.dataset.cardKey] = el.getBoundingClientRect().left + (strip ? strip.scrollLeft : 0);
+  document.querySelectorAll('#resupplyGrid [data-card-key]').forEach(el=>{
+    const r = el.getBoundingClientRect();
+    cardsBefore[el.dataset.cardKey] = { left:r.left, top:r.top };
   });
+
+  const activeCode = activeResupplyLocation;
+  const activeItems = resupplyItemsFor(activeCode);
+  const activeName = activeCode===ON_HOLD_CODE ? t('onHold') : LOC_NAME_BY_CODE[activeCode];
+  const collapsedCodes = resupplyRowOrder.filter(c=>c!==activeCode);
 
   main.innerHTML = `
     <div class="toolbar-top resupply-toolbar-default">
       <div class="chiprow" style="flex:1;">
-        ${LOC_FILTER_CHIP_ORDER.map(code=>`<div class="chip ${(!onHoldActive && resupplyLocFilter[code])?'on':''}" data-loc-chip="${code}" onclick="toggleResupplyLocFilter('${code}')">${LOC_NAME_BY_CODE[code]}</div>`).join('')}
-        <div class="chip on-hold-chip ${onHoldActive?'on':''}" data-loc-chip="${ON_HOLD_CODE}" onclick="toggleOnHoldFilter()">${t('onHold')}</div>
+        ${LOC_FILTER_CHIP_ORDER.map(code=>`<div class="chip ${activeCode===code?'on':''}" data-loc-chip="${code}" onclick="selectResupplyLocation('${code}')">${LOC_NAME_BY_CODE[code]}</div>`).join('')}
+        <div class="chip on-hold-chip ${activeCode===ON_HOLD_CODE?'on':''}" data-loc-chip="${ON_HOLD_CODE}" onclick="selectResupplyLocation('${ON_HOLD_CODE}')">${t('onHold')}</div>
       </div>
       <button class="rotate-btn" onclick="rotateResupplyOrder()" title="Cycle row order">
         <span class="rotate-arrow">⟳</span><span class="rotate-text">${t('rotate')}</span>
@@ -1459,7 +1518,7 @@ function renderResupplyTab(main, list){
     </div>
     <div class="resupply-toolbar-portrait">
       <div class="rtp-locs">
-        ${LOC_FILTER_CHIP_ORDER.map(code=>`<div class="chip ${(!onHoldActive && resupplyLocFilter[code])?'on':''}" onclick="toggleResupplyLocFilter('${code}')">${LOC_NAME_BY_CODE[code]}</div>`).join('')}
+        ${LOC_FILTER_CHIP_ORDER.map(code=>`<div class="chip ${activeCode===code?'on':''}" onclick="selectResupplyLocation('${code}')">${LOC_NAME_BY_CODE[code]}</div>`).join('')}
       </div>
       <div class="rtp-right">
         <div class="rtp-actions">
@@ -1471,72 +1530,65 @@ function renderResupplyTab(main, list){
             <button class="scale-btn" onclick="adjustScale(-1)">+</button>
           </div>
         </div>
-        <div class="chip on-hold-chip ${onHoldActive?'on':''}" onclick="toggleOnHoldFilter()">${t('onHold')}</div>
+        <div class="chip on-hold-chip ${activeCode===ON_HOLD_CODE?'on':''}" onclick="selectResupplyLocation('${ON_HOLD_CODE}')">${t('onHold')}</div>
       </div>
     </div>
-    <div id="resupplyRows"></div>
+    <div class="resupply-active-section${activeCode===ON_HOLD_CODE?' onhold-glow':''}">
+      <div class="grid-toolbar">
+        <div class="grid-title">${esc(activeName).toUpperCase()} <span style="color:var(--ink);font-weight:800;">${activeItems.length}</span></div>
+      </div>
+      <div class="photo-grid" id="resupplyGrid" style="--cols:${state.gridColsByTab.resupply};"></div>
+    </div>
+    <div id="resupplyCollapsedRows"></div>
   `;
-  const container = document.getElementById('resupplyRows');
-  // Rows are ALWAYS rendered (label + count never disappear) — only the
-  // item strip collapses visually. On Hold sits last unless it's the
-  // active filter, in which case it slides to the top.
-  const rowOrder = onHoldActive ? [ON_HOLD_CODE, ...resupplyRowOrder] : [...resupplyRowOrder, ON_HOLD_CODE];
-  container.innerHTML = rowOrder.map(code=>{
-    if(code===ON_HOLD_CODE){
-      const items = onHoldItems();
-      return resupplyRowHtml(code, items, !onHoldActive);
-    }
-    const items = catFiltered.filter(r=>Number(r[RESUPPLY_FIELD_BY_CODE[code]]||0)>0 && r.Location.indexOf(code)!==-1);
-    return resupplyRowHtml(code, items, onHoldActive || !resupplyLocFilter[code]);
+
+  const grid = document.getElementById('resupplyGrid');
+  if(activeItems.length===0){
+    grid.outerHTML = emptyState();
+  }else{
+    grid.innerHTML = activeItems.map(r => activeCode===ON_HOLD_CODE ? onHoldCardHtml(r) : resupplyCardHtml(r, activeCode, RESUPPLY_FIELD_BY_CODE[activeCode])).join('');
+  }
+
+  document.getElementById('resupplyCollapsedRows').innerHTML = collapsedCodes.map(code=>{
+    const count = resupplyItemsFor(code).length;
+    const name = code===ON_HOLD_CODE ? t('onHold') : LOC_NAME_BY_CODE[code];
+    return `<div class="resupply-collapsed-row" data-loc-row="${code}" onclick="selectResupplyLocation('${code}')">
+      <div class="resupply-row-label">${esc(name.toUpperCase())} <span class="resupply-row-count">${count}</span></div>
+    </div>`;
   }).join('');
 
   // FLIP animate: measure surviving cards' new positions and slide them in
   // from their old spot. Cards with no "before" entry are genuinely new
-  // (or their row was previously collapsed/hidden) and just appear as-is —
-  // only cards that were already visible and moved get the slide.
-  requestAnimationFrame(()=>{
-    const uiScale = state.uiScale || 1;
-    document.querySelectorAll('#resupplyRows [data-card-key]').forEach(el=>{
-      const key = el.dataset.cardKey;
-      if(cardsBefore[key]===undefined) return;
-      const strip = el.closest('.resupply-row-strip');
-      const nowLeft = el.getBoundingClientRect().left + (strip ? strip.scrollLeft : 0);
-      const delta = (cardsBefore[key] - nowLeft) / uiScale;
-      if(Math.abs(delta) < 1) return;
-      el.style.transition = 'none';
-      el.style.transform = `translateX(${delta}px)`;
-      requestAnimationFrame(()=>{
-        el.style.transition = 'transform 0.32s cubic-bezier(0.4,0,0.2,1)';
-        el.style.transform = 'translateX(0)';
+  // and just appear as-is — only cards that were already visible and moved
+  // get the slide.
+  if(activeItems.length>0){
+    requestAnimationFrame(()=>{
+      const uiScale = state.uiScale || 1;
+      document.querySelectorAll('#resupplyGrid [data-card-key]').forEach(el=>{
+        const before = cardsBefore[el.dataset.cardKey];
+        if(!before) return;
+        const r = el.getBoundingClientRect();
+        const dx = (before.left - r.left) / uiScale, dy = (before.top - r.top) / uiScale;
+        if(Math.abs(dx)<1 && Math.abs(dy)<1) return;
+        el.style.transition = 'none';
+        el.style.transform = `translate(${dx}px, ${dy}px)`;
+        requestAnimationFrame(()=>{
+          el.style.transition = 'transform 0.32s cubic-bezier(0.4,0,0.2,1)';
+          el.style.transform = 'translate(0,0)';
+        });
       });
     });
-  });
-}
-function resupplyRowHtml(code, items, collapsed){
-  const name = code===ON_HOLD_CODE ? 'ON HOLD' : LOC_NAME_BY_CODE[code].toUpperCase();
-  const collapsedClass = (collapsed || items.length===0) ? ' collapsed' : '';
-  // On Hold gets a red glow specifically while it's the active filter (i.e.
-  // right after tapping the On Hold chip) — a visual cue that this section
-  // behaves differently from the plain Tangle/Parkway/Bears rows.
-  const onHoldGlowClass = (code===ON_HOLD_CODE && onHoldActive) ? ' onhold-glow' : '';
-  const cardsHtml = items.map(r => code===ON_HOLD_CODE ? onHoldCardHtml(r) : resupplyCardHtml(r, code, RESUPPLY_FIELD_BY_CODE[code])).join('');
-  return `<div class="resupply-row${onHoldGlowClass}" data-loc-row="${code}">
-    <div class="resupply-row-label">${esc(name)} <span class="resupply-row-count">${items.length}</span></div>
-    <div class="resupply-row-strip${collapsedClass}">${cardsHtml}</div>
-  </div>`;
+  }
 }
 function resupplyCardHtml(row, code, field){
   const qty = Number(row[field]||0);
   const photo = row.Photo ? `<img src="${esc(row.Photo)}" loading="lazy">` : '👕';
   const color = SIZE_COLORS[row.Size] || '#DDD';
-  // Card width still follows grid zoom (+/-), but the badges are now a
-  // fixed size (like the Storage tab) instead of scaling with it.
-  const w = Math.max(90, Math.round(900/(state.gridColsByTab.resupply||4)));
   const pending = pendingSubmitIds.has(String(row.ID));
   return `
-    <div class="card resupply-card${pending?' card-pending':''}" data-card-key="${esc(row.ID)}_${code}" style="width:${w}px; border-color:${color}; box-shadow:0 0 0 3px ${color}55;" ${pending?'':`onclick="openResupplyItem('${esc(row.ID)}','${code}')"`}>
+    <div class="card resupply-card${pending?' card-pending':''}" data-card-key="${esc(row.ID)}_${code}" style="border-color:${color}; box-shadow:0 0 0 3px ${color}55;" ${pending?'':`onclick="openResupplyItem('${esc(row.ID)}','${code}')"`}>
       <div class="photo">${photo}</div>
-      <div class="size-badge" style="background:${color}CC; border:2px solid #fff;">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
+      <div class="size-badge" style="background:${color}CC;">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
       <div class="qty-badge">${qty}</div>
       <div class="cap">${esc(row.Name)}</div>
     </div>`;
@@ -1548,21 +1600,22 @@ function onHoldCardHtml(row){
   const onHold = ['T','P','B'].reduce((sum,c)=>sum+Number(row[ON_HOLD_FIELD_BY_CODE[c]]||0),0);
   const photo = row.Photo ? `<img src="${esc(row.Photo)}" loading="lazy">` : '👕';
   const color = SIZE_COLORS[row.Size] || '#DDD';
-  const w = Math.max(90, Math.round(900/(state.gridColsByTab.resupply||4)));
   const pending = pendingSubmitIds.has(String(row.ID));
   return `
-    <div class="card resupply-card${pending?' card-pending':''}" data-card-key="onhold_${esc(row.ID)}" style="width:${w}px; border-color:${color}; box-shadow:0 0 0 3px ${color}55;" ${pending?'':`onclick="openOnHoldItem('${esc(row.ID)}')"`}>
+    <div class="card resupply-card${pending?' card-pending':''}" data-card-key="onhold_${esc(row.ID)}" style="border-color:${color}; box-shadow:0 0 0 3px ${color}55;" ${pending?'':`onclick="openOnHoldItem('${esc(row.ID)}')"`}>
       <div class="photo">${photo}</div>
-      <div class="size-badge" style="background:${color}CC; border:2px solid #fff;">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
+      <div class="size-badge" style="background:${color}CC;">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
       <div class="qty-badge">${onHold}</div>
       <div class="cap">${esc(row.Name)}</div>
     </div>`;
 }
-// FLIP animation: capture each row's current on-screen position, apply the
-// state change and re-render, then animate every row from where it used to
-// be to where it landed — gives a real slide instead of an instant snap.
+// FLIP animation: capture each collapsed row's current on-screen position,
+// apply the state change and re-render, then animate every row from where
+// it used to be to where it landed — gives a real slide instead of an
+// instant snap. Chips no longer move (fixed order), but the check stays
+// harmless in case that ever changes.
 function animateResupplyRowChange(mutateFn){
-  const container = document.getElementById('resupplyRows');
+  const container = document.getElementById('resupplyCollapsedRows');
   const before = {};
   if(container){
     container.querySelectorAll('[data-loc-row]').forEach(el=>{
@@ -1586,7 +1639,7 @@ function animateResupplyRowChange(mutateFn){
     // for that, so the slide animation covers the actual visual gap
     // instead of over/undershooting it at any UI Scale other than 100%.
     const uiScale = state.uiScale || 1;
-    const newContainer = document.getElementById('resupplyRows');
+    const newContainer = document.getElementById('resupplyCollapsedRows');
     if(newContainer){
       newContainer.querySelectorAll('[data-loc-row]').forEach(el=>{
         const code = el.dataset.locRow;
@@ -1615,39 +1668,20 @@ function animateResupplyRowChange(mutateFn){
     });
   });
 }
-function toggleResupplyLocFilter(code){
+// Makes the tapped location (or On Hold — all four are treated identically
+// now) the sole active/expanded one. Its items take over the main grid;
+// whatever was previously active collapses back down into the label+count
+// row list below.
+function selectResupplyLocation(code){
+  if(activeResupplyLocation===code) return;
   animateResupplyRowChange(()=>{
-    // While On Hold is active, clicking any location box just deselects
-    // On Hold — same as clicking the On Hold chip itself — restoring
-    // whatever location filter was active before. The tapped location is
-    // NOT also applied; it takes a second, separate tap once On Hold is off.
-    if(onHoldActive){
-      onHoldActive = false;
-      if(onHoldPrevFilter) resupplyLocFilter = {...onHoldPrevFilter};
-      onHoldPrevFilter = null;
-      return;
-    }
-    resupplyLocFilter[code] = !resupplyLocFilter[code];
-  });
-}
-function toggleOnHoldFilter(){
-  animateResupplyRowChange(()=>{
-    if(!onHoldActive){
-      onHoldPrevFilter = {...resupplyLocFilter}; // remember so we can restore it
-      onHoldActive = true;
-    }else{
-      onHoldActive = false;
-      if(onHoldPrevFilter) resupplyLocFilter = {...onHoldPrevFilter};
-      onHoldPrevFilter = null;
-    }
+    activeResupplyLocation = code;
   });
 }
 function rotateResupplyOrder(){
   animateResupplyRowChange(()=>{
-    // On Hold is never part of resupplyRowOrder, so it's untouched by
-    // rotation and stays pinned to the end (unless it's the active filter).
-    const withItems = resupplyRowOrder.filter(code => resupplyItemsForCode(code).length > 0);
-    const withoutItems = resupplyRowOrder.filter(code => resupplyItemsForCode(code).length === 0);
+    const withItems = resupplyRowOrder.filter(code => resupplyItemsFor(code).length > 0);
+    const withoutItems = resupplyRowOrder.filter(code => resupplyItemsFor(code).length === 0);
     if(withItems.length > 1) withItems.push(withItems.shift());
     resupplyRowOrder = withItems.concat(withoutItems);
   });
@@ -2016,6 +2050,216 @@ async function submitNewItem(){
   }else{ toast(t('addFailed') + (res.error||t('unknownError')), true); }
 }
 
+/* ============================= EDIT TAB: DRAG TO REORDER ============================= */
+// Press-and-hold a card in the Edit tab to pick it up, then drag it to a
+// new spot — the grid live-previews the new layout as you move it (every
+// other card slides out of the way via the same FLIP technique used
+// elsewhere in the app), and the new order is written back to the sheet
+// the moment you let go. Order is completely independent per location:
+// reordering while Bears is selected (top bar) only ever touches Bears'
+// own Order column — Tangle and Parkway are untouched.
+let dragReorder = null; // active drag session, or null when nothing's being dragged
+const DRAG_LONG_PRESS_MS = 380;
+const DRAG_MOVE_CANCEL_PX = 8;
+
+document.addEventListener('pointerdown', (e)=>{
+  if(currentTab!=='edit') return;
+  const cardEl = e.target.closest('#photoGrid .card[data-group-key]:not(.card-pending)');
+  if(!cardEl) return;
+  if(e.pointerType==='mouse' && e.button!==0) return; // left-click only for mouse
+
+  const startX = e.clientX, startY = e.clientY;
+  const pointerId = e.pointerId;
+  let fired = false;
+  const timer = setTimeout(()=>{ fired = true; beginDragReorder(cardEl, e); }, DRAG_LONG_PRESS_MS);
+
+  const onMove = (ev)=>{
+    if(ev.pointerId!==pointerId || fired) return;
+    if(Math.abs(ev.clientX-startX)>DRAG_MOVE_CANCEL_PX || Math.abs(ev.clientY-startY)>DRAG_MOVE_CANCEL_PX){
+      clearTimeout(timer);
+      cleanup();
+    }
+  };
+  const onUp = (ev)=>{
+    if(ev.pointerId!==pointerId) return;
+    if(!fired) clearTimeout(timer);
+    cleanup();
+  };
+  function cleanup(){
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
+    document.removeEventListener('pointercancel', onUp);
+  }
+  document.addEventListener('pointermove', onMove);
+  document.addEventListener('pointerup', onUp);
+  document.addEventListener('pointercancel', onUp);
+});
+
+function beginDragReorder(cardEl, e){
+  if(locationFilter==='All'){
+    toast(t('pickLocationForOrder'), true);
+    return;
+  }
+  const grid = document.getElementById('photoGrid');
+  if(!grid) return;
+  const orderedKeys = Array.from(grid.querySelectorAll('.card[data-group-key]')).map(c=>c.dataset.groupKey);
+  const startRect = cardEl.getBoundingClientRect();
+
+  dragReorder = {
+    key: cardEl.dataset.groupKey,
+    orderedKeys,
+    pointerId: e.pointerId,
+    offsetX: e.clientX - startRect.left,
+    offsetY: e.clientY - startRect.top,
+    originLeft: startRect.left,
+    originTop: startRect.top,
+    lastX: e.clientX,
+    lastY: e.clientY
+  };
+
+  hapticTap();
+  cardEl.setPointerCapture(e.pointerId);
+  cardEl.classList.add('dragging');
+  cardEl.removeAttribute('onclick');
+  positionDraggedCard(cardEl, e.clientX, e.clientY);
+  cardEl.addEventListener('pointermove', onDragMove);
+  cardEl.addEventListener('pointerup', onDragEnd);
+  cardEl.addEventListener('pointercancel', onDragEnd);
+}
+
+function positionDraggedCard(cardEl, clientX, clientY){
+  // Divides by the current UI Scale for the same reason the Resupply row
+  // FLIP animation does — this element lives inside #uiShell, which is
+  // itself visually scaled via CSS transform, so a raw on-screen pixel
+  // offset needs correcting before being applied as this element's OWN
+  // transform, or the movement would be scaled twice.
+  const uiScale = state.uiScale || 1;
+  const dx = (clientX - dragReorder.offsetX - dragReorder.originLeft) / uiScale;
+  const dy = (clientY - dragReorder.offsetY - dragReorder.originTop) / uiScale;
+  cardEl.style.transform = `translate(${dx}px, ${dy}px) scale(1.05)`;
+}
+
+function onDragMove(e){
+  if(!dragReorder || e.pointerId!==dragReorder.pointerId) return;
+  e.preventDefault();
+  dragReorder.lastX = e.clientX;
+  dragReorder.lastY = e.clientY;
+  const cardEl = e.currentTarget;
+  positionDraggedCard(cardEl, e.clientX, e.clientY);
+
+  // Find whichever OTHER card the pointer is currently nearest to. If
+  // that's a different slot than where the dragged card currently sits in
+  // our working order, move it there and re-render the preview.
+  const grid = document.getElementById('photoGrid');
+  if(!grid) return;
+  let closest = null, closestDist = Infinity;
+  grid.querySelectorAll('.card[data-group-key]').forEach(el=>{
+    if(el===cardEl) return;
+    const r = el.getBoundingClientRect();
+    const dist = Math.hypot(e.clientX-(r.left+r.width/2), e.clientY-(r.top+r.height/2));
+    if(dist < closestDist){ closestDist = dist; closest = el; }
+  });
+  if(!closest) return;
+  const fromIndex = dragReorder.orderedKeys.indexOf(dragReorder.key);
+  const toIndex = dragReorder.orderedKeys.indexOf(closest.dataset.groupKey);
+  if(fromIndex===-1 || toIndex===-1 || fromIndex===toIndex) return;
+
+  const newOrder = dragReorder.orderedKeys.slice();
+  newOrder.splice(fromIndex, 1);
+  newOrder.splice(toIndex, 0, dragReorder.key);
+  dragReorder.orderedKeys = newOrder;
+  renderReorderPreview(cardEl);
+}
+
+function renderReorderPreview(cardEl){
+  // Re-renders the grid in the dragged-to order. Every card except the one
+  // actually being dragged gets FLIP-animated from its old spot to its
+  // new one; the dragged card keeps following the pointer directly.
+  const grid = document.getElementById('photoGrid');
+  if(!grid || !dragReorder) return;
+  const before = {};
+  grid.querySelectorAll('.card[data-group-key]').forEach(el=>{
+    if(el===cardEl) return;
+    const r = el.getBoundingClientRect();
+    before[el.dataset.groupKey] = { left:r.left, top:r.top };
+  });
+
+  const byKey = {};
+  allGroups().forEach(g=>{ byKey[g.key]=g; });
+  grid.innerHTML = dragReorder.orderedKeys.map(k=>byKey[k] ? cardHtml(byKey[k]) : '').join('');
+
+  const newCardEl = grid.querySelector(`.card[data-group-key="${CSS.escape(dragReorder.key)}"]`);
+  if(newCardEl){
+    newCardEl.classList.add('dragging');
+    newCardEl.removeAttribute('onclick');
+    // The pointer capture set in beginDragReorder was on the OLD element,
+    // which just got destroyed by the innerHTML rebuild above — capture is
+    // implicitly released when its element leaves the DOM, so without
+    // re-capturing here, the drag would stop tracking the finger the
+    // moment it moves outside this new element's bounds.
+    try{ newCardEl.setPointerCapture(dragReorder.pointerId); }catch(err){}
+    positionDraggedCard(newCardEl, dragReorder.lastX, dragReorder.lastY);
+    newCardEl.addEventListener('pointermove', onDragMove);
+    newCardEl.addEventListener('pointerup', onDragEnd);
+    newCardEl.addEventListener('pointercancel', onDragEnd);
+  }
+
+  requestAnimationFrame(()=>{
+    const uiScale = state.uiScale || 1;
+    grid.querySelectorAll('.card[data-group-key]').forEach(el=>{
+      if(el===newCardEl) return;
+      const b = before[el.dataset.groupKey];
+      if(!b) return;
+      const r = el.getBoundingClientRect();
+      const dx = (b.left - r.left) / uiScale, dy = (b.top - r.top) / uiScale;
+      if(Math.abs(dx)<1 && Math.abs(dy)<1) return;
+      el.style.transition = 'none';
+      el.style.transform = `translate(${dx}px, ${dy}px)`;
+      requestAnimationFrame(()=>{
+        el.style.transition = 'transform 0.32s cubic-bezier(0.4,0,0.2,1)';
+        el.style.transform = 'translate(0,0)';
+      });
+    });
+  });
+}
+
+async function onDragEnd(e){
+  if(!dragReorder || e.pointerId!==dragReorder.pointerId) return;
+  const cardEl = e.currentTarget;
+  cardEl.removeEventListener('pointermove', onDragMove);
+  cardEl.removeEventListener('pointerup', onDragEnd);
+  cardEl.removeEventListener('pointercancel', onDragEnd);
+  const { orderedKeys } = dragReorder;
+  const code = locationFilter;
+  dragReorder = null;
+
+  // Commit: assign fresh sequential order values (spaced by 10, leaving
+  // room to slot new items in later without renumbering everything) to
+  // every group currently in view, written to every size row in each one.
+  const byKey = {};
+  allGroups().forEach(g=>{ byKey[g.key]=g; });
+  const updates = [];
+  orderedKeys.forEach((key, i)=>{
+    const g = byKey[key];
+    if(!g) return;
+    Object.values(g.rows).forEach(r=>{
+      updates.push({ id:r.ID, order:i*10 });
+    });
+  });
+
+  pushUndoSnapshot(updates.map(u=>u.id)); // snapshot BEFORE the optimistic mutation below, so Undo restores the pre-drag order
+  updates.forEach(u=>{
+    const row = rows.find(r=>sameId(r.ID,u.id));
+    if(row) row[ORDER_FIELD_BY_CODE[code]] = u.order; // optimistic local update
+  });
+
+  render(); // drop the dragging visual state immediately, show the settled order
+  toast(t('savingOrder'));
+  const res = await apiPost({ action:'setGroupOrder', location:code, updates });
+  toast(res.ok ? t('orderSaved') : t('saveFailed') + (res.error||t('unknownError')), !res.ok);
+  refresh(false);
+}
+
 /* ============================= EDIT TAB ============================= */
 function openEditGroup(key){
   const groups = allGroups();
@@ -2311,7 +2555,7 @@ function hapticTap(){
 document.addEventListener('click', (e)=>{
   const el = e.target.closest(
     'button, .card, .chip, .nav-item, .top-btn, .side-cat, .loc-row, ' +
-    '.rotate-btn, .session-refresh-btn, .size-plus, .size-minus, .rq-minus, .rq-plus, .scale-btn'
+    '.rotate-btn, .session-refresh-btn, .size-plus, .size-minus, .rq-minus, .rq-plus, .scale-btn, .resupply-collapsed-row'
   );
   if(el) hapticTap();
 }, true);
@@ -2322,7 +2566,7 @@ applyLanguage();
 updateToastPosition();
 render();
 refresh(false);
-setInterval(()=>{ if(!document.hidden) refresh(false); }, 20000);
+setInterval(()=>{ if(!document.hidden && !dragReorder) refresh(false); }, 20000);
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{ navigator.serviceWorker.register('service-worker.js').catch(()=>{}); });
 }
