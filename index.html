@@ -70,7 +70,7 @@
      button, since item creation is really an Edit-tab task. */
   .btn-new-wide{
     display:block; width:calc(100% - 8px); margin:0 4px 10px; padding:14px 0;
-    background:var(--thread); color:#fff; border:none; border-radius:12px;
+    background:#fff; color:var(--thread-dark); border:2px solid var(--thread-dark); border-radius:12px;
     font-family:'Oswald'; font-weight:700; font-size:18px; letter-spacing:0.6px; text-transform:uppercase;
   }
   .btn-new-wide:active{opacity:0.8;}
@@ -103,14 +103,15 @@
                              (and the Edit button) never sit hidden behind it */
   }
   .side-cat{
-    padding:24px 6px; text-align:center; font-weight:600; /* padding doubled from 12px — ~2x box height */
+    height:87px; display:flex; align-items:center; justify-content:center;
+    padding:0 6px; text-align:center; font-weight:600; /* height matches the current "Men" box — every category (except All) is now this same height, 1-line or 2-line */
     letter-spacing:0.3px; text-transform:uppercase; color:var(--ink-soft);
     border-bottom:1.5px solid var(--line); line-height:1.15; position:relative;
     word-break:break-word; /* safety net so a future long/unbroken type name
                                shrinks its wrapping instead of overflowing the box */
   }
   .side-cat.active{background:var(--thread); color:#fff;}
-  .side-cat.side-cat-all{padding:9px 6px; font-size:20px;} /* excluded from the 2x height/font changes below */
+  .side-cat.side-cat-all{height:auto; display:block; padding:9px 6px; font-size:20px;} /* explicitly excluded — keeps its own original auto-sizing */
   .side-cat .rm{
     position:absolute; top:3px; right:3px; width:16px;height:16px;border-radius:50%;
     background:rgba(0,0,0,0.15); color:#fff; font-size:10px; line-height:16px; display:none;
@@ -131,7 +132,12 @@
   /* Display/Storage tab titles get this — same size/weight as the Resupply
      tab's active-location label, so it reads as an equally strong visual
      cue for "this is the location you're currently looking at". */
-  .grid-title.loc-title-big{font-size:26px; font-weight:800; letter-spacing:0.6px; color:var(--ink-soft);}
+  .grid-title.loc-title-big{font-size:33px; font-weight:800; letter-spacing:0.6px; color:var(--thread-dark);}
+  .grid-title.loc-title-big .loc-title-suffix{color:var(--ink-soft); font-weight:600; opacity:0.65;}
+  .grid-title .loc-title-count{
+    display:inline-block; vertical-align:middle; background:var(--line); color:var(--ink); font-weight:800;
+    font-size:15px; padding:2px 12px; border-radius:12px; margin-left:8px;
+  }
   .scale-ctrl{display:flex;align-items:center;gap:4px;}
   .scale-btn{
     width:78px;height:78px;border-radius:14px;background:var(--paper-raised);border:1.5px solid var(--line);
@@ -309,11 +315,11 @@
   .sheet.narrow{max-width:620px;}
   .sheet.display-wide{max-width:min(900px, 60vw);}
   .sheet-close{
-    position:absolute; top:12px; right:12px; width:60px;height:60px;border-radius:12px;
-    background:var(--restock); color:#fff; font-size:30px; font-weight:700; border:1.5px solid #7A2620; z-index:5;
+    position:absolute; top:12px; right:12px; width:45px;height:45px;border-radius:9px;
+    background:var(--restock); color:#fff; font-size:22px; font-weight:700; border:1.25px solid #7A2620; z-index:5;
     text-shadow:1px 0 0 #7A2620, -1px 0 0 #7A2620, 0 1px 0 #7A2620, 0 -1px 0 #7A2620;
   }
-  .sheet h2{font-size:16px;margin:0 0 4px;text-transform:uppercase;letter-spacing:0.5px;padding-right:66px;}
+  .sheet h2{font-size:16px;margin:0 0 4px;text-transform:uppercase;letter-spacing:0.5px;padding-right:50px;}
   .sheet .desc{font-size:12.5px;color:var(--ink-soft);margin-bottom:14px;line-height:1.5;}
   .field{margin-bottom:13px;}
   .field label{display:block;font-size:11px;font-weight:600;color:var(--ink-soft);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:5px;}
@@ -329,6 +335,7 @@
   }
   .chip.on{background:var(--thread);border-color:var(--thread);color:#fff;}
   .chip.on-hold-chip.on{background:var(--restock);border-color:var(--restock);color:#fff;}
+  .chip.chip-default-tab{height:48px; padding:0 20px; border-radius:18px; font-size:19px;}
   .sheet-actions{display:flex;gap:10px;margin-top:8px;}
   .btn{font-family:'Inter';font-weight:600;font-size:13px;border:none;border-radius:9px;padding:11px 14px;flex:1;}
   .btn-primary{background:var(--thread);color:#fff;}
@@ -603,16 +610,24 @@
   }
   .size-loc-tab.active{
     background:var(--paper-raised); color:var(--ink); position:relative; z-index:2;
-    border:3px solid var(--line); border-bottom:none;
+    border:3px solid var(--ink-soft); border-bottom:none; /* matches the "0" text color, not the paler box behind it */
     padding:9px 3px 8px; /* compensates for the new 3px border so this tab stays the same overall size as its unbordered siblings */
   }
   .size-loc-tab.disabled{background:#C4C4C4; color:#8A8A8A; cursor:not-allowed;}
-  .size-loc-panel{background:var(--paper-raised); border-radius:0 10px 10px 10px; padding:12px 6px 6px; border:3px solid var(--line);}
+  /* No top border at all here — that's what was showing as a stray line
+     between the active tab and this panel. Both top corners are square
+     (not just the left one), so the panel reads as directly open into
+     whichever tab is active, instead of looking capped/closed off on the
+     right regardless of which tab that actually is. */
+  .size-loc-panel{
+    background:var(--paper-raised); border-radius:0 0 10px 10px; padding:8px 6px 6px;
+    border:3px solid var(--ink-soft); border-top:none;
+  }
   .size-loc-panel .size-label{margin-bottom:2px;}
-  .size-loc-panel .size-count{padding:5px 0; margin:3px 0;}
+  .size-loc-panel .size-count-input{margin-bottom:6px;} /* was targeting the wrong class name (.size-count) and never actually applied — this is what was letting the count box touch the + button below it */
   .size-loc-panel .size-minus{margin-top:14px; position:relative;}
   .size-loc-panel .size-minus::before{
-    content:''; position:absolute; top:-7px; left:12.5%; width:75%; height:1px;
+    content:''; position:absolute; top:-9px; left:12.5%; width:75%; height:1px;
     background:var(--line);
   }
 
@@ -1123,7 +1138,7 @@ function render(){
         </div>
       </div>
       <div class="grid-toolbar">
-        <div class="grid-title loc-title-big">${tabTitle()} <span style="color:var(--ink);font-weight:800;">${storageRows.length}</span></div>
+        <div class="grid-title loc-title-big">${tabTitle()} <span class="loc-title-count">${storageRows.length}</span></div>
       </div>
       <div class="photo-grid" id="photoGrid" style="--cols:${state.gridColsByTab[currentTab]};"></div>
     `;
@@ -1169,7 +1184,7 @@ function render(){
     </div>
     ${currentTab==='edit' ? `<button class="btn-new-wide" onclick="openNewItemForm()">+ ${t('newBtn')}</button>` : ''}
     <div class="grid-toolbar">
-      <div class="grid-title${currentTab==='display'?' loc-title-big':''}">${tabTitle()} <span style="color:var(--ink);font-weight:800;">${groups.length}</span></div>
+      <div class="grid-title${currentTab==='display'?' loc-title-big':''}">${tabTitle()} <span class="loc-title-count">${groups.length}</span></div>
     </div>
     ${currentTab==='edit' && locationFilter!=='All' ? `<div class="desc" style="margin:0 4px 8px;">${t('dragHint')} ${esc(LOC_NAME_BY_CODE[locationFilter])}</div>` : ''}
     <div class="photo-grid" id="photoGrid" style="--cols:${state.gridColsByTab[currentTab]};"></div>
@@ -1208,8 +1223,10 @@ function activeLocationTitleWord(){
   return locationFilter==='All' ? t('locAll') : LOC_NAME_BY_CODE[locationFilter];
 }
 function tabTitle(){
-  if(currentTab==='display') return `${esc(activeLocationTitleWord()).toUpperCase()} ${t('tabTitleDisplay')}`;
-  if(currentTab==='storage') return `${esc(activeLocationTitleWord()).toUpperCase()} ${t('tabTitleStorage')}`;
+  // The location word is wrapped so it can be styled darker/more prominent
+  // than the DISPLAY/CHECK suffix — see .loc-title-suffix.
+  if(currentTab==='display') return `${esc(activeLocationTitleWord()).toUpperCase()} <span class="loc-title-suffix">${t('tabTitleDisplay')}</span>`;
+  if(currentTab==='storage') return `${esc(activeLocationTitleWord()).toUpperCase()} <span class="loc-title-suffix">${t('tabTitleStorage')}</span>`;
   return currentTab==='resupply' ? t('tabTitleResupply') : t('tabTitleEdit');
 }
 function emptyState(compact){
@@ -1409,7 +1426,7 @@ function openDisplayCheck(key){
     displayDraft[row.ID] = { original:Number(row[displayField]||0), current:Number(row[displayField]||0), minCount:Number(row[MIN_COUNT_FIELD_BY_CODE[locationFilter]]||0) };
   });
   openSheetHtml(`
-    <div style="margin-bottom:4px; padding-right:66px;">
+    <div style="margin-bottom:4px; padding-right:50px;">
       <h2 style="margin:0 0 1px 0;">${esc(g.name)}</h2>
       <div class="desc" style="margin:0;">${esc(g.type)} · ${esc(g.location)} · ${t('editingDisplay')} <b>${esc(LOC_NAME_BY_CODE[locationFilter])}</b></div>
     </div>
@@ -2736,9 +2753,9 @@ function openSettings(){
     <div class="field">
       <label>${t('defaultTabLabel')}</label>
       <div class="chiprow">
-        <div class="chip ${(pendingDefaultTab||state.defaultTab)==='display'?'on':''}" onclick="setDefaultTabPreview('display')" id="defaultTabDisplayChip">${t('tabDisplay')}</div>
-        <div class="chip ${(pendingDefaultTab||state.defaultTab)==='storage'?'on':''}" onclick="setDefaultTabPreview('storage')" id="defaultTabStorageChip">${t('tabStorage')}</div>
-        <div class="chip ${(pendingDefaultTab||state.defaultTab)==='resupply'?'on':''}" onclick="setDefaultTabPreview('resupply')" id="defaultTabResupplyChip">${t('tabResupply')}</div>
+        <div class="chip chip-default-tab ${(pendingDefaultTab||state.defaultTab)==='display'?'on':''}" onclick="setDefaultTabPreview('display')" id="defaultTabDisplayChip">${t('tabDisplay')}</div>
+        <div class="chip chip-default-tab ${(pendingDefaultTab||state.defaultTab)==='storage'?'on':''}" onclick="setDefaultTabPreview('storage')" id="defaultTabStorageChip">${t('tabStorage')}</div>
+        <div class="chip chip-default-tab ${(pendingDefaultTab||state.defaultTab)==='resupply'?'on':''}" onclick="setDefaultTabPreview('resupply')" id="defaultTabResupplyChip">${t('tabResupply')}</div>
       </div>
       <div class="desc" style="margin-top:6px;margin-bottom:0;">${t('defaultTabDesc')}</div>
     </div>
