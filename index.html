@@ -239,7 +239,7 @@
     background:rgba(174,66,57,0.13);
     box-shadow:0 0 0 3px rgba(174,66,57,0.55), 0 0 40px 10px rgba(174,66,57,0.45);
   }
-  .resupply-collapsed-row{margin-bottom:14px;}
+  .resupply-collapsed-row{cursor:pointer; margin-bottom:14px;}
   .resupply-row-label{
     font-family:'Oswald'; font-weight:600; font-size:26px; letter-spacing:0.6px; text-transform:uppercase;
     color:var(--ink-soft); background:none; padding:0 4px 6px; margin:0 4px 10px; border-bottom:1.5px solid var(--line);
@@ -1077,6 +1077,7 @@ function render(){
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active', n.dataset.tab===currentTab));
   document.querySelector('.nav-item[data-tab="edit"]').classList.toggle('reorder-active', editReorderMode);
   document.getElementById('btnLocation').textContent = locationFilter==='All' ? t('allLocs') : LOCS.find(l=>l.code===locationFilter).name;
+  document.getElementById('btnLocation').style.display = currentTab==='resupply' ? 'none' : '';
 
   const main = document.getElementById('main');
   main.classList.toggle('edit-mode-bg', currentTab==='edit');
@@ -1256,11 +1257,12 @@ function cardHtml(g){
   const locBadge = locationFilter==='All' ? `<div class="loc-tag">${esc(g.location)}</div>` : '';
   const photo = g.photo ? `<img src="${esc(g.photo)}" loading="lazy">` : '👕';
   const pending = Object.values(g.rows).some(r=>pendingSubmitIds.has(String(r.ID)));
+  const inReorderMode = currentTab==='edit' && editReorderMode;
   // Slight random negative delay so jiggling cards aren't perfectly
   // synchronized — closer to the organic look of iOS's home screen wobble.
-  const jiggleStyle = (currentTab==='edit' && editReorderMode) ? ` style="animation-delay:-${(Math.random()*0.26).toFixed(2)}s;"` : '';
+  const jiggleStyle = inReorderMode ? ` style="animation-delay:-${(Math.random()*0.26).toFixed(2)}s;"` : '';
   return `
-    <div class="card${inactive?' inactive-card':''}${checked?' session-checked':''}${pending?' card-pending':''}" data-group-key="${esc(g.key)}"${jiggleStyle} ${pending?'':`onclick="openGroup('${esc(g.key)}')"`}>
+    <div class="card${inactive?' inactive-card':''}${checked?' session-checked':''}${pending?' card-pending':''}" data-group-key="${esc(g.key)}"${jiggleStyle} ${(pending||inReorderMode)?'':`onclick="openGroup('${esc(g.key)}')"`}>
       <div class="photo">${photo}</div>
       <div class="status-dot ${status}"></div>
       ${locBadge}
@@ -1738,13 +1740,10 @@ function renderResupplyTab(main, list){
     grid.innerHTML = activeItems.map(r => activeCode===ON_HOLD_CODE ? onHoldCardHtml(r) : resupplyCardHtml(r, activeCode, RESUPPLY_FIELD_BY_CODE[activeCode])).join('');
   }
 
-  // Collapsed rows are display-only now — no onclick. Clicking a location
-  // row used to switch to it, but that made it too easy to accidentally
-  // change location with a stray tap; use the chips or Change button instead.
   document.getElementById('resupplyCollapsedRows').innerHTML = collapsedCodes.map(code=>{
     const count = resupplyItemsFor(code).length;
     const name = code===ON_HOLD_CODE ? t('onHold') : LOC_NAME_BY_CODE[code];
-    return `<div class="resupply-collapsed-row" data-loc-row="${code}">
+    return `<div class="resupply-collapsed-row" data-loc-row="${code}" onclick="selectResupplyLocation('${code}')">
       <div class="resupply-row-label">${esc(name.toUpperCase())} <span class="resupply-row-count">${count}</span></div>
     </div>`;
   }).join('');
@@ -2603,11 +2602,20 @@ function renderReorderPreview(cardEl){
       const r = el.getBoundingClientRect();
       const dx = (b.left - r.left) / uiScale, dy = (b.top - r.top) / uiScale;
       if(Math.abs(dx)<1 && Math.abs(dy)<1) return;
+      // The jiggle animation (reorder mode) and this slide both animate
+      // `transform` — a CSS animation re-asserts its own value every
+      // single frame, which was overriding the slide's translate() almost
+      // immediately and making the whole thing look like an instant snap
+      // instead of a smooth motion. Pausing jiggle just for the duration
+      // of this one card's slide fixes it; the CSS class puts it right
+      // back once the transition settles.
+      el.style.animation = 'none';
       el.style.transition = 'none';
       el.style.transform = `translate(${dx}px, ${dy}px)`;
       requestAnimationFrame(()=>{
         el.style.transition = 'transform 0.32s cubic-bezier(0.4,0,0.2,1)';
         el.style.transform = 'translate(0,0)';
+        setTimeout(()=>{ el.style.animation = ''; }, 340); // hands jiggle back to the CSS class once the slide has visibly settled
       });
     });
   });
@@ -2999,7 +3007,7 @@ function hapticTap(){
 document.addEventListener('click', (e)=>{
   const el = e.target.closest(
     'button, .card, .chip, .nav-item, .top-btn, .side-cat, .loc-row, ' +
-    '.rotate-btn, .session-refresh-btn, .size-plus, .size-minus, .rq-minus, .rq-plus, .scale-btn, .size-loc-tab:not(.disabled), .btn-new-wide'
+    '.rotate-btn, .session-refresh-btn, .size-plus, .size-minus, .rq-minus, .rq-plus, .scale-btn, .size-loc-tab:not(.disabled), .btn-new-wide, .resupply-collapsed-row'
   );
   if(el) hapticTap();
 }, true);
