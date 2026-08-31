@@ -1980,8 +1980,18 @@ async function submitOnHoldResolve(){
   render(); // immediately dims/disables the card on the now-visible On Hold row
   toast(t('saving'));
   for(const code of changedCodes){
+    // The amount being resolved for THIS location (original minus what's
+    // left on hold) is credited onto THIS location's own Display count,
+    // capped at THIS location's own Min Count — same rule as the regular
+    // per-location Resupply popup, just applied per column here since one
+    // On Hold item can span all three locations at once.
+    const stepperVal = original[code] - updates[code];
+    const minCount = Number(row[MIN_COUNT_FIELD_BY_CODE[code]]||0);
+    const currentDisplay = Number(row[DISPLAY_FIELD_BY_CODE[code]]||0);
+    const newDisplay = Math.min(minCount, currentDisplay + stepperVal);
     row[ON_HOLD_FIELD_BY_CODE[code]] = updates[code];
-    await apiPost({action:'setResupplyForLocation', id, location:code, onHold:updates[code]});
+    row[DISPLAY_FIELD_BY_CODE[code]] = newDisplay;
+    await apiPost({action:'setResupplyForLocation', id, location:code, onHold:updates[code], displayValue:newDisplay});
   }
   toast(t('updated'));
   pendingSubmitIds.delete(String(id));
@@ -2066,24 +2076,36 @@ async function submitResupplyEdit(){
   resupplyEditContext = null;
   if(!row){ closeSheet(); return; }
 
+  // The resupplied quantity is credited onto this location's Display
+  // count too, capped at this location's own Min Count — e.g. Display at
+  // 1 with a Min Count of 3: entering 5 and pressing Resupply adds only
+  // the 2 needed to reach 3, not the full 5; entering 1 adds all of it
+  // since 1+1=2 doesn't reach the cap.
+  const minCount = Number(row[MIN_COUNT_FIELD_BY_CODE[code]]||0);
+  const currentDisplay = Number(row[DISPLAY_FIELD_BY_CODE[code]]||0);
+  const newDisplay = Math.min(minCount, currentDisplay + value);
+
   pushUndoSnapshot([id]);
   pendingSubmitIds.add(String(id));
   closeSheet();
   render(); // immediately dims/disables the card on the now-visible grid, before the API round-trip even starts
   toast(t('saving'));
 
-  // Done must not alter Resupply or any other field. Only write the
-  // selected location's On Hold field when a shortfall actually applies.
+  // Done must not alter Resupply beyond closing it out. Only write the
+  // selected location's On Hold field when a shortfall actually applies,
+  // and always credit the Display count for this location.
   if(onHold > 0){
     row[ON_HOLD_FIELD_BY_CODE[code]] = onHold;
   }
+  row[DISPLAY_FIELD_BY_CODE[code]] = newDisplay;
 
   const res = await apiPost({
     action:'setResupplyForLocation',
     id,
     location:code,
     onHold,
-    applyOnHold: onHold > 0
+    applyOnHold: onHold > 0,
+    displayValue: newDisplay
   });
   toast(res.ok ? t('saved') : t('saveFailed') + (res.error||t('unknownError')), !res.ok);
   pendingSubmitIds.delete(String(id));
