@@ -335,7 +335,11 @@
      individually instead of sitting right on top of each other. */
   .detail-wrap .size-label{margin-bottom:2px;}
   .detail-wrap .size-count{padding:5px 0; margin:3px 0;}
-  .detail-wrap .size-minus{margin-top:14px;}
+  .detail-wrap .size-minus{margin-top:14px; position:relative;}
+  .detail-wrap .size-minus::before{
+    content:''; position:absolute; top:-7px; left:12.5%; width:75%; height:1px;
+    background:var(--line);
+  }
   .detail-wrap .size-min{white-space:nowrap; font-size:clamp(6.5px, 1.7cqw, 9.5px); margin-top:1px;}
   .size-col{text-align:center;}
   .size-label{font-family:'Oswald';font-weight:700;font-size:clamp(15px, 4.2cqw, 39px);margin-bottom:5px;}
@@ -686,7 +690,7 @@ const TRANSLATIONS = {
     requesting:'Requesting…', resupplyRequestedFor:'Resupply requested for', displayPlus:'— display +',
     couldNotSubmit:'Could not submit request: ', addingToHold:'Adding to On Hold…', onHoldForNowIs:'On Hold for', isNow:'is now',
     couldNotUpdateHold:'Could not update On Hold: ', updated:'Updated',
-    rotate:'Rotate',
+    next:'Next',
     settingsTitle:'Settings', settingsDesc:'Adjust the overall web UI size for smaller or larger screens. This scales the entire interface, including the photo-card grid, independently of the per-tab grid controls.',
     apiUrlLabel:'Apps Script URL', uiScaleLabel:'UI Scale', hapticsLabel:'Haptic feedback (buzz on tap)',
     hapticsOn:'On', hapticsOff:'Off',
@@ -731,7 +735,7 @@ const TRANSLATIONS = {
     requesting:'요청 중…', resupplyRequestedFor:'보충 요청됨:', displayPlus:'— 진열 +',
     couldNotSubmit:'요청을 제출할 수 없습니다: ', addingToHold:'보류로 추가 중…', onHoldForNowIs:'', isNow:'보류 수량:',
     couldNotUpdateHold:'보류 수량을 업데이트할 수 없습니다: ', updated:'업데이트됨',
-    rotate:'회전',
+    next:'다음',
     settingsTitle:'설정', settingsDesc:'화면 크기에 맞게 전체 UI 크기를 조정합니다. 탭별 그리드 크기와는 별도로 사진 그리드를 포함한 전체 화면 크기가 조정됩니다.',
     apiUrlLabel:'Apps Script URL', uiScaleLabel:'UI 크기', hapticsLabel:'진동 피드백 (탭 시 진동)',
     hapticsOn:'켜짐', hapticsOff:'꺼짐',
@@ -1518,8 +1522,8 @@ function renderResupplyTab(main, list){
         ${LOC_FILTER_CHIP_ORDER.map(code=>`<div class="chip ${activeCode===code?'on':''}" data-loc-chip="${code}" onclick="selectResupplyLocation('${code}')">${LOC_NAME_BY_CODE[code]}</div>`).join('')}
         <div class="chip on-hold-chip ${activeCode===ON_HOLD_CODE?'on':''}" data-loc-chip="${ON_HOLD_CODE}" onclick="selectResupplyLocation('${ON_HOLD_CODE}')">${t('onHold')}</div>
       </div>
-      <button class="rotate-btn" onclick="rotateResupplyOrder()" title="Cycle row order">
-        <span class="rotate-arrow">⟳</span><span class="rotate-text">${t('rotate')}</span>
+      <button class="rotate-btn" onclick="nextResupplyLocation()" title="Show next location with items">
+        <span class="rotate-arrow">→</span><span class="rotate-text">${t('next')}</span>
       </button>
       <div class="scale-ctrl">
         <button class="scale-btn" onclick="adjustScale(1)">−</button>
@@ -1532,8 +1536,8 @@ function renderResupplyTab(main, list){
       </div>
       <div class="rtp-right">
         <div class="rtp-actions">
-          <button class="rotate-btn" onclick="rotateResupplyOrder()" title="Cycle row order">
-            <span class="rotate-arrow">⟳</span><span class="rotate-text">${t('rotate')}</span>
+          <button class="rotate-btn" onclick="nextResupplyLocation()" title="Show next location with items">
+            <span class="rotate-arrow">→</span><span class="rotate-text">${t('next')}</span>
           </button>
           <div class="scale-ctrl">
             <button class="scale-btn" onclick="adjustScale(1)">−</button>
@@ -1686,13 +1690,17 @@ function selectResupplyLocation(code){
     activeResupplyLocation = code;
   });
 }
-function rotateResupplyOrder(){
-  animateResupplyRowChange(()=>{
-    const withItems = resupplyRowOrder.filter(code => resupplyItemsFor(code).length > 0);
-    const withoutItems = resupplyRowOrder.filter(code => resupplyItemsFor(code).length === 0);
-    if(withItems.length > 1) withItems.push(withItems.shift());
-    resupplyRowOrder = withItems.concat(withoutItems);
-  });
+// "Next" jumps the active selection straight to the next location (or On
+// Hold) that actually has items — cycling back and forth between however
+// many are populated. Reuses selectResupplyLocation() so the chip
+// highlight, the FLIP slide, and everything else stays exactly consistent
+// with tapping a chip or a collapsed row directly.
+function nextResupplyLocation(){
+  const withItems = resupplyRowOrder.filter(code => code!==ON_HOLD_CODE && resupplyItemsFor(code).length > 0);
+  if(withItems.length === 0) return; // no location (excluding On Hold) has items right now
+  const currentIdx = withItems.indexOf(activeResupplyLocation);
+  const nextCode = withItems[(currentIdx === -1 ? 0 : currentIdx + 1) % withItems.length];
+  selectResupplyLocation(nextCode);
 }
 
 // On Hold resolve popup — the ONLY popup opened from tapping an On Hold
@@ -2122,7 +2130,8 @@ function beginDragReorder(cardEl, e){
     originLeft: startRect.left,
     originTop: startRect.top,
     lastX: e.clientX,
-    lastY: e.clientY
+    lastY: e.clientY,
+    lastReorderCheck: 0
   };
 
   hapticTap();
@@ -2153,23 +2162,35 @@ function onDragMove(e){
   dragReorder.lastX = e.clientX;
   dragReorder.lastY = e.clientY;
   const cardEl = e.currentTarget;
-  positionDraggedCard(cardEl, e.clientX, e.clientY);
+  positionDraggedCard(cardEl, e.clientX, e.clientY); // always smooth — tracks the finger every single frame, unthrottled
 
-  // Find whichever OTHER card the pointer is currently nearest to. If
-  // that's a different slot than where the dragged card currently sits in
-  // our working order, move it there and re-render the preview.
+  // Reordering the grid itself is throttled and separate from the visual
+  // follow above. pointermove can fire 60-120+ times a second — recomputing
+  // and re-rendering the WHOLE grid on every single one of those caused
+  // visible thrashing (cards jumping around rapidly). A short cooldown
+  // between reorder checks keeps the drag feeling smooth while only
+  // actually reshuffling the other cards a few times a second.
+  const now = performance.now();
+  if(now - dragReorder.lastReorderCheck < 150) return;
+  dragReorder.lastReorderCheck = now;
+
+  // Hit-test: only reorder when the pointer is genuinely OVER another
+  // card's box, rather than "nearest by distance". Nearest-by-distance is
+  // unstable in a wrapping multi-column grid — small movements near a
+  // boundary can flip between two different neighbors, which is what was
+  // causing a drop to land one slot off from wherever you actually
+  // released it.
   const grid = document.getElementById('photoGrid');
   if(!grid) return;
-  let closest = null, closestDist = Infinity;
+  let target = null;
   grid.querySelectorAll('.card[data-group-key]').forEach(el=>{
-    if(el===cardEl) return;
+    if(el===cardEl || target) return;
     const r = el.getBoundingClientRect();
-    const dist = Math.hypot(e.clientX-(r.left+r.width/2), e.clientY-(r.top+r.height/2));
-    if(dist < closestDist){ closestDist = dist; closest = el; }
+    if(e.clientX>=r.left && e.clientX<=r.right && e.clientY>=r.top && e.clientY<=r.bottom) target = el;
   });
-  if(!closest) return;
+  if(!target) return;
   const fromIndex = dragReorder.orderedKeys.indexOf(dragReorder.key);
-  const toIndex = dragReorder.orderedKeys.indexOf(closest.dataset.groupKey);
+  const toIndex = dragReorder.orderedKeys.indexOf(target.dataset.groupKey);
   if(fromIndex===-1 || toIndex===-1 || fromIndex===toIndex) return;
 
   const newOrder = dragReorder.orderedKeys.slice();
