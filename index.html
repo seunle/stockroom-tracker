@@ -65,8 +65,19 @@
     height:48px; padding:0 13px; box-sizing:border-box; border-radius:9px;
     display:flex; align-items:center; justify-content:center; gap:5px; white-space:nowrap;
   }
-  .top-btn.new-btn{background:#fff;color:var(--thread-dark);border-color:#fff;}
   .top-btn.icon-only{padding:9px 10px; font-size:16px;}
+  /* Wide +New button, Edit tab only — replaces the old permanent top-bar
+     button, since item creation is really an Edit-tab task. */
+  .btn-new-wide{
+    display:block; width:calc(100% - 8px); margin:0 4px 10px; padding:14px 0;
+    background:var(--thread); color:#fff; border:none; border-radius:12px;
+    font-family:'Oswald'; font-weight:700; font-size:18px; letter-spacing:0.6px; text-transform:uppercase;
+  }
+  .btn-new-wide:active{opacity:0.8;}
+  /* 1.5x wider (via padding) and a noticeably bigger, adaptive font —
+     freed up by moving +New into the Edit tab — so the current location
+     reads clearly at a glance from across the room. */
+  #btnLocation{padding:0 20px; font-size:clamp(13px, 3.2vw, 19px);}
   #btnUndo{min-width:76px; background:#F6D9A0; border:2px solid #fff; color:var(--thread);}
   #btnUndo svg{display:block; filter:drop-shadow(1px 0 0 #fff) drop-shadow(-1px 0 0 #fff) drop-shadow(0 1px 0 #fff) drop-shadow(0 -1px 0 #fff);}
   .top-btn:active{opacity:0.75;}
@@ -120,7 +131,7 @@
   /* Display/Storage tab titles get this — same size/weight as the Resupply
      tab's active-location label, so it reads as an equally strong visual
      cue for "this is the location you're currently looking at". */
-  .grid-title.loc-title-big{font-size:52px; font-weight:800; letter-spacing:0.6px; color:var(--ink-soft);}
+  .grid-title.loc-title-big{font-size:26px; font-weight:800; letter-spacing:0.6px; color:var(--ink-soft);}
   .scale-ctrl{display:flex;align-items:center;gap:4px;}
   .scale-btn{
     width:78px;height:78px;border-radius:14px;background:var(--paper-raised);border:1.5px solid var(--line);
@@ -247,13 +258,24 @@
   /* ---------- Bottom nav ---------- */
   nav.bottomnav{
     position:fixed; left:0; right:0; bottom:0; background:var(--paper-raised);
-    border-top:1.5px solid var(--line); display:flex;
-    padding:18px 4px calc(18px + env(safe-area-inset-bottom)); z-index:20;
+    border-top:1.5px solid var(--line); display:flex; padding:0 4px; z-index:20;
   }
-  .nav-item{flex:1; text-align:center; padding:27px 2px 18px; color:var(--ink-soft);}
+  /* All vertical spacing lives here now (not split between nav.bottomnav
+     and .nav-item) — previously the active highlight only covered
+     .nav-item's own box, leaving nav.bottomnav's separate outer padding
+     uncovered above/below it, so the highlight looked too short for the
+     bar. Consolidating means the highlight now spans the bar's full
+     height edge-to-edge. flex centering (rather than relying on matched
+     padding) keeps the label genuinely centered regardless of safe-area
+     insets on notched devices. */
+  .nav-item{
+    flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:40px 2px calc(40px + env(safe-area-inset-bottom)); color:var(--ink-soft);
+  }
   .nav-item[data-tab="edit"]{flex:0.7;} /* Edit is used less often — narrower, the other three share the freed-up width evenly */
   .nav-item .tab-label{font-size:26px; font-weight:600; letter-spacing:0.6px; text-transform:uppercase;}
   .nav-item.active{color:#fff; background:var(--thread); border-radius:10px; font-weight:700;}
+  .nav-item[data-tab="edit"].active{background:var(--ink-soft);} /* Edit gets its own distinct grey instead of the shared blue */
 
   /* ---------- Overlay / sheet ---------- */
   .overlay{position:fixed;inset:0;background:rgba(37,36,31,0.5);display:none;align-items:center;justify-content:center;z-index:50;padding:16px;overflow:auto;}
@@ -287,8 +309,9 @@
   .sheet.narrow{max-width:620px;}
   .sheet.display-wide{max-width:min(900px, 60vw);}
   .sheet-close{
-    position:absolute; top:12px; right:12px; width:60px;height:60px;border-radius:50%;
-    background:var(--restock); color:#fff; font-size:30px; font-weight:700; border:3px solid #7A2620; z-index:5;
+    position:absolute; top:12px; right:12px; width:60px;height:60px;border-radius:12px;
+    background:var(--restock); color:#fff; font-size:30px; font-weight:700; border:1.5px solid #7A2620; z-index:5;
+    text-shadow:1px 0 0 #7A2620, -1px 0 0 #7A2620, 0 1px 0 #7A2620, 0 -1px 0 #7A2620;
   }
   .sheet h2{font-size:16px;margin:0 0 4px;text-transform:uppercase;letter-spacing:0.5px;padding-right:66px;}
   .sheet .desc{font-size:12.5px;color:var(--ink-soft);margin-bottom:14px;line-height:1.5;}
@@ -355,7 +378,7 @@
   .detail-wrap .size-count{padding:5px 0; margin:3px 0;}
   .detail-wrap .size-minus{margin-top:14px; position:relative;}
   .detail-wrap .size-minus::before{
-    content:''; position:absolute; top:-7px; left:12.5%; width:75%; height:1px;
+    content:''; position:absolute; top:-9px; left:12.5%; width:75%; height:1px;
     background:var(--line);
   }
   .detail-wrap .size-min{white-space:nowrap; font-size:clamp(6.5px, 1.7cqw, 9.5px); margin-top:1px;}
@@ -578,9 +601,13 @@
     font-family:'Oswald'; font-weight:700; font-size:13px; text-transform:uppercase; letter-spacing:0.4px;
     background:var(--line); color:var(--ink-soft); cursor:pointer;
   }
-  .size-loc-tab.active{background:var(--paper-raised); color:var(--ink); position:relative; z-index:1;}
+  .size-loc-tab.active{
+    background:var(--paper-raised); color:var(--ink); position:relative; z-index:2;
+    border:3px solid var(--line); border-bottom:none;
+    padding:9px 3px 8px; /* compensates for the new 3px border so this tab stays the same overall size as its unbordered siblings */
+  }
   .size-loc-tab.disabled{background:#C4C4C4; color:#8A8A8A; cursor:not-allowed;}
-  .size-loc-panel{background:var(--paper-raised); border-radius:0 10px 10px 10px; padding:12px 6px 6px; border:2px solid var(--thread);}
+  .size-loc-panel{background:var(--paper-raised); border-radius:0 10px 10px 10px; padding:12px 6px 6px; border:3px solid var(--line);}
   .size-loc-panel .size-label{margin-bottom:2px;}
   .size-loc-panel .size-count{padding:5px 0; margin:3px 0;}
   .size-loc-panel .size-minus{margin-top:14px; position:relative;}
@@ -620,7 +647,6 @@
   </div>
   <button class="session-refresh-btn" id="btnRefreshSession" title="Refresh Session (also resyncs)"><span class="refresh-arrow">↻</span> Refresh Session</button>
   <div class="top-actions">
-    <button class="top-btn new-btn" id="btnNew">+ New</button>
     <button class="top-btn" id="btnLocation">All Locs</button>
     <button class="top-btn icon-only" id="btnUndo" title="Undo last action">
       <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
@@ -676,7 +702,7 @@ function applyUiScale(){
   document.documentElement.style.setProperty('--ui-scale', String(v));
 }
 let rows = [];              // flat rows from the sheet
-let currentTab = 'display';
+let currentTab = ['display','storage','resupply'].includes(state.defaultTab) ? state.defaultTab : 'display';
 let locationFilter = state.deviceLocation || 'All'; // 'All' | 'T' | 'P' | 'B' — persisted per device, see pickLocationFilter
 let categoryFilter = 'All';
 let sidebarEditMode = false;
@@ -687,6 +713,7 @@ let filePickerTarget = null; // 'add' | 'edit'
 let editingGroupKey = null;
 let undoStack = [];
 let pendingHapticsEnabled = null; // draft value while Settings sheet is open; null = unchanged
+let pendingDefaultTab = null; // draft value while Settings sheet is open; null = unchanged
 /* ============================= LANGUAGE / TRANSLATIONS ============================= */
 // Only app CHROME text is translated here — buttons, labels, headings,
 // toasts, filter chips, tab titles. Actual sheet DATA is deliberately
@@ -736,6 +763,7 @@ const TRANSLATIONS = {
     hapticsDescSupported:'Vibrates briefly on button/card taps. Android only — iPhones don\'t support this.',
     hapticsDescUnsupported:'This device/browser doesn\'t support vibration, so this setting won\'t do anything here.',
     languageLabel:'Language', langEnglish:'English', langKorean:'한국어',
+    defaultTabLabel:'Default Tab', defaultTabDesc:'Which tab the app opens to by default.',
     pickLocationForOrder:'Select a specific location (top bar) before reordering', savingOrder:'Saving order…', orderSaved:'Order saved', dragHint:'Press and hold a card to reorder for',
     storageTitle:'Storage', pickLocationTitle:'Pick a location',
     pickLocationBody:'Storage needs a specific location selected (top bar) — restocking requirements are tracked separately per location now.',
@@ -781,6 +809,7 @@ const TRANSLATIONS = {
     hapticsDescSupported:'버튼/카드를 탭하면 짧게 진동합니다. Android 전용 — iPhone은 지원하지 않습니다.',
     hapticsDescUnsupported:'이 기기/브라우저는 진동을 지원하지 않아 이 설정은 효과가 없습니다.',
     languageLabel:'언어', langEnglish:'English', langKorean:'한국어',
+    defaultTabLabel:'기본 탭', defaultTabDesc:'앱을 열었을 때 기본으로 표시할 탭입니다.',
     pickLocationForOrder:'순서를 변경하려면 상단에서 매장을 선택하세요', savingOrder:'순서 저장 중…', orderSaved:'순서가 저장되었습니다', dragHint:'길게 눌러 순서를 변경하세요 —',
     storageTitle:'재고', pickLocationTitle:'매장을 선택하세요',
     pickLocationBody:'재고 확인에는 특정 매장 선택이 필요합니다 (상단) — 이제 매장별로 보충 필요 수량이 따로 관리됩니다.',
@@ -806,8 +835,6 @@ function applyLanguage(){
     refreshBtn.textContent = ' ' + t('refreshSession');
     if(arrow) refreshBtn.prepend(arrow);
   }
-  const newBtn = document.getElementById('btnNew');
-  if(newBtn) newBtn.textContent = '+ ' + t('newBtn');
   if(!state.apiUrl){ const sync=document.getElementById('lastSync'); if(sync) sync.textContent = t('notConnected'); }
 }
 
@@ -855,6 +882,7 @@ function loadState(){
       if(s.apiUrl){
         s.uiScale = Math.max(0.3, Math.min(1.2, Number(s.uiScale) || 1));
         s.language = s.language || 'en';
+        if(!['display','storage','resupply'].includes(s.defaultTab)) s.defaultTab = 'display';
         if(!s.gridColsByTab){
           const legacy = s.gridCols || 4; // migrate old shared value
           s.gridColsByTab = { display:legacy, storage:legacy, resupply:legacy, edit:legacy };
@@ -863,7 +891,7 @@ function loadState(){
       }
     }
   }catch(e){}
-  return { apiUrl: DEFAULT_API_URL, uiScale: 1, gridColsByTab: { display:4, storage:4, resupply:4, edit:4 } }; // falls back to the baked-in URL if nothing saved (or it got cleared)
+  return { apiUrl: DEFAULT_API_URL, uiScale: 1, defaultTab: 'display', gridColsByTab: { display:4, storage:4, resupply:4, edit:4 } }; // falls back to the baked-in URL if nothing saved (or it got cleared)
 }
 function saveState(){ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
 
@@ -1149,6 +1177,7 @@ function render(){
         <button class="scale-btn" onclick="adjustScale(-1)">+</button>
       </div>
     </div>
+    ${currentTab==='edit' ? `<button class="btn-new-wide" onclick="openNewItemForm()">+ ${t('newBtn')}</button>` : ''}
     <div class="grid-toolbar">
       <div class="grid-title${currentTab==='display'?' loc-title-big':''}">${tabTitle()} <span style="color:var(--ink);font-weight:800;">${groups.length}</span></div>
     </div>
@@ -1363,7 +1392,7 @@ function openSheetHtml(html, widthMode, footerHtml){
   sheetEl.innerHTML = `<button class="sheet-close" onclick="closeSheet()">×</button><div class="sheet-scroll">${html}</div>${footerHtml ? `<div class="sheet-fixed-footer">${footerHtml}</div>` : ''}`;
   document.getElementById('overlay').classList.add('show');
 }
-function closeSheet(){ document.getElementById('overlay').classList.remove('show'); pendingPhotoBase64=null; resupplyEditContext=null; onHoldResolveContext=null; }
+function closeSheet(){ document.getElementById('overlay').classList.remove('show'); pendingPhotoBase64=null; resupplyEditContext=null; onHoldResolveContext=null; pendingHapticsEnabled=null; pendingDefaultTab=null; }
 document.getElementById('overlay').addEventListener('click', e=>{ if(e.target.id==='overlay') closeSheet(); });
 
 /* ============================= ITEM DETAIL POPUP (Display/Storage/Resupply) ============================= */
@@ -2174,7 +2203,7 @@ function updateSizeLocTabAvailability(picker){
     if(hint) hint.style.display = '';
   }
 }
-document.getElementById('btnNew').addEventListener('click', ()=>{
+function openNewItemForm(){
   if(!state.apiUrl){ toast(t('connectFirst')); return; }
   openSheetHtml(`
     <h2>${t('newItemTitle')}</h2>
@@ -2212,7 +2241,7 @@ document.getElementById('btnNew').addEventListener('click', ()=>{
       <button class="btn btn-primary" onclick="submitNewItem()">${t('addItem')}</button>
     </div>
   `, 'display');
-});
+}
 function toggleLocRow(el){
   el.classList.toggle('on');
   updateSizeLocTabAvailability(el.closest('.loc-picker'));
@@ -2715,6 +2744,15 @@ function openSettings(){
       </div>
       <div class="desc" style="margin-top:6px;margin-bottom:0;">${navigator.vibrate ? t('hapticsDescSupported') : t('hapticsDescUnsupported')}</div>
     </div>
+    <div class="field">
+      <label>${t('defaultTabLabel')}</label>
+      <div class="chiprow">
+        <div class="chip ${(pendingDefaultTab||state.defaultTab)==='display'?'on':''}" onclick="setDefaultTabPreview('display')" id="defaultTabDisplayChip">${t('tabDisplay')}</div>
+        <div class="chip ${(pendingDefaultTab||state.defaultTab)==='storage'?'on':''}" onclick="setDefaultTabPreview('storage')" id="defaultTabStorageChip">${t('tabStorage')}</div>
+        <div class="chip ${(pendingDefaultTab||state.defaultTab)==='resupply'?'on':''}" onclick="setDefaultTabPreview('resupply')" id="defaultTabResupplyChip">${t('tabResupply')}</div>
+      </div>
+      <div class="desc" style="margin-top:6px;margin-bottom:0;">${t('defaultTabDesc')}</div>
+    </div>
     <div class="field"><label>${t('apiUrlLabel')}</label><input type="text" id="setUrl" value="${esc(state.apiUrl)}" placeholder="https://script.google.com/macros/s/.../exec"></div>
   `;
   const footer = `
@@ -2737,6 +2775,12 @@ function setHapticsPreview(on){
   document.getElementById('hapticsOffChip').classList.toggle('on', !on);
   if(on) hapticTap(); // immediate buzz so you can feel the setting take effect
 }
+function setDefaultTabPreview(tabName){
+  pendingDefaultTab = tabName;
+  document.getElementById('defaultTabDisplayChip').classList.toggle('on', tabName==='display');
+  document.getElementById('defaultTabStorageChip').classList.toggle('on', tabName==='storage');
+  document.getElementById('defaultTabResupplyChip').classList.toggle('on', tabName==='resupply');
+}
 function previewUiScale(value){
   const v = Math.max(0.3, Math.min(1.2, Number(value)||1));
   document.documentElement.style.setProperty('--ui-scale', String(v));
@@ -2756,6 +2800,8 @@ function submitSettings(){
   if(range) state.uiScale = Math.max(0.3, Math.min(1.2, Number(range.value)||1));
   if(pendingHapticsEnabled!==null) state.hapticsEnabled = pendingHapticsEnabled;
   pendingHapticsEnabled = null;
+  if(pendingDefaultTab!==null) state.defaultTab = pendingDefaultTab;
+  pendingDefaultTab = null;
   applyUiScale();
   saveState(); closeSheet(); refresh(true);
 }
@@ -2786,7 +2832,7 @@ function hapticTap(){
 document.addEventListener('click', (e)=>{
   const el = e.target.closest(
     'button, .card, .chip, .nav-item, .top-btn, .side-cat, .loc-row, ' +
-    '.rotate-btn, .session-refresh-btn, .size-plus, .size-minus, .rq-minus, .rq-plus, .scale-btn, .size-loc-tab:not(.disabled)'
+    '.rotate-btn, .session-refresh-btn, .size-plus, .size-minus, .rq-minus, .rq-plus, .scale-btn, .size-loc-tab:not(.disabled), .btn-new-wide'
   );
   if(el) hapticTap();
 }, true);
