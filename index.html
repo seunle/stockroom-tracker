@@ -167,12 +167,15 @@
   .card.inactive-card{opacity:0.5;}
   .card.card-pending{opacity:0.35; pointer-events:none;}
   .card.dragging{cursor:grabbing; box-shadow:0 10px 28px rgba(0,0,0,0.35); z-index:50;}
-  /* pan-y (not none) lets the browser still handle a normal vertical swipe
-     as scrolling by default — a genuine drag only takes over once the
-     long-press fires and onDragMove starts calling preventDefault(), so a
-     quick scroll swipe still works normally and isn't eaten entirely. */
+  /* none (not pan-y): pan-y was letting the browser treat vertical finger
+     movement as a scroll gesture and race the custom drag for control —
+     it usually won, which is why dragging up/down failed while side-to-
+     side worked fine. touch-action:none hands ALL touch handling to this
+     JS entirely, with no competing native gesture. Trade-off: touching
+     directly on a card in the Edit tab no longer scrolls the page by
+     itself — scroll via the gaps/margins between cards instead. */
   main.grid-area.edit-mode-bg .card[data-group-key]{
-    touch-action:pan-y;
+    touch-action:none;
     -webkit-touch-callout:none; /* stops iOS's long-press "Save Image" menu from popping up mid-drag */
     -webkit-user-select:none; user-select:none; /* stops Android's long-press text-selection handles from doing the same */
   }
@@ -612,16 +615,18 @@
     background:var(--paper-raised); color:var(--ink); position:relative; z-index:2;
     border:3px solid var(--ink-soft); border-bottom:none; /* matches the "0" text color, not the paler box behind it */
     padding:9px 3px 8px; /* compensates for the new 3px border so this tab stays the same overall size as its unbordered siblings */
+    margin-bottom:-3px; /* overlaps down into the panel's own top border by exactly its width, visually covering that one segment so only the active tab's own portion of the line disappears — the inactive tabs' portion stays visible */
   }
   .size-loc-tab.disabled{background:#C4C4C4; color:#8A8A8A; cursor:not-allowed;}
-  /* No top border at all here — that's what was showing as a stray line
-     between the active tab and this panel. Both top corners are square
-     (not just the left one), so the panel reads as directly open into
-     whichever tab is active, instead of looking capped/closed off on the
-     right regardless of which tab that actually is. */
+  /* Both top corners are square (not just the left one), so the panel
+     reads as open into whichever tab is active, instead of looking capped
+     off on the right regardless of which tab that actually is. The panel
+     DOES have a full border, top included — the active tab above is what
+     covers its own segment of that top line (via the overlap above), not
+     the panel omitting it. */
   .size-loc-panel{
     background:var(--paper-raised); border-radius:0 0 10px 10px; padding:8px 6px 6px;
-    border:3px solid var(--ink-soft); border-top:none;
+    border:3px solid var(--ink-soft);
   }
   .size-loc-panel .size-label{margin-bottom:2px;}
   .size-loc-panel .size-count-input{margin-bottom:6px;} /* was targeting the wrong class name (.size-count) and never actually applied — this is what was letting the count box touch the + button below it */
@@ -2337,6 +2342,7 @@ document.addEventListener('pointerdown', (e)=>{
 });
 
 function beginDragReorder(cardEl, e){
+  if(dragReorder) return; // a drag session is already active — never start a second one for the same or an overlapping gesture
   if(locationFilter==='All'){
     toast(t('pickLocationForOrder'), true);
     return;
@@ -2396,7 +2402,7 @@ function onDragMove(e){
   // between reorder checks keeps the drag feeling smooth while only
   // actually reshuffling the other cards a few times a second.
   const now = performance.now();
-  if(now - dragReorder.lastReorderCheck < 150) return;
+  if(now - dragReorder.lastReorderCheck < 220) return;
   dragReorder.lastReorderCheck = now;
 
   // Hit-test: only reorder when the pointer is genuinely OVER another
@@ -2404,14 +2410,19 @@ function onDragMove(e){
   // unstable in a wrapping multi-column grid — small movements near a
   // boundary can flip between two different neighbors, which is what was
   // causing a drop to land one slot off from wherever you actually
-  // released it.
+  // released it. Shrunk to the CENTER 60% of each card (not its full
+  // edge-to-edge box) — hovering right at the boundary between two cards
+  // was flipping the match back and forth on every check; requiring the
+  // pointer to be well inside a card, not just barely over its edge, adds
+  // hysteresis so a slow hover near a seam doesn't cause rapid flapping.
   const grid = document.getElementById('photoGrid');
   if(!grid) return;
   let target = null;
   grid.querySelectorAll('.card[data-group-key]').forEach(el=>{
     if(el===cardEl || target) return;
     const r = el.getBoundingClientRect();
-    if(e.clientX>=r.left && e.clientX<=r.right && e.clientY>=r.top && e.clientY<=r.bottom) target = el;
+    const insetX = r.width * 0.2, insetY = r.height * 0.2;
+    if(e.clientX>=r.left+insetX && e.clientX<=r.right-insetX && e.clientY>=r.top+insetY && e.clientY<=r.bottom-insetY) target = el;
   });
   if(!target) return;
   const fromIndex = dragReorder.orderedKeys.indexOf(dragReorder.key);
@@ -2520,8 +2531,20 @@ async function onDragEnd(e){
   render(); // drop the dragging visual state immediately, show the settled order
   toast(t('savingOrder'));
   const res = await apiPost({ action:'setGroupOrder', location:code, updates });
-  toast(res.ok ? t('orderSaved') : t('saveFailed') + (res.error||t('unknownError')), !res.ok);
-  refresh(false);
+  if(res.ok){
+    toast(t('orderSaved'));
+    // Deliberately NOT calling refresh() here. The write and this popup's
+    // eventual read are two separate requests with no guaranteed instant
+    // consistency between them — re-fetching right away could occasionally
+    // land before the write has fully settled server-side, which showed up
+    // as the just-dragged item snapping back to its old spot until the
+    // NEXT drag's refresh finally picked up the real data. The optimistic
+    // local update above is already correct; the next natural refresh
+    // (auto-poll or another action) will confirm it.
+  }else{
+    toast(t('saveFailed') + (res.error||t('unknownError')), true);
+    refresh(false); // the write failed — the optimistic local state may be wrong, so resync with the server's real data
+  }
 }
 
 /* ============================= EDIT TAB ============================= */
