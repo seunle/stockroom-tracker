@@ -70,7 +70,7 @@
      button, since item creation is really an Edit-tab task. */
   .btn-new-wide{
     display:block; width:calc(100% - 8px); margin:0 4px 10px; padding:14px 0;
-    background:#fff; color:var(--thread-dark); border:2px solid var(--thread-dark); border-radius:12px;
+    background:var(--paper); color:var(--ink-soft); border:1.5px solid var(--line); border-radius:12px;
     font-family:'Oswald'; font-weight:700; font-size:18px; letter-spacing:0.6px; text-transform:uppercase;
   }
   .btn-new-wide:active{opacity:0.8;}
@@ -167,20 +167,26 @@
   .card.inactive-card{opacity:0.5;}
   .card.card-pending{opacity:0.35; pointer-events:none;}
   .card.dragging{cursor:grabbing; box-shadow:0 10px 28px rgba(0,0,0,0.35); z-index:50;}
-  /* none (not pan-y): pan-y was letting the browser treat vertical finger
-     movement as a scroll gesture and race the custom drag for control —
-     it usually won, which is why dragging up/down failed while side-to-
-     side worked fine. touch-action:none hands ALL touch handling to this
-     JS entirely, with no competing native gesture. Trade-off: touching
-     directly on a card in the Edit tab no longer scrolls the page by
-     itself — scroll via the gaps/margins between cards instead. */
-  main.grid-area.edit-mode-bg .card[data-group-key]{
+  /* A dedicated drag handle (not the whole card) is what actually needs
+     touch-action:none, so the rest of the card — photo, name, everything
+     — keeps normal touch behavior and the grid scrolls like any other tab.
+     touch-action:none on the WHOLE card (an earlier attempt) reliably
+     fixed dragging but broke scrolling everywhere on the grid, since
+     there was no card-sized gap left to swipe from. A small dedicated
+     handle avoids that trade-off entirely — you scroll from anywhere
+     except this one small icon. */
+  .card-drag-handle{
+    position:absolute; bottom:6px; left:6px; z-index:10;
+    width:34px; height:34px; border-radius:8px;
+    background:rgba(37,36,31,0.6); color:#fff;
+    display:flex; align-items:center; justify-content:center;
+    font-size:18px; line-height:1;
     touch-action:none;
-    -webkit-touch-callout:none; /* stops iOS's long-press "Save Image" menu from popping up mid-drag */
-    -webkit-user-select:none; user-select:none; /* stops Android's long-press text-selection handles from doing the same */
+    -webkit-touch-callout:none; -webkit-user-select:none; user-select:none;
   }
+  .card-drag-handle:active{background:rgba(37,36,31,0.8);}
   main.grid-area.edit-mode-bg .card[data-group-key] img{
-    -webkit-user-drag:none; pointer-events:none; /* the image itself should never intercept the drag or offer its own native save/drag behavior */
+    -webkit-user-drag:none; pointer-events:none; /* the image itself should never intercept a drag or offer its own native save/drag behavior */
   }
   .card.session-checked{filter:grayscale(1); opacity:0.55;}
   .card.session-checked::after{
@@ -282,7 +288,7 @@
     padding:40px 2px calc(40px + env(safe-area-inset-bottom)); color:var(--ink-soft);
   }
   .nav-item[data-tab="edit"]{flex:0.7;} /* Edit is used less often — narrower, the other three share the freed-up width evenly */
-  .nav-item .tab-label{font-size:26px; font-weight:600; letter-spacing:0.6px; text-transform:uppercase;}
+  .nav-item .tab-label{font-size:39px; font-weight:600; letter-spacing:0.6px; text-transform:uppercase;}
   .nav-item.active{color:#fff; background:var(--thread); border-radius:10px; font-weight:700;}
   .nav-item[data-tab="edit"].active{background:var(--ink-soft);} /* Edit gets its own distinct grey instead of the shared blue */
 
@@ -784,7 +790,7 @@ const TRANSLATIONS = {
     hapticsDescUnsupported:'This device/browser doesn\'t support vibration, so this setting won\'t do anything here.',
     languageLabel:'Language', langEnglish:'English', langKorean:'한국어',
     defaultTabLabel:'Default Tab', defaultTabDesc:'Which tab the app opens to by default.',
-    pickLocationForOrder:'Select a specific location (top bar) before reordering', savingOrder:'Saving order…', orderSaved:'Order saved', dragHint:'Press and hold a card to reorder for',
+    pickLocationForOrder:'Select a specific location (top bar) before reordering', savingOrder:'Saving order…', orderSaved:'Order saved', dragHint:'Press and hold the ⠿ handle on a card to reorder for',
     storageTitle:'Storage', pickLocationTitle:'Pick a location',
     pickLocationBody:'Storage needs a specific location selected (top bar) — restocking requirements are tracked separately per location now.',
   },
@@ -830,7 +836,7 @@ const TRANSLATIONS = {
     hapticsDescUnsupported:'이 기기/브라우저는 진동을 지원하지 않아 이 설정은 효과가 없습니다.',
     languageLabel:'언어', langEnglish:'English', langKorean:'한국어',
     defaultTabLabel:'기본 탭', defaultTabDesc:'앱을 열었을 때 기본으로 표시할 탭입니다.',
-    pickLocationForOrder:'순서를 변경하려면 상단에서 매장을 선택하세요', savingOrder:'순서 저장 중…', orderSaved:'순서가 저장되었습니다', dragHint:'길게 눌러 순서를 변경하세요 —',
+    pickLocationForOrder:'순서를 변경하려면 상단에서 매장을 선택하세요', savingOrder:'순서 저장 중…', orderSaved:'순서가 저장되었습니다', dragHint:'카드의 ⠿ 손잡이를 길게 눌러 순서를 변경하세요 —',
     storageTitle:'재고', pickLocationTitle:'매장을 선택하세요',
     pickLocationBody:'재고 확인에는 특정 매장 선택이 필요합니다 (상단) — 이제 매장별로 보충 필요 수량이 따로 관리됩니다.',
   }
@@ -1247,8 +1253,15 @@ function cardHtml(g){
   const locBadge = locationFilter==='All' ? `<div class="loc-tag">${esc(g.location)}</div>` : '';
   const photo = g.photo ? `<img src="${esc(g.photo)}" loading="lazy">` : '👕';
   const pending = Object.values(g.rows).some(r=>pendingSubmitIds.has(String(r.ID)));
+  // Edit tab only: a small dedicated drag handle, not the whole card. Only
+  // this handle has touch-action:none — the rest of the card (photo, cap,
+  // everything) keeps normal touch behavior, so swiping anywhere else on
+  // the grid still scrolls the page like normal. Long-press specifically
+  // on this handle to drag-reorder.
+  const dragHandle = (currentTab==='edit' && !pending) ? '<div class="card-drag-handle">⠿</div>' : '';
   return `
     <div class="card${inactive?' inactive-card':''}${checked?' session-checked':''}${pending?' card-pending':''}" data-group-key="${esc(g.key)}" ${pending?'':`onclick="openGroup('${esc(g.key)}')"`}>
+      ${dragHandle}
       <div class="photo">${photo}</div>
       <div class="status-dot ${status}"></div>
       ${locBadge}
@@ -1551,7 +1564,6 @@ async function commitDisplayCheck(forceChecked){
   const affectedIds = Object.keys(draft);
   if(affectedIds.length>0){
     pushUndoSnapshot(affectedIds); // one batch undo covering Display, On Hold, Resupply, and Storage changes from this check
-    toast(t('saving'));
     // Optimistic local updates, matching what the server is about to do.
     reviewUpdates.forEach(u=>{
       const row = rows.find(r=>sameId(r.ID,u.id));
@@ -1561,15 +1573,33 @@ async function commitDisplayCheck(forceChecked){
       if(u.onHold!==undefined) row[onHoldField] = u.onHold;
       if(u.resupplyIncrement) row[resupplyField] = Number(row[resupplyField]||0) + u.resupplyIncrement;
     });
-    await apiPost({action:'commitDisplayReview', location:locForDraft, updates:reviewUpdates});
   }
   if(changedIds.length>0 || forceChecked){
     // Scoped to the location this popup was actually reviewing — checking
     // Bears' count doesn't mark the item checked for Parkway too.
     sessionCheckedKeys.add(sessionCheckKey(locForDraft, groupKeyForDraft));
+  }
+  // Show the grey/Checked state RIGHT NOW — the local data above is
+  // already correct, so there's no reason to wait on the network before
+  // rendering it. Previously this only happened after the awaited apiPost
+  // below (and, before that, an even later refresh()), so nothing visibly
+  // changed until two full round trips had completed — which is exactly
+  // what was taking ~4 seconds.
+  render();
+  if(changedIds.length>0 || forceChecked){
     toast(forceChecked ? t('markedChecked') : t('checkedToast'));
   }
-  refresh(false);
+  if(affectedIds.length>0){
+    const res = await apiPost({action:'commitDisplayReview', location:locForDraft, updates:reviewUpdates});
+    if(!res.ok){
+      toast(t('saveFailed') + (res.error||t('unknownError')), true);
+      refresh(false); // the write failed — the optimistic state above may be wrong, resync with the server's real data
+    }
+    // On success, deliberately NOT calling refresh() — same reasoning as
+    // the drag-reorder fix: the write and a fresh read are two separate
+    // requests with no guaranteed instant consistency between them, and
+    // the optimistic local state is already correct.
+  }
 }
 
 /* ============================= RESUPPLY TAB: PER-LOCATION ROWS ============================= */
@@ -2310,7 +2340,9 @@ const DRAG_MOVE_CANCEL_PX = 8;
 
 document.addEventListener('pointerdown', (e)=>{
   if(currentTab!=='edit') return;
-  const cardEl = e.target.closest('#photoGrid .card[data-group-key]:not(.card-pending)');
+  const handle = e.target.closest('#photoGrid .card-drag-handle');
+  if(!handle) return;
+  const cardEl = handle.closest('.card[data-group-key]:not(.card-pending)');
   if(!cardEl) return;
   if(e.pointerType==='mouse' && e.button!==0) return; // left-click only for mouse
 
