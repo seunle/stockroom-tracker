@@ -545,14 +545,14 @@
   .restock-meta-label{font-family:'Inter'; font-weight:400; font-size:11px; color:var(--ink-soft); margin-bottom:8px; line-height:1.3;}
   .restock-photo{width:clamp(120px, 45cqw, 240px);aspect-ratio:4/5;border-radius:12px;overflow:hidden;background:var(--line);}
   .restock-photo img{width:100%;height:100%;object-fit:cover;}
-  .restock-info-col{flex:1; min-width:0; display:flex; flex-direction:column;}
+  .restock-info-col{flex:1; min-width:0; display:flex; flex-direction:column; align-items:center;}
   .restock-section-label{font-family:'Oswald'; font-weight:700; font-size:12px; letter-spacing:1px; text-transform:uppercase; color:var(--ink-soft); margin-bottom:8px; text-align:center;}
   .restock-request-label{font-family:'Oswald'; font-weight:700; font-size:clamp(13px, 2.2cqw, 18px); letter-spacing:1px; text-transform:uppercase; color:var(--ink-soft); margin-bottom:8px; text-align:center;}
   /* Storage tab popup only — .restock-request-section isn't used by the
      Resupply tab's own popup, which has its own separate classes. */
   .restock-request-section .restock-request-label{font-size:clamp(15px, 2.6cqw, 21px);}
   .restock-section-label.need-label{font-size:clamp(17px, 3cqw, 24px);}
-  .restock-request-stepper.lg button{width:clamp(38px, 7cqw, 54px);height:clamp(38px, 7cqw, 54px);border-radius:12px;font-size:clamp(19px, 3.6cqw, 29px);}
+  .restock-request-stepper.lg button{width:clamp(76px, 14cqw, 108px);height:clamp(38px, 7cqw, 54px);border-radius:12px;font-size:clamp(19px, 3.6cqw, 29px);}
   .restock-request-stepper.lg input{flex:0 0 clamp(104px, 23cqw, 180px);width:clamp(104px, 23cqw, 180px);font-size:clamp(20px, 4cqw, 33px);padding:10px 0;}
   .restock-request-stepper.xl button{width:clamp(46px, 10cqw, 88px);height:clamp(46px, 10cqw, 88px);border-radius:20px;font-size:clamp(22px, 5.5cqw, 46px);}
   .restock-request-stepper.xl input{flex:0 0 clamp(144px, 31cqw, 240px);width:clamp(144px, 31cqw, 240px);font-size:clamp(34px, 8.4cqw, 77px);padding:19px 0;border-radius:19px;}
@@ -584,7 +584,7 @@
   }
   .resupply-edit-hold-box{background:var(--restock-bg); color:var(--restock); border:2px solid var(--restock);}
   .resupply-edit-divider{border-top:1.5px solid var(--line); margin-bottom:16px;}
-  .restock-need-numbers{display:flex; align-items:center; justify-content:center; gap:8px;}
+  .restock-need-numbers{display:flex; align-items:center; justify-content:center; gap:8px; width:100%;}
   .restock-need-num,.restock-need-size{
     font-family:'Oswald'; font-size:clamp(32px, 8cqw, 60px); font-weight:800; color:var(--ink); line-height:1;
     background:var(--line); border-radius:14px; padding:16px 24px; min-width:clamp(50px, 10cqw, 92px); text-align:center;
@@ -682,7 +682,7 @@
   .request-popup .size-count-input{height:clamp(38px, 7cqw, 66px); box-sizing:border-box; padding:5px 0; font-size:clamp(18px, 3.2cqw, 30px); border-radius:10px;}
   .request-popup .size-label.zero-val{color:#A6A6A6; opacity:1;}
   .request-popup .size-count-input.zero-val{background:#D1D1D1; border-color:#C2C2C2; color:#8F8F8F;}
-  .request-popup .btn-request-submit{font-size:clamp(19px, 3cqw, 24px);}
+  .request-popup .btn-request-submit{font-family:'Oswald'; font-weight:700; font-size:clamp(19px, 3cqw, 24px); letter-spacing:0.5px; text-transform:uppercase;}
   @container popup (max-width: 420px){
     .request-popup .size-grid{width:100%; max-width:720px; margin:0 auto;}
   }
