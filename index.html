@@ -2437,7 +2437,8 @@ function beginDragReorder(cardEl, e){
     originTop: startRect.top,
     lastX: e.clientX,
     lastY: e.clientY,
-    lastReorderCheck: 0
+    lastReorderCheck: 0,
+    autoScrolling: false // true while the grid is actively being auto-scrolled near an edge — see startAutoScroll/maybeReorderDuringDrag
   };
 
   hapticTap();
@@ -2483,6 +2484,7 @@ function startAutoScroll(){
         visualDelta = maxSpeed * Math.min(1, (y - (rect.bottom - threshold)) / threshold);
       }
       if(visualDelta !== 0){
+        dragReorder.autoScrolling = true; // suppress reorder shuffling while the grid is actively scrolling — see maybeReorderDuringDrag
         const before = scrollEl.scrollTop;
         scrollEl.scrollTop = before + (visualDelta / uiScale); // convert the desired VISUAL speed into the element's own unscaled space
         const actualDelta = (scrollEl.scrollTop - before) * uiScale; // convert back to visual space to match originTop's coordinate space
@@ -2494,8 +2496,15 @@ function startAutoScroll(){
           dragReorder.originTop -= actualDelta;
           const activeCardEl = document.querySelector('.card.dragging');
           if(activeCardEl) positionDraggedCard(activeCardEl, dragReorder.lastX, dragReorder.lastY);
-          maybeReorderDuringDrag(); // new cards may have just scrolled into range even though the finger didn't move
+          // Deliberately NOT calling maybeReorderDuringDrag() here anymore.
+          // While actively auto-scrolling, the grid is moving fast enough
+          // underneath the finger that repeatedly re-checking and shuffling
+          // neighbors just looked cluttered and confusing — cards kept
+          // jumping out of the way over and over. Reordering resumes the
+          // instant the finger moves away from the edge (see below).
         }
+      }else{
+        dragReorder.autoScrolling = false; // finger is no longer near an edge — normal reorder-on-hover resumes right away
       }
     }
     autoScrollRAF = requestAnimationFrame(tick);
@@ -2531,12 +2540,12 @@ function onDragMove(e){
 // visible thrashing (cards jumping around rapidly). A short cooldown
 // between reorder checks keeps the drag feeling smooth while only
 // actually reshuffling the other cards a few times a second. Called from
-// BOTH onDragMove (finger actively moving) and the auto-scroll loop
-// (finger holding still at an edge while the grid scrolls underneath it)
-// — the finger not moving shouldn't mean new cards scrolled into range
-// never get picked up.
+// onDragMove (finger actively moving) — deliberately NOT called from the
+// auto-scroll loop, since reordering while the grid is actively scrolling
+// looked cluttered (cards kept jumping out of the way repeatedly); see
+// dragReorder.autoScrolling below.
 function maybeReorderDuringDrag(){
-  if(!dragReorder) return;
+  if(!dragReorder || dragReorder.autoScrolling) return; // never reorder while the grid is actively auto-scrolling
   const now = performance.now();
   if(now - dragReorder.lastReorderCheck < 220) return;
   dragReorder.lastReorderCheck = now;
