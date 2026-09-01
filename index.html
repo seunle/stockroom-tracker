@@ -133,9 +133,21 @@
      `top` offset is set dynamically in JS (syncStickyTitleOffset) to match
      whichever toolbar is actually visible above it, since toolbar height
      varies by tab/content and by the portrait/desktop Resupply layout. */
+  /* main.grid-area has its own 10px horizontal padding — these sticky
+     elements sat WITHIN that padded content area, so their solid
+     background stopped short of the container's true edges, leaving a
+     thin strip at each side where a scrolling card's photo could peek
+     through. Negative margin + matching padding extends the background
+     to the container's real edges (full bleed) while keeping the visible
+     content (chips, text) positioned exactly where it was before. */
+  .toolbar-top, .resupply-toolbar-portrait, .sticky-title-zone{
+    margin-left:-10px; margin-right:-10px; padding-left:10px; padding-right:10px;
+  }
   .toolbar-top, .resupply-toolbar-portrait{position:sticky; top:0; z-index:16; background:var(--paper); padding-top:2px;}
-  .sticky-title-zone{position:sticky; z-index:15; background:var(--paper);}
+  .btn-new-wide{position:sticky; z-index:15; background:var(--paper);} /* offset set dynamically in JS, stacks right below .toolbar-top */
+  .sticky-title-zone{position:sticky; z-index:15; background:var(--paper); padding-bottom:12px;}
   main.grid-area.edit-mode-bg .toolbar-top{background:#A39C8C;}
+  main.grid-area.edit-mode-bg .btn-new-wide{background:#A39C8C;}
   main.grid-area.edit-mode-bg .sticky-title-zone{background:#A39C8C;}
   .grid-title{font-size:12px; font-weight:600; letter-spacing:1.2px; text-transform:uppercase; color:var(--ink-soft);}
   /* Display/Storage tab titles get this — same size/weight as the Resupply
@@ -1105,12 +1117,23 @@ function render(){
 // CSS offset since toolbar height varies by tab, by content (e.g. Edit's
 // hint text), and between the desktop/portrait Resupply layouts.
 function syncStickyTitleOffset(){
-  let toolbarHeight = 0;
+  // Sticky layers stack in DOM order: the toolbar (filters+zoom) first,
+  // then — Edit tab only — the +New button, then the title/hint zone.
+  // Each layer's offset is the cumulative height of everything stacked
+  // above it, computed here since layer heights vary by tab and content
+  // (and between the desktop/portrait Resupply toolbar layouts) rather
+  // than being a fixed, guessable number.
+  let cumulative = 0;
   document.querySelectorAll('main.grid-area .toolbar-top, main.grid-area .resupply-toolbar-portrait').forEach(el=>{
-    if(el.offsetHeight > toolbarHeight) toolbarHeight = el.offsetHeight;
+    if(el.offsetHeight > cumulative) cumulative = el.offsetHeight;
   });
+  const newBtn = document.querySelector('main.grid-area .btn-new-wide');
+  if(newBtn){
+    newBtn.style.top = cumulative + 'px';
+    cumulative += newBtn.offsetHeight;
+  }
   document.querySelectorAll('main.grid-area .sticky-title-zone').forEach(el=>{
-    el.style.top = toolbarHeight + 'px';
+    el.style.top = cumulative + 'px';
   });
 }
 function renderInner(){
@@ -1772,9 +1795,7 @@ function renderResupplyTab(main, list){
       </div>
     </div>
     <div class="resupply-active-section${activeCode===ON_HOLD_CODE?' onhold-glow':''}">
-      <div class="sticky-title-zone">
-        <div class="resupply-row-label active-label">${esc(activeName).toUpperCase()} <span class="resupply-row-count active-count">${activeItems.length}</span></div>
-      </div>
+      <div class="resupply-row-label active-label">${esc(activeName).toUpperCase()} <span class="resupply-row-count active-count">${activeItems.length}</span></div>
       <div class="photo-grid" id="resupplyGrid" style="--cols:${state.gridColsByTab.resupply};"></div>
     </div>
     <div id="resupplyCollapsedRows"></div>
