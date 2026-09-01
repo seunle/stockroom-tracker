@@ -2682,18 +2682,28 @@ function renderReorderPreview(cardEl){
   const newCardEl = existingByKey[dragReorder.key] || grid.querySelector(`.card[data-group-key="${CSS.escape(dragReorder.key)}"]`);
   if(newCardEl){
     // This is the SAME node from before this call (just moved, not
-    // recreated), so its pointer capture and pointermove/pointerup/
-    // pointercancel listeners — all attached back in beginDragReorder —
-    // are still fully intact. No need to re-request capture or
-    // re-attach anything here anymore.
+    // recreated), so its pointermove/pointerup/pointercancel listeners —
+    // attached back in beginDragReorder — are still fully intact.
     newCardEl.classList.add('dragging');
-    // The dragged card just landed at a NEW natural grid position (its
-    // array index changed), but dragReorder.originLeft/originTop were
-    // still the OLD position from drag-start (or the previous reorder).
-    // Read the fresh, untransformed position now — before any transform
-    // is applied below — or positionDraggedCard would compute the "follow
-    // the pointer" offset from a stale reference point and the card would
-    // visibly jump the instant it's dropped into a new slot.
+    // Defensively re-request pointer capture. appendChild on a node that's
+    // ALREADY a child of the target (which is exactly what's happening on
+    // every reorder step) technically removes-then-reinserts it per the
+    // DOM spec, even though it happens synchronously within the same
+    // parent — some browsers treat that as the element being "removed",
+    // which silently drops pointer capture. Once capture is gone, this
+    // card stops receiving pointermove/pointerup at all: it looks frozen
+    // in place, releasing your finger never fires onDragEnd, and
+    // dragReorder never gets reset to null — which is exactly why every
+    // subsequent drag attempt then does nothing until a full reload.
+    try{ newCardEl.setPointerCapture(dragReorder.pointerId); }catch(err){}
+    // The dragged card still has its OLD transform applied from following
+    // the finger before this reorder — getBoundingClientRect() reflects
+    // the CURRENT VISUAL (transformed) position, not where the card
+    // naturally sits at its new spot in the grid. Clearing the transform
+    // FIRST, before measuring, is what makes this actually "fresh": the
+    // browser never gets a chance to paint the momentarily-untransformed
+    // state, since it's replaced by a new transform in the very next line.
+    newCardEl.style.transform = 'none';
     const freshRect = newCardEl.getBoundingClientRect();
     dragReorder.originLeft = freshRect.left;
     dragReorder.originTop = freshRect.top;
