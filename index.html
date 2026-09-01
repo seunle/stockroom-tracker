@@ -98,7 +98,7 @@
     display:flex; flex-direction:column;
     min-height:0; /* lets this flex item actually shrink+scroll instead of forcing
                      the whole page taller once there are more categories than fit */
-    padding-bottom:120px; /* matches main.grid-area's bottom padding — reserves
+    padding-bottom:calc(150px + env(safe-area-inset-bottom)); /* matches main.grid-area's bottom padding — reserves
                              room for the fixed bottom nav so the last category
                              (and the Edit button) never sit hidden behind it */
   }
@@ -125,7 +125,7 @@
     text-transform:uppercase; color:var(--thread); border-top:1.5px solid var(--line); margin-top:auto; flex-shrink:0;
   }
 
-  main.grid-area{flex:1; overflow-y:auto; padding:12px 10px 120px; position:relative;}
+  main.grid-area{flex:1; overflow-y:auto; padding:12px 10px calc(150px + env(safe-area-inset-bottom)); position:relative;}
   main.grid-area.edit-mode-bg{background:#A39C8C;}
   .grid-toolbar{display:flex; align-items:center; justify-content:space-between; margin:0 4px 3px;}
   .grid-title{font-size:12px; font-weight:600; letter-spacing:1.2px; text-transform:uppercase; color:var(--ink-soft);}
@@ -2364,6 +2364,7 @@ async function submitNewItem(){
 // reordering while Bears is selected (top bar) only ever touches Bears'
 // own Order column — Tangle and Parkway are untouched.
 let dragReorder = null; // active drag session, or null when nothing's being dragged
+let lastOrderCommitTime = 0; // guards the periodic auto-poll from racing a just-sent order write (see setInterval below)
 const DRAG_LONG_PRESS_MS = 150;
 const DRAG_MOVE_CANCEL_PX = 8;
 
@@ -2448,25 +2449,33 @@ function startAutoScroll(){
     if(!dragReorder){ autoScrollRAF = null; return; }
     const scrollEl = document.querySelector('main.grid-area');
     if(scrollEl){
+      // #uiShell (an ancestor of this element) is visually scaled via CSS
+      // transform:scale() for the app's UI Scale setting. getBoundingClientRect()
+      // returns VISUAL (post-transform) coordinates, but scrollTop operates
+      // in the element's own UNSCALED coordinate space — mixing the two
+      // directly compounds a small error every single frame, which is what
+      // was causing the dragged card to drift further and further away
+      // and eventually fly off-screen the longer auto-scroll ran.
+      const uiScale = state.uiScale || 1;
       const rect = scrollEl.getBoundingClientRect();
-      const threshold = 70; // px from the edge that starts auto-scrolling
-      const maxSpeed = 14; // px per frame at full intensity (right at the very edge)
+      const threshold = 70; // px from the edge that starts auto-scrolling (visual space)
+      const maxSpeed = 14; // desired VISUAL px per frame at full intensity
       const y = dragReorder.lastY;
-      let delta = 0;
+      let visualDelta = 0;
       if(y < rect.top + threshold){
-        delta = -maxSpeed * Math.min(1, (rect.top + threshold - y) / threshold);
+        visualDelta = -maxSpeed * Math.min(1, (rect.top + threshold - y) / threshold);
       }else if(y > rect.bottom - threshold){
-        delta = maxSpeed * Math.min(1, (y - (rect.bottom - threshold)) / threshold);
+        visualDelta = maxSpeed * Math.min(1, (y - (rect.bottom - threshold)) / threshold);
       }
-      if(delta !== 0){
+      if(visualDelta !== 0){
         const before = scrollEl.scrollTop;
-        scrollEl.scrollTop = before + delta;
-        const actualDelta = scrollEl.scrollTop - before; // 0 once already at a scroll boundary
+        scrollEl.scrollTop = before + (visualDelta / uiScale); // convert the desired VISUAL speed into the element's own unscaled space
+        const actualDelta = (scrollEl.scrollTop - before) * uiScale; // convert back to visual space to match originTop's coordinate space
         if(actualDelta !== 0){
           // The dragged card's origin was captured via getBoundingClientRect
-          // at a specific scroll position — shift it by the same amount the
-          // container just scrolled, or the card would visibly drift away
-          // from the finger as auto-scroll continues.
+          // at a specific scroll position — shift it by the same VISUAL
+          // amount the container just scrolled, or the card would visibly
+          // drift away from the finger as auto-scroll continues.
           dragReorder.originTop -= actualDelta;
           const activeCardEl = document.querySelector('.card.dragging');
           if(activeCardEl) positionDraggedCard(activeCardEl, dragReorder.lastX, dragReorder.lastY);
@@ -2655,6 +2664,7 @@ async function onDragEnd(e){
   toast(t('savingOrder'));
   const res = await apiPost({ action:'setGroupOrder', location:code, updates });
   if(res.ok){
+    lastOrderCommitTime = Date.now();
     toast(t('orderSaved'));
     // Deliberately NOT calling refresh() here. The write and this popup's
     // eventual read are two separate requests with no guaranteed instant
@@ -3018,7 +3028,18 @@ applyLanguage();
 updateToastPosition();
 render();
 refresh(false);
-setInterval(()=>{ if(!document.hidden && !dragReorder) refresh(false); }, 20000);
+setInterval(()=>{
+  if(document.hidden || dragReorder) return;
+  // A recently-committed drag-reorder write and this poll's read are two
+  // separate requests with no guaranteed instant consistency between them
+  // — polling too soon after a commit could occasionally catch a stale
+  // read and visibly revert the just-moved item until the NEXT refresh,
+  // even though the write itself succeeded (confirmed by reopening the
+  // app later, which always showed the correct final position). A short
+  // grace period after any order commit avoids racing that window.
+  if(Date.now() - lastOrderCommitTime < 5000) return;
+  refresh(false);
+}, 20000);
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{ navigator.serviceWorker.register('service-worker.js').catch(()=>{}); });
 }
