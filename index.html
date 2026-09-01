@@ -101,8 +101,7 @@
      freed up by moving +New into the Edit tab — so the current location
      reads clearly at a glance from across the room. */
   #btnLocation{padding:0 20px; font-size:clamp(13px, 3.2vw, 19px);}
-  #btnUndo{min-width:76px; background:#F6D9A0; border:2px solid #fff; color:var(--thread);}
-  #btnUndo svg{display:block; filter:drop-shadow(1px 0 0 #fff) drop-shadow(-1px 0 0 #fff) drop-shadow(0 1px 0 #fff) drop-shadow(0 -1px 0 #fff);}
+  #btnUndo{min-width:76px; background:#8A8578; border:2px solid #fff; color:#fff; font-family:'Oswald'; font-weight:700; font-size:13px; letter-spacing:0.5px; text-transform:uppercase;}
   .top-btn:active{opacity:0.75;}
   .session-refresh-btn{
     justify-self:center; height:48px; box-sizing:border-box; background:var(--ok); color:#fff; border:none;
@@ -186,6 +185,17 @@
   .card .status-dot{
     position:absolute; top:6px; right:6px; width:12px;height:12px;border-radius:50%;
     border:2px solid var(--paper-raised);
+  }
+  /* Request tab (Hoodie category): a price badge instead of the usual
+     status-dot, since Hoodie items don't have a Display-vs-Min-Count
+     state to show a dot for in the first place. */
+  .request-price-badge{
+    position:absolute; top:6px; right:6px; background:rgba(37,36,31,0.75); color:#fff;
+    font-family:'Oswald'; font-weight:700; font-size:11px; padding:3px 7px; border-radius:8px;
+  }
+  .price-pick-photo{
+    font-family:'Oswald'; font-weight:800; color:var(--thread-dark);
+    font-size:clamp(18px, 7cqw, 30px);
   }
   .card.inactive-card{opacity:0.5;}
   .card.card-pending{opacity:0.35; pointer-events:none;}
@@ -377,6 +387,17 @@
   .btn-ok{background:var(--ok);color:#fff;}
   .btn-confirm{background:#B7D9C2; color:#2E7D32; border:1.5px solid #2E7D32;}
   .btn:active{opacity:0.75;}
+  /* Checkmark toggle — takes roughly 1/4 of the action row (flex:1 next to
+     the Done/Request button's flex:3), icon-only, toggles like a filter
+     chip: on = blue with white check, off = muted/unselected. */
+  .btn-check-toggle{
+    flex:1; display:flex; align-items:center; justify-content:center;
+    background:var(--paper); border:1.5px solid var(--line); border-radius:9px;
+    font-size:20px; font-weight:800; color:var(--ink-soft); padding:11px 0;
+  }
+  .btn-check-toggle.on{background:var(--thread); border-color:var(--thread); color:#fff;}
+  .btn-check-toggle:active{opacity:0.75;}
+  .btn-wide3{flex:3;}
 
   .upload-box{
     border:2px dashed var(--line); border-radius:12px; height:120px;
@@ -636,6 +657,7 @@
     -moz-appearance:textfield;
   }
   .size-count-input.zero-val{color:var(--ink-soft); background:var(--line); border-color:var(--line);}
+  .size-label.zero-val{color:var(--ink-soft); opacity:0.55;}
   .size-count-input::-webkit-outer-spin-button,.size-count-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
 
   /* item form (New / Edit) — landscape layout, photo left / fields right */
@@ -727,12 +749,7 @@
   <button class="session-refresh-btn" id="btnRefreshSession" title="Refresh Session (also resyncs)"><span class="refresh-arrow">↻</span> Refresh Session</button>
   <div class="top-actions">
     <button class="top-btn" id="btnLocation">All Locs</button>
-    <button class="top-btn icon-only" id="btnUndo" title="Undo last action">
-      <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="21" y1="12" x2="4" y2="12"/>
-        <polyline points="10,5 4,12 10,19"/>
-      </svg>
-    </button>
+    <button class="top-btn icon-only" id="btnUndo" title="Undo last action">Undo</button>
     <button class="top-btn icon-only" id="btnSettings" title="Settings">⚙</button>
   </div>
 </header>
@@ -787,6 +804,12 @@ let categoryFilter = 'All';
 let sidebarEditMode = false;
 let editFilter = 'all'; // 'all' | 'active' | 'inactive' — Edit tab only
 const FIXED_TYPES = ['Men','Women','Youth','Kids','Baby','TankTop','Long Sleeve','Hoodie','Crewneck','Y Hoodie Crewneck','K Hoodie Crewneck','Cap'];
+const HOODIE_SIZES = ['XS','S','M','L','XL','XXL','XXXL']; // same size list as everything else, just toggled on/off instead of given per-location minimums
+let requestFilter = 'all'; // 'all' | 'price' — Request tab only (Hoodie category)
+let requestPriceFilter = null; // the specific price selected, once requestFilter==='price'
+let requestDraft = null;      // { rowId: { current, size } } — sizes being requested right now, always starts at 0
+let requestDraftGroupKey = null;
+let requestDraftLocation = null;
 let pendingPhotoBase64 = null;
 let filePickerTarget = null; // 'add' | 'edit'
 let editingGroupKey = null;
@@ -802,11 +825,11 @@ let pendingDefaultTab = null; // draft value while Settings sheet is open; null 
 // regardless of language.
 const TRANSLATIONS = {
   en: {
-    notConnected:'Not connected', refreshSession:'Refresh Session', newBtn:'New', allLocs:'All Locs',
-    tabDisplay:'Display', tabStorage:'Storage', tabResupply:'Resupply', tabEdit:'Edit',
+    notConnected:'Not connected', refreshSession:'Refresh Session', newBtn:'New', allLocs:'All Locs', undoBtn:'Undo',
+    tabDisplay:'Display', tabStorage:'Storage', tabResupply:'Resupply', tabEdit:'Edit', tabRequest:'Request',
     connectTitle:'Not connected yet', connectBody:'Tap the ⚙ icon in the top-right to enter your Apps Script URL.',
     connectEmptyTitle:'Connect your sheet', connectEmptyBody:'Once connected, all three locations will share the same live inventory.',
-    tabTitleDisplay:'Display', tabTitleStorage:'Check', tabTitleResupply:'Needs Attention', tabTitleEdit:'All Items',
+    tabTitleDisplay:'Display', tabTitleStorage:'Check', tabTitleResupply:'Needs Attention', tabTitleEdit:'All Items', tabTitleRequest:'Request', filterPrice:'Price',
     emptyResupply:'Nothing here for this location right now — try another one above.',
     emptyStorage:'Everything on display is at or above its minimum count.',
     emptyEdit:'No items match this filter.', emptyDefault:'Tap "+ New" up top to add your first item.',
@@ -821,6 +844,7 @@ const TRANSLATIONS = {
     newItemTitle:'New item', editItemTitle:'Edit item', deactivatedNotice:'This item is currently deactivated — hidden from Display/Storage/Resupply.',
     fieldName:'Name', fieldType:'Type', fieldLocation:'Location', chooseEllipsis:'Choose…',
     fieldSizesCheck:'Sizes check (minimum on display)', upload:'Upload', pickLocationFirstHint:'Select a location above to enter sizes for it.',
+    fieldPriceSizesLabel:'Price & Sizes', fieldPrice:'Price', fieldSizesToggle:'Available Sizes', pickHoodieSize:'Select at least one size',
     addItem:'Add item', save:'Save', enterName:'Enter a name', chooseType:'Choose a type', pickLocation:'Pick at least one location', duplicateItemError:'An item with this name and type already exists',
     adding:'Adding…', itemAdded:'Item added', addFailed:'Add failed: ', saving:'Saving…', saved:'Saved', saveFailed:'Save failed: ', unknownError:'unknown error',
     deactivate:'Deactivate', reactivate:'Reactivate', reactivateTitle:'Reactivate', reactivateBody:'This brings it back into Display/Storage/Resupply.',
@@ -830,7 +854,7 @@ const TRANSLATIONS = {
     editingDisplay:'editing Display -', checkedBtn:'✓ Checked', doneBtn:'Done', markedChecked:'Marked checked', checkedToast:'Checked', minLabel:'min',
     photoReady:'Photo ready — tap Save/Add to finish', photoError:'Could not read that photo (', photoErrorSuffix:'). Try a JPG or PNG, not HEIC.', processingPhoto:'Processing photo…',
     connectFirst:'Connect your sheet first',
-    need:'Need', hold:'Hold', onHold:'On Hold', resupplyFor:'Resupply for', requestFor:'Request for', resupplyBtn:'Resupply', requestBtn:'Request', stockBtn:'Stock',
+    need:'Need', hold:'Hold', onHold:'On Hold', resupplyFor:'Resupply for', requestFor:'Request for', resupplyBtn:'Resupply', requestBtn:'Request', stockBtn:'Stock', requestSentToast:'Requested',
     selectLocationResupply:'Select a specific location (top bar) before requesting a resupply',
     requesting:'Requesting…', resupplyRequestedFor:'Resupply requested for', displayPlus:'— display +',
     couldNotSubmit:'Could not submit request: ', addingToHold:'Adding to On Hold…', onHoldForNowIs:'On Hold for', isNow:'is now',
@@ -848,11 +872,11 @@ const TRANSLATIONS = {
     pickLocationBody:'Storage needs a specific location selected (top bar) — restocking requirements are tracked separately per location now.',
   },
   ko: {
-    notConnected:'연결 안 됨', refreshSession:'세션 새로고침', newBtn:'추가', allLocs:'전체 매장',
-    tabDisplay:'진열', tabStorage:'재고', tabResupply:'보충', tabEdit:'편집',
+    notConnected:'연결 안 됨', refreshSession:'세션 새로고침', newBtn:'추가', allLocs:'전체 매장', undoBtn:'실행 취소',
+    tabDisplay:'진열', tabStorage:'재고', tabResupply:'보충', tabEdit:'편집', tabRequest:'요청',
     connectTitle:'아직 연결되지 않음', connectBody:'오른쪽 위 ⚙ 아이콘을 눌러 Apps Script URL을 입력하세요.',
     connectEmptyTitle:'시트 연결하기', connectEmptyBody:'연결하면 세 매장이 동일한 실시간 재고를 공유합니다.',
-    tabTitleDisplay:'진열', tabTitleStorage:'확인', tabTitleResupply:'조치 필요', tabTitleEdit:'전체 품목',
+    tabTitleDisplay:'진열', tabTitleStorage:'확인', tabTitleResupply:'조치 필요', tabTitleEdit:'전체 품목', tabTitleRequest:'요청', filterPrice:'가격',
     emptyResupply:'이 매장에는 지금 필요한 항목이 없습니다 — 위에서 다른 매장을 선택해 보세요.',
     emptyStorage:'진열된 모든 품목이 최소 수량 이상입니다.',
     emptyEdit:'이 필터에 맞는 품목이 없습니다.', emptyDefault:'위쪽 "+ 추가"를 눌러 첫 품목을 추가하세요.',
@@ -867,6 +891,7 @@ const TRANSLATIONS = {
     newItemTitle:'새 품목', editItemTitle:'품목 편집', deactivatedNotice:'이 품목은 현재 비활성화되어 진열/재고/보충 탭에서 숨겨져 있습니다.',
     fieldName:'이름', fieldType:'종류', fieldLocation:'매장', chooseEllipsis:'선택…',
     fieldSizesCheck:'사이즈 확인 (진열 최소 수량)', upload:'업로드', pickLocationFirstHint:'위에서 매장을 선택하면 해당 매장의 사이즈를 입력할 수 있습니다.',
+    fieldPriceSizesLabel:'가격 및 사이즈', fieldPrice:'가격', fieldSizesToggle:'판매 가능한 사이즈', pickHoodieSize:'사이즈를 하나 이상 선택하세요',
     addItem:'품목 추가', save:'저장', enterName:'이름을 입력하세요', chooseType:'종류를 선택하세요', pickLocation:'매장을 하나 이상 선택하세요', duplicateItemError:'같은 이름과 종류의 품목이 이미 존재합니다',
     adding:'추가 중…', itemAdded:'품목이 추가되었습니다', addFailed:'추가 실패: ', saving:'저장 중…', saved:'저장됨', saveFailed:'저장 실패: ', unknownError:'알 수 없는 오류',
     deactivate:'비활성화', reactivate:'재활성화', reactivateTitle:'재활성화', reactivateBody:'진열/재고/보충 탭에 다시 표시됩니다.',
@@ -876,7 +901,7 @@ const TRANSLATIONS = {
     editingDisplay:'진열 수정 -', checkedBtn:'✓ 확인함', doneBtn:'완료', markedChecked:'확인 완료로 표시함', checkedToast:'확인함', minLabel:'최소',
     photoReady:'사진 준비 완료 — 저장/추가를 눌러 마무리하세요', photoError:'사진을 읽을 수 없습니다 (', photoErrorSuffix:'). HEIC 대신 JPG나 PNG를 사용해 보세요.', processingPhoto:'사진 처리 중…',
     connectFirst:'먼저 시트를 연결하세요',
-    need:'필요', hold:'보류', onHold:'보류 중', resupplyFor:'보충 대상:', requestFor:'요청 대상:', resupplyBtn:'보충', requestBtn:'요청', stockBtn:'입고',
+    need:'필요', hold:'보류', onHold:'보류 중', resupplyFor:'보충 대상:', requestFor:'요청 대상:', resupplyBtn:'보충', requestBtn:'요청', stockBtn:'입고', requestSentToast:'요청됨',
     selectLocationResupply:'보충을 요청하려면 상단에서 매장을 선택하세요',
     requesting:'요청 중…', resupplyRequestedFor:'보충 요청됨:', displayPlus:'— 진열 +',
     couldNotSubmit:'요청을 제출할 수 없습니다: ', addingToHold:'보류로 추가 중…', onHoldForNowIs:'', isNow:'보류 수량:',
@@ -902,18 +927,13 @@ function t(key){
 // language — bottom nav labels, top bar buttons/sync text, etc.
 function applyLanguage(){
   const setText = (id, key) => { const el=document.getElementById(id); if(el) el.textContent = t(key); };
-  document.querySelectorAll('.nav-item').forEach(el=>{
-    const tab = el.dataset.tab;
-    const key = tab==='display'?'tabDisplay':tab==='storage'?'tabStorage':tab==='resupply'?'tabResupply':'tabEdit';
-    const label = el.querySelector('.tab-label');
-    if(label) label.textContent = t(key);
-  });
   const refreshBtn = document.getElementById('btnRefreshSession');
   if(refreshBtn){
     const arrow = refreshBtn.querySelector('.refresh-arrow');
     refreshBtn.textContent = ' ' + t('refreshSession');
     if(arrow) refreshBtn.prepend(arrow);
   }
+  setText('btnUndo', 'undoBtn');
   if(!state.apiUrl){ const sync=document.getElementById('lastSync'); if(sync) sync.textContent = t('notConnected'); }
 }
 
@@ -954,13 +974,14 @@ function loadState(){
         if(!['display','storage','resupply'].includes(s.defaultTab)) s.defaultTab = 'display';
         if(!s.gridColsByTab){
           const legacy = s.gridCols || 4; // migrate old shared value
-          s.gridColsByTab = { display:legacy, storage:legacy, resupply:legacy, edit:legacy };
+          s.gridColsByTab = { display:legacy, storage:legacy, resupply:legacy, edit:legacy, request:legacy };
         }
+        if(!s.gridColsByTab.request) s.gridColsByTab.request = 4; // added for the Hoodie Request tab — older saved states won't have this key yet
         return s;
       }
     }
   }catch(e){}
-  return { apiUrl: DEFAULT_API_URL, uiScale: 1, defaultTab: 'display', gridColsByTab: { display:4, storage:4, resupply:4, edit:4 } }; // falls back to the baked-in URL if nothing saved (or it got cleared)
+  return { apiUrl: DEFAULT_API_URL, uiScale: 1, defaultTab: 'display', gridColsByTab: { display:4, storage:4, resupply:4, edit:4, request:4 } }; // falls back to the baked-in URL if nothing saved (or it got cleared)
 }
 function saveState(){ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
 
@@ -1146,10 +1167,25 @@ function groupIsActive(g){
 }
 
 /* ============================= RENDER ============================= */
+// The Hoodie category (sidebar) replaces Display+Storage with a single
+// merged "Request" tab — everything else (Resupply, Edit) stays exactly
+// the same in text/shape/functionality. Rebuilt on every render() rather
+// than static HTML, since which set of tabs is correct depends on
+// categoryFilter.
+function renderBottomNav(){
+  const nav = document.querySelector('nav.bottomnav');
+  const isHoodieCat = categoryFilter === HOODIE_TYPE;
+  const tabs = isHoodieCat
+    ? [['request', t('tabRequest')], ['resupply', t('tabResupply')], ['edit', t('tabEdit')]]
+    : [['display', t('tabDisplay')], ['storage', t('tabStorage')], ['resupply', t('tabResupply')], ['edit', t('tabEdit')]];
+  nav.innerHTML = tabs.map(([tab,label])=>`<div class="nav-item" data-tab="${tab}"><div class="tab-label">${esc(label)}</div></div>`).join('');
+  nav.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active', n.dataset.tab===currentTab));
+  const editEl = nav.querySelector('.nav-item[data-tab="edit"]');
+  if(editEl) editEl.classList.toggle('reorder-active', editReorderMode);
+}
 function render(){
   renderSidebar();
-  document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active', n.dataset.tab===currentTab));
-  document.querySelector('.nav-item[data-tab="edit"]').classList.toggle('reorder-active', editReorderMode);
+  renderBottomNav();
   document.getElementById('btnLocation').textContent = locationFilter==='All' ? t('allLocs') : LOCS.find(l=>l.code===locationFilter).name;
   document.getElementById('btnLocation').style.display = currentTab==='resupply' ? 'none' : '';
 
@@ -1254,6 +1290,14 @@ function render(){
     return;
   }
 
+  // Request tab (Hoodie category only): mirrors Display's grouped-card
+  // layout, but filtered by All/Price instead of Checked/Unchecked, and
+  // opens the Hoodie-specific request popup instead of the Display one.
+  if(currentTab==='request'){
+    renderRequestTab(main, list);
+    return;
+  }
+
   // Resupply tab: three location rows, not grouped by item.
   if(currentTab==='resupply'){
     renderResupplyTab(main, list);
@@ -1308,6 +1352,85 @@ function checkedFilterChipsHtml(){
 function setCheckedFilter(v){ checkedFilter=v; render(); }
 function setStorageSizeFilter(v){ storageSizeFilter=v; render(); }
 
+/* ============================= REQUEST TAB (Hoodie category) ============================= */
+function setRequestFilter(v){
+  requestFilter = v;
+  requestPriceFilter = null; // switching filter mode always resets which specific price (if any) was picked
+  render();
+}
+function selectRequestPrice(p){
+  requestPriceFilter = p;
+  render();
+}
+function requestFilterChipsHtml(){
+  return `<div class="chiprow">
+    <div class="chip ${requestFilter==='all'?'on':''}" onclick="setRequestFilter('all')">${t('filterAll')}</div>
+    <div class="chip ${requestFilter==='price'?'on':''}" onclick="setRequestFilter('price')">${t('filterPrice')}</div>
+  </div>`;
+}
+function requestCardHtml(g){
+  const inactive = !groupIsActive(g);
+  const checked = locationFilter!=='All' && sessionCheckedKeys.has(sessionCheckKey(locationFilter,g.key));
+  const locBadge = locationFilter==='All' ? `<div class="loc-tag">${esc(g.location)}</div>` : '';
+  const photo = g.photo ? `<img src="${esc(g.photo)}" loading="lazy">` : '👕';
+  const pending = Object.values(g.rows).some(r=>pendingSubmitIds.has(String(r.ID)));
+  const priceVal = Object.values(g.rows).map(r=>Number(r.Price||0)).find(p=>p>0) || 0;
+  const priceBadge = priceVal>0 ? `<div class="request-price-badge">$${priceVal.toFixed(2)}</div>` : '';
+  return `
+    <div class="card${inactive?' inactive-card':''}${checked?' session-checked':''}${pending?' card-pending':''}" data-group-key="${esc(g.key)}" ${pending?'':`onclick="openRequestCheck('${esc(g.key)}')"`}>
+      <div class="photo">${photo}</div>
+      ${priceBadge}
+      ${locBadge}
+      ${inactive?'<div class="loc-tag" style="left:auto;right:6px;top:auto;bottom:34px;background:rgba(174,66,57,0.85);">OFF</div>':''}
+      <div class="cap">${esc(g.name)}</div>
+    </div>`;
+}
+function renderRequestTab(main, list){
+  // Hoodie items only (categoryFilter is forced to 'Hoodie' by the sidebar
+  // whenever this tab is reachable, so matchesFilters already restricts to
+  // Type==='Hoodie' — same grouping mechanism as every other tab).
+  const catLocFiltered = list.filter(r=>matchesFilters({type:r.Type, location:r.Location}));
+  const priceValues = Array.from(new Set(
+    catLocFiltered.map(r=>Number(r.Price||0)).filter(p=>p>0)
+  )).sort((a,b)=>a-b);
+
+  let groups = buildGroups(list).filter(g=>matchesFilters(g));
+  if(requestFilter==='price' && requestPriceFilter!=null){
+    groups = groups.filter(g=>Object.values(g.rows).some(r=>Number(r.Price||0)===requestPriceFilter));
+  }
+  groups = applyCustomOrder(groups, locationFilter);
+
+  const showingPricePicker = requestFilter==='price' && requestPriceFilter==null;
+  const count = showingPricePicker ? priceValues.length : groups.length;
+
+  main.innerHTML = `
+    <div class="toolbar-top">
+      ${requestFilterChipsHtml()}
+      <div class="scale-ctrl">
+        <button class="scale-btn" onclick="adjustScale(1)">−</button>
+        <button class="scale-btn" onclick="adjustScale(-1)">+</button>
+      </div>
+    </div>
+    <div class="grid-toolbar">
+      <div class="grid-title loc-title-big">${tabTitle()} <span class="loc-title-count">${count}</span></div>
+    </div>
+    <div class="photo-grid" id="photoGrid" style="--cols:${state.gridColsByTab.request};"></div>
+  `;
+  const grid = document.getElementById('photoGrid');
+
+  if(showingPricePicker){
+    if(priceValues.length===0){ grid.outerHTML = emptyState(); return; }
+    grid.innerHTML = priceValues.map(p=>`
+      <div class="card price-pick-card" onclick="selectRequestPrice(${p})">
+        <div class="photo price-pick-photo">$${p.toFixed(2)}</div>
+      </div>`).join('');
+    return;
+  }
+
+  if(groups.length===0){ grid.outerHTML = emptyState(); return; }
+  grid.innerHTML = groups.map(g=>requestCardHtml(g)).join('');
+}
+
 function activeLocationTitleWord(){
   return locationFilter==='All' ? t('locAll') : LOC_NAME_BY_CODE[locationFilter];
 }
@@ -1316,6 +1439,7 @@ function tabTitle(){
   // than the DISPLAY/CHECK suffix — see .loc-title-suffix.
   if(currentTab==='display') return `${esc(activeLocationTitleWord()).toUpperCase()} <span class="loc-title-suffix">${t('tabTitleDisplay')}</span>`;
   if(currentTab==='storage') return `${esc(activeLocationTitleWord()).toUpperCase()} <span class="loc-title-suffix">${t('tabTitleStorage')}</span>`;
+  if(currentTab==='request') return `${esc(activeLocationTitleWord()).toUpperCase()} <span class="loc-title-suffix">${t('tabTitleRequest')}</span>`;
   return currentTab==='resupply' ? t('tabTitleResupply') : t('tabTitleEdit');
 }
 function emptyState(compact){
@@ -1401,7 +1525,17 @@ function renderSidebar(){
   html += `<div class="side-editbtn" onclick="sidebarEditMode=!sidebarEditMode;render();">${sidebarEditMode?t('sidebarDone'):t('sidebarEdit')}</div>`;
   el.innerHTML = html;
 }
-function setCategory(c){ categoryFilter=c; render(); }
+function setCategory(c){
+  const wasHoodie = categoryFilter === HOODIE_TYPE;
+  const isHoodie = c === HOODIE_TYPE;
+  categoryFilter = c;
+  if(isHoodie && !wasHoodie && (currentTab==='display' || currentTab==='storage')){
+    currentTab = 'request';
+  }else if(!isHoodie && wasHoodie && currentTab==='request'){
+    currentTab = 'display';
+  }
+  render();
+}
 function removeCategory(c){
   // Categories are just distinct Type values — "removing" one means no active items use it.
   // We ask for confirmation since it deactivates every item currently in that category.
@@ -1543,8 +1677,8 @@ function openDisplayCheck(key){
       </div>
     </div>
     <div class="sheet-actions" style="margin-top:16px;">
-      <button class="btn btn-ghost" onclick="commitDisplayCheck(true)">${t('checkedBtn')}</button>
-      <button class="btn btn-confirm" onclick="commitDisplayCheck(false)">${t('doneBtn')}</button>
+      <button class="btn-check-toggle${sessionCheckedKeys.has(sessionCheckKey(locationFilter,key))?' on':''}" id="displayCheckToggle" onclick="toggleCheckedAndClose('${esc(key)}','${locationFilter}')">✓</button>
+      <button class="btn btn-confirm btn-wide3" onclick="commitDisplayCheck()">${t('doneBtn')}</button>
     </div>
   `, 'display');
   scrollSheetToBottom();
@@ -1571,7 +1705,7 @@ function stepDisplayDraft(id, delta){
   const el = document.getElementById('cnt-'+id);
   if(el){ el.textContent = d.current; el.classList.toggle('low', d.current < d.minCount); }
 }
-async function commitDisplayCheck(forceChecked){
+async function commitDisplayCheck(){
   const draft = displayDraft, groupKeyForDraft = displayDraftGroupKey, locForDraft = displayDraftLocation;
   const displayField = DISPLAY_FIELD_BY_CODE[locForDraft];
   const onHoldField = ON_HOLD_FIELD_BY_CODE[locForDraft];
@@ -1658,11 +1792,10 @@ async function commitDisplayCheck(forceChecked){
       if(u.resupplyIncrement) row[resupplyField] = Number(row[resupplyField]||0) + u.resupplyIncrement;
     });
   }
-  if(changedIds.length>0 || forceChecked){
-    // Scoped to the location this popup was actually reviewing — checking
-    // Bears' count doesn't mark the item checked for Parkway too.
-    sessionCheckedKeys.add(sessionCheckKey(locForDraft, groupKeyForDraft));
-  }
+  // Pressing Done always marks the item checked now — the separate
+  // "force checked without changes" button doesn't exist anymore, that
+  // role is covered by the standalone checkmark toggle instead.
+  sessionCheckedKeys.add(sessionCheckKey(locForDraft, groupKeyForDraft));
   // Show the grey/Checked state RIGHT NOW — the local data above is
   // already correct, so there's no reason to wait on the network before
   // rendering it. Previously this only happened after the awaited apiPost
@@ -1670,9 +1803,7 @@ async function commitDisplayCheck(forceChecked){
   // changed until two full round trips had completed — which is exactly
   // what was taking ~4 seconds.
   render();
-  if(changedIds.length>0 || forceChecked){
-    toast(forceChecked ? t('markedChecked') : t('checkedToast'));
-  }
+  toast(t('checkedToast'));
   if(affectedIds.length>0){
     const res = await apiPost({action:'commitDisplayReview', location:locForDraft, updates:reviewUpdates});
     if(!res.ok){
@@ -1683,6 +1814,118 @@ async function commitDisplayCheck(forceChecked){
     // the drag-reorder fix: the write and a fresh read are two separate
     // requests with no guaranteed instant consistency between them, and
     // the optimistic local state is already correct.
+  }
+}
+
+// The standalone checkmark toggle — a quick way to flip an item's checked
+// status without doing a full review. Deliberately discards any pending
+// size draft (same "closing without Done/Request discards changes"
+// philosophy as X or tapping outside) and closes immediately.
+function toggleCheckedAndClose(groupKey, code){
+  const key = sessionCheckKey(code, groupKey);
+  if(sessionCheckedKeys.has(key)) sessionCheckedKeys.delete(key);
+  else sessionCheckedKeys.add(key);
+  displayDraft = null; displayDraftGroupKey = null; displayDraftLocation = null;
+  requestDraft = null; requestDraftGroupKey = null; requestDraftLocation = null;
+  closeSheet();
+  render();
+}
+
+/* ============================= REQUEST TAB: ITEM POPUP (Hoodie category) ============================= */
+// Hoodie items skip the whole Display/Storage pipeline entirely — this
+// popup always starts every active size at 0 (never shows a current
+// stock count, since Display isn't used for Hoodies at all) and adds
+// whatever's entered straight onto Resupply (or On Hold, if that
+// location already has some) the instant Request is pressed. No
+// diminishing-returns math, no Display writes.
+function openRequestCheck(key){
+  if(locationFilter==='All'){
+    toast(t('selectLocationDisplay'), true);
+    return;
+  }
+  const groups = buildGroups(activeRows());
+  const g = groups.find(x=>x.key===key);
+  if(!g) return;
+  requestDraftGroupKey = key;
+  requestDraftLocation = locationFilter;
+  requestDraft = {};
+  const activeSizesPresent = HOODIE_SIZES.filter(sz=>g.rows[sz]);
+  activeSizesPresent.forEach(sz=>{
+    requestDraft[g.rows[sz].ID] = { current: 0, size: sz };
+  });
+  openSheetHtml(`
+    <div style="margin-bottom:4px; padding-right:50px;">
+      <h2 style="margin:0 0 1px 0;">${esc(g.name)}</h2>
+      <div class="desc" style="margin:0;">${esc(g.type)} · ${esc(g.location)} · ${t('editingDisplay')} <b>${esc(LOC_NAME_BY_CODE[locationFilter])}</b></div>
+    </div>
+    <div class="detail-wrap">
+      <div class="detail-photo">${g.photo?`<img src="${esc(g.photo)}">`:''}</div>
+      <div class="size-grid">
+        ${activeSizesPresent.map(sz=>{
+          const row = g.rows[sz];
+          return `
+            <div class="size-col">
+              <div class="size-label zero-val" id="reqlabel-${row.ID}">${SIZE_SHORT_LABEL[sz]}</div>
+              <input type="number" class="size-count-input zero-val" id="req-${row.ID}" value="0" readonly>
+              <button type="button" class="size-plus" onclick="stepRequestDraft('${row.ID}',1)">+</button>
+              <button type="button" class="size-minus" onclick="stepRequestDraft('${row.ID}',-1)">−</button>
+            </div>`;
+        }).join('')}
+      </div>
+    </div>
+    <div class="sheet-actions" style="margin-top:16px;">
+      <button class="btn-check-toggle${sessionCheckedKeys.has(sessionCheckKey(locationFilter,key))?' on':''}" onclick="toggleCheckedAndClose('${esc(key)}','${locationFilter}')">✓</button>
+      <button class="btn btn-confirm btn-wide3" onclick="commitRequestCheck()">${t('requestBtn')}</button>
+    </div>
+  `, 'display');
+  scrollSheetToBottom();
+}
+function stepRequestDraft(id, delta){
+  const d = requestDraft && requestDraft[id];
+  if(!d) return;
+  d.current = Math.max(0, d.current + delta);
+  const input = document.getElementById('req-'+id);
+  const label = document.getElementById('reqlabel-'+id);
+  const isZero = d.current === 0;
+  if(input){ input.value = d.current; input.classList.toggle('zero-val', isZero); }
+  if(label){ label.classList.toggle('zero-val', isZero); }
+}
+async function commitRequestCheck(){
+  const draft = requestDraft, groupKeyForDraft = requestDraftGroupKey, locForDraft = requestDraftLocation;
+  requestDraft = null; requestDraftGroupKey = null; requestDraftLocation = null;
+  closeSheet();
+  if(!draft) return;
+  const resupplyField = RESUPPLY_FIELD_BY_CODE[locForDraft];
+  const onHoldField = ON_HOLD_FIELD_BY_CODE[locForDraft];
+  const requests = Object.keys(draft).filter(id=>draft[id].current>0).map(id=>({id, qty:draft[id].current}));
+
+  // Pressing Request always marks the item checked, even if every size was
+  // left at 0 — same "visual feedback that it was a success" idea as Done.
+  sessionCheckedKeys.add(sessionCheckKey(locForDraft, groupKeyForDraft));
+
+  if(requests.length===0){
+    render();
+    toast(t('checkedToast'));
+    return;
+  }
+
+  pushUndoSnapshot(requests.map(r=>r.id));
+  // Optimistic local update, mirroring exactly what the backend will do:
+  // if this location already has some On Hold for a row, the request adds
+  // there instead of Resupply.
+  requests.forEach(r=>{
+    const row = rows.find(x=>sameId(x.ID,r.id));
+    if(!row) return;
+    const currentOnHold = Number(row[onHoldField]||0);
+    if(currentOnHold>0){ row[onHoldField] = Math.min(5, currentOnHold + r.qty); }
+    else{ row[resupplyField] = Number(row[resupplyField]||0) + r.qty; }
+  });
+  render();
+  toast(t('requestSentToast'));
+  const res = await apiPost({action:'requestHoodieSizes', location:locForDraft, requests});
+  if(!res.ok){
+    toast(t('saveFailed') + (res.error||t('unknownError')), true);
+    refresh(false);
   }
 }
 
@@ -2054,6 +2297,7 @@ async function submitOnHoldResolve(){
   });
   const changedCodes = Object.keys(updates);
   if(changedCodes.length===0){ closeSheet(); return; }
+  const isHoodieRow = row.Type === HOODIE_TYPE;
   pushUndoSnapshot([id]);
   pendingSubmitIds.add(String(id));
   closeSheet();
@@ -2064,13 +2308,17 @@ async function submitOnHoldResolve(){
     // left on hold) is credited onto THIS location's own Display count,
     // capped at THIS location's own Min Count — same rule as the regular
     // per-location Resupply popup, just applied per column here since one
-    // On Hold item can span all three locations at once.
+    // On Hold item can span all three locations at once. Hoodie items
+    // skip this — they never use Display at all.
     const stepperVal = original[code] - updates[code];
-    const minCount = Number(row[MIN_COUNT_FIELD_BY_CODE[code]]||0);
-    const currentDisplay = Number(row[DISPLAY_FIELD_BY_CODE[code]]||0);
-    const newDisplay = Math.min(minCount, currentDisplay + stepperVal);
     row[ON_HOLD_FIELD_BY_CODE[code]] = updates[code];
-    row[DISPLAY_FIELD_BY_CODE[code]] = newDisplay;
+    let newDisplay;
+    if(!isHoodieRow){
+      const minCount = Number(row[MIN_COUNT_FIELD_BY_CODE[code]]||0);
+      const currentDisplay = Number(row[DISPLAY_FIELD_BY_CODE[code]]||0);
+      newDisplay = Math.min(minCount, currentDisplay + stepperVal);
+      row[DISPLAY_FIELD_BY_CODE[code]] = newDisplay;
+    }
     await apiPost({action:'setResupplyForLocation', id, location:code, onHold:updates[code], displayValue:newDisplay});
   }
   toast(t('updated'));
@@ -2160,7 +2408,9 @@ async function submitResupplyEdit(){
   // count too, capped at this location's own Min Count — e.g. Display at
   // 1 with a Min Count of 3: entering 5 and pressing Resupply adds only
   // the 2 needed to reach 3, not the full 5; entering 1 adds all of it
-  // since 1+1=2 doesn't reach the cap.
+  // since 1+1=2 doesn't reach the cap. Hoodie items skip this entirely —
+  // they never use Display at all, so there's nothing to credit.
+  const isHoodieRow = row.Type === HOODIE_TYPE;
   const minCount = Number(row[MIN_COUNT_FIELD_BY_CODE[code]]||0);
   const currentDisplay = Number(row[DISPLAY_FIELD_BY_CODE[code]]||0);
   const newDisplay = Math.min(minCount, currentDisplay + value);
@@ -2173,11 +2423,12 @@ async function submitResupplyEdit(){
 
   // Done must not alter Resupply beyond closing it out. Only write the
   // selected location's On Hold field when a shortfall actually applies,
-  // and always credit the Display count for this location.
+  // and always credit the Display count for this location — except for
+  // Hoodies, which never touch Display.
   if(onHold > 0){
     row[ON_HOLD_FIELD_BY_CODE[code]] = onHold;
   }
-  row[DISPLAY_FIELD_BY_CODE[code]] = newDisplay;
+  if(!isHoodieRow) row[DISPLAY_FIELD_BY_CODE[code]] = newDisplay;
 
   const res = await apiPost({
     action:'setResupplyForLocation',
@@ -2185,7 +2436,7 @@ async function submitResupplyEdit(){
     location:code,
     onHold,
     applyOnHold: onHold > 0,
-    displayValue: newDisplay
+    displayValue: isHoodieRow ? undefined : newDisplay
   });
   toast(res.ok ? t('saved') : t('saveFailed') + (res.error||t('unknownError')), !res.ok);
   pendingSubmitIds.delete(String(id));
@@ -2303,6 +2554,36 @@ function stepFormSize(id, delta){
 // item forms. enabledCodes = which locations are currently checked in the
 // picker above (drives which tabs are clickable vs greyed out).
 // valuesByCode = { T:{XS:1,S:2,...}, P:{...}, B:{...} } initial values.
+// Hoodie items get a completely different sizes section: one shared Price
+// input (not per-location minimums) and a simple toggle list of which
+// sizes exist for this item — no live creation, sizes are only actually
+// created/deactivated once Save is pressed (see submitNewItem/submitEditGroup).
+function hoodieSizesFieldHtml(idPrefix, price, selectedSizes){
+  return `
+    <label>${t('fieldPrice')}</label>
+    <input type="number" step="0.01" min="0" inputmode="decimal" id="${idPrefix}Price" value="${price?price:''}" placeholder="29.99">
+    <label style="margin-top:12px;">${t('fieldSizesToggle')}</label>
+    <div class="chiprow">
+      ${HOODIE_SIZES.map(sz=>`<div class="chip ${selectedSizes.includes(sz)?'on':''}" data-hoodie-size="${sz}" onclick="this.classList.toggle('on')">${SIZE_SHORT_LABEL[sz]}</div>`).join('')}
+    </div>
+  `;
+}
+// Swaps the sizes section between the regular per-location Min Count UI
+// and the Hoodie Price+size-toggle UI, live, as soon as Hoodie is picked
+// in the Type dropdown — reads whatever locations are currently checked
+// so the regular path still works correctly if the user switches back.
+function onItemTypeChange(formPrefix){
+  const typeVal = document.getElementById(formPrefix+'Type').value;
+  const container = document.getElementById(formPrefix+'SizesSection');
+  if(!container) return;
+  if(typeVal === HOODIE_TYPE){
+    container.innerHTML = `<label>${t('fieldPriceSizesLabel')}</label>` + hoodieSizesFieldHtml(formPrefix+'Hoodie', 0, []);
+  }else{
+    const locPicker = document.getElementById(formPrefix+'LocPicker');
+    const locCodesOn = locPicker ? Array.from(locPicker.querySelectorAll('.loc-row.on')).map(el=>el.dataset.code) : [];
+    container.innerHTML = `<label>${t('fieldSizesCheck')}</label>` + locationTabbedSizeGridHtml(formPrefix+'Size', locCodesOn, {});
+  }
+}
 function locationTabbedSizeGridHtml(prefix, enabledCodes, valuesByCode){
   const initialActive = LOCS.map(l=>l.code).find(c=>enabledCodes.includes(c)) || null;
   return `
@@ -2372,7 +2653,7 @@ function openNewItemForm(){
           <div class="field name-field"><label>${t('fieldName')}</label><input type="text" id="newName"></div>
           <div class="field type-field">
             <label>${t('fieldType')}</label>
-            <select id="newType">
+            <select id="newType" onchange="onItemTypeChange('new')">
               <option value="" disabled selected>${t('chooseEllipsis')}</option>
               ${FIXED_TYPES.map(ty=>`<option value="${esc(ty)}">${esc(ty)}</option>`).join('')}
             </select>
@@ -2384,7 +2665,7 @@ function openNewItemForm(){
             ${LOCS.map(l=>`<div class="loc-row" data-code="${l.code}" onclick="toggleLocRow(this)" style="flex:1;justify-content:center;gap:6px;"><span>${l.name}</span></div>`).join('')}
           </div>
         </div>
-        <div class="field item-form-sizes">
+        <div class="field item-form-sizes" id="newSizesSection">
           <label>${t('fieldSizesCheck')}</label>
           ${locationTabbedSizeGridHtml('newSize', [], {})}
         </div>
@@ -2410,18 +2691,30 @@ async function submitNewItem(){
   const locCodes = Array.from(document.querySelectorAll('#newLocPicker .loc-row.on')).map(el=>el.dataset.code);
   if(locCodes.length===0){ toast(t('pickLocation')); return; }
   const location = LOCS.filter(l=>locCodes.includes(l.code)).map(l=>l.code).join('');
-  const sizes = {};
-  SIZES.forEach(s=>{
-    sizes[s] = {};
-    LOCS.forEach(l=>{
-      const el = document.getElementById('newSize-'+l.code+'-'+s);
-      sizes[s][l.code] = el ? Number(el.value||0) : 0;
+
+  const body = { action:'saveItem', matchIds:[], name, type, location };
+  if(type === HOODIE_TYPE){
+    const priceEl = document.getElementById('newHoodiePrice');
+    const hoodiePrice = priceEl ? Number(priceEl.value||0) : 0;
+    const hoodieSizes = Array.from(document.querySelectorAll('#newSizesSection .chip[data-hoodie-size].on')).map(el=>el.dataset.hoodieSize);
+    if(hoodieSizes.length===0){ toast(t('pickHoodieSize')); return; }
+    body.hoodiePrice = hoodiePrice;
+    body.hoodieSizes = hoodieSizes;
+  }else{
+    const sizes = {};
+    SIZES.forEach(s=>{
+      sizes[s] = {};
+      LOCS.forEach(l=>{
+        const el = document.getElementById('newSize-'+l.code+'-'+s);
+        sizes[s][l.code] = el ? Number(el.value||0) : 0;
+      });
     });
-  });
+    body.sizes = sizes;
+  }
+
   const photoToSend = pendingPhotoBase64; // capture before closeSheet() clears it
   closeSheet();
   toast(t('adding'));
-  const body = { action:'saveItem', matchIds:[], name, type, location, sizes };
   if(photoToSend) body.photoBase64 = photoToSend;
   const res = await apiPost(body);
   if(res.ok){
@@ -2807,6 +3100,8 @@ function openEditGroup(key){
   editingGroupKey = key;
   const isActive = groupIsActive(g);
   const locCodesOn = LOCS.filter(l=>g.location.indexOf(l.code)!==-1).map(l=>l.code);
+  const isHoodieItem = g.type === HOODIE_TYPE;
+  let hoodiePrice = 0, hoodieSelectedSizes = [];
   const valuesByCode = {};
   LOCS.forEach(l=>{
     valuesByCode[l.code] = {};
@@ -2815,6 +3110,17 @@ function openEditGroup(key){
       valuesByCode[l.code][s] = r ? Number(r[MIN_COUNT_FIELD_BY_CODE[l.code]]||0) : 0;
     });
   });
+  if(isHoodieItem){
+    HOODIE_SIZES.forEach(sz=>{
+      const r = g.rows[sz];
+      if(!r) return;
+      if(!hoodiePrice) hoodiePrice = Number(r.Price||0);
+      if(Number(r.Active)===1) hoodieSelectedSizes.push(sz);
+    });
+  }
+  const sizesSectionHtml = isHoodieItem
+    ? `<label>${t('fieldPriceSizesLabel')}</label>${hoodieSizesFieldHtml('editHoodie', hoodiePrice, hoodieSelectedSizes)}`
+    : `<label>${t('fieldSizesCheck')}</label>${locationTabbedSizeGridHtml('editSize', locCodesOn, valuesByCode)}`;
   openSheetHtml(`
     <h2>${t('editItemTitle')}</h2>
     ${isActive?'':`<div class="desc" style="color:var(--restock);font-weight:600;">${t('deactivatedNotice')}</div>`}
@@ -2829,7 +3135,7 @@ function openEditGroup(key){
           <div class="field name-field"><label>${t('fieldName')}</label><input type="text" id="editName" value="${esc(g.name)}"></div>
           <div class="field type-field">
             <label>${t('fieldType')}</label>
-            <select id="editType">
+            <select id="editType" onchange="onItemTypeChange('edit')">
               ${FIXED_TYPES.map(ty=>`<option value="${esc(ty)}" ${g.type===ty?'selected':''}>${esc(ty)}</option>`).join('')}
             </select>
           </div>
@@ -2840,9 +3146,8 @@ function openEditGroup(key){
             ${LOCS.map(l=>`<div class="loc-row ${locCodesOn.includes(l.code)?'on':''}" data-code="${l.code}" onclick="toggleLocRow(this)" style="flex:1;justify-content:center;gap:6px;"><span>${l.name}</span></div>`).join('')}
           </div>
         </div>
-        <div class="field item-form-sizes">
-          <label>${t('fieldSizesCheck')}</label>
-          ${locationTabbedSizeGridHtml('editSize', locCodesOn, valuesByCode)}
+        <div class="field item-form-sizes" id="editSizesSection">
+          ${sizesSectionHtml}
         </div>
       </div>
     </div>
@@ -2866,20 +3171,32 @@ async function submitEditGroup(){
   pushUndoSnapshot(matchIds);
   const locCodes = Array.from(document.querySelectorAll('#editLocPicker .loc-row.on')).map(el=>el.dataset.code);
   const location = LOCS.filter(l=>locCodes.includes(l.code)).map(l=>l.code).join('');
-  const sizes = {};
-  SIZES.forEach(s=>{
-    sizes[s] = {};
-    LOCS.forEach(l=>{
-      const el = document.getElementById('editSize-'+l.code+'-'+s);
-      sizes[s][l.code] = el ? Number(el.value||0) : 0;
+
+  const body = { action:'saveItem', matchIds, name, type, location };
+  if(type === HOODIE_TYPE){
+    const priceEl = document.getElementById('editHoodiePrice');
+    const hoodiePrice = priceEl ? Number(priceEl.value||0) : 0;
+    const hoodieSizes = Array.from(document.querySelectorAll('#editSizesSection .chip[data-hoodie-size].on')).map(el=>el.dataset.hoodieSize);
+    if(hoodieSizes.length===0){ toast(t('pickHoodieSize')); return; }
+    body.hoodiePrice = hoodiePrice;
+    body.hoodieSizes = hoodieSizes;
+  }else{
+    const sizes = {};
+    SIZES.forEach(s=>{
+      sizes[s] = {};
+      LOCS.forEach(l=>{
+        const el = document.getElementById('editSize-'+l.code+'-'+s);
+        sizes[s][l.code] = el ? Number(el.value||0) : 0;
+      });
     });
-  });
+    body.sizes = sizes;
+  }
+
   const photoToSend = pendingPhotoBase64; // capture before closeSheet() clears it
   matchIds.forEach(id=>pendingSubmitIds.add(String(id)));
   closeSheet();
   render(); // immediately dims/disables the card(s) — a Type/Location change here can move them out of the current filtered view
   toast(t('saving'));
-  const body = { action:'saveItem', matchIds, name, type, location, sizes };
   if(photoToSend) body.photoBase64 = photoToSend;
   const res = await apiPost(body);
   if(res.ok) toast(t('saved')); else toast(t('saveFailed') + (res.error||t('unknownError')), true);
@@ -3024,21 +3341,21 @@ function applyReorderModeToggle(){
     hintEl.textContent = `${t(editReorderMode?'dragHintOn':'dragHintOff')} ${LOC_NAME_BY_CODE[locationFilter]}`;
   }
 }
-document.querySelectorAll('.nav-item').forEach(el=>{
-  el.addEventListener('click', ()=>{
-    const tab = el.dataset.tab;
-    if(tab==='edit' && currentTab==='edit'){
-      // Already on the Edit tab — this tap toggles reorder mode instead
-      // of just re-selecting the same tab (which would otherwise be a no-op).
-      editReorderMode = !editReorderMode;
-      hapticTap();
-      applyReorderModeToggle();
-    }else{
-      editReorderMode = false; // always starts off when entering Edit fresh from elsewhere
-      currentTab = tab;
-      render();
-    }
-  });
+document.querySelector('nav.bottomnav').addEventListener('click', (e)=>{
+  const el = e.target.closest('.nav-item');
+  if(!el) return;
+  const tab = el.dataset.tab;
+  if(tab==='edit' && currentTab==='edit'){
+    // Already on the Edit tab — this tap toggles reorder mode instead
+    // of just re-selecting the same tab (which would otherwise be a no-op).
+    editReorderMode = !editReorderMode;
+    hapticTap();
+    applyReorderModeToggle();
+  }else{
+    editReorderMode = false; // always starts off when entering Edit fresh from elsewhere
+    currentTab = tab;
+    render();
+  }
 });
 // cardHtml's onclick calls openGroup() — only Display and Edit tabs ever
 // render cards through that path now (Storage and Resupply have their own
