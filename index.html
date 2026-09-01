@@ -867,7 +867,8 @@ let categoryFilter = 'All';
 let sidebarEditMode = false;
 let editFilter = 'all'; // 'all' | 'active' | 'inactive' — Edit tab only
 const FIXED_TYPES = ['Men','Women','Youth','Kids','Baby','TankTop','Long Sleeve','Hoodie','Crewneck','Y Hoodie Crewneck','K Hoodie Crewneck','Cap'];
-const HOODIE_TYPE = 'Hoodie'; // must match Code.gs's own HOODIE_TYPE constant exactly — two separate scripts, no shared scope, so this has to be declared independently here too
+const HOODIE_TYPES = ['Hoodie', 'Crewneck', 'Y Hoodie Crewneck', 'K Hoodie Crewneck']; // every type that gets the alternate Price/Request workflow — must match Code.gs's own HOODIE_TYPES exactly (two separate scripts, no shared scope, so this has to be declared independently here too). Each is still its own separate category; only the workflow is shared.
+function isHoodieFamily(type){ return HOODIE_TYPES.includes(type); }
 const HOODIE_SIZES = ['XS','S','M','L','XL','XXL','XXXL']; // same size list as everything else, just toggled on/off instead of given per-location minimums
 let requestFilter = 'all'; // 'all' | 'price' — Request tab only (Hoodie category)
 let requestPriceFilter = null; // the specific price selected, once requestFilter==='price'
@@ -1238,7 +1239,7 @@ function groupIsActive(g){
 // categoryFilter.
 function renderBottomNav(){
   const nav = document.querySelector('nav.bottomnav');
-  const isHoodieCat = categoryFilter === HOODIE_TYPE;
+  const isHoodieCat = isHoodieFamily(categoryFilter);
   nav.classList.toggle('hoodie-nav', isHoodieCat);
   const tabs = isHoodieCat
     ? [['request', t('tabRequest')], ['resupply', t('tabResupply')], ['edit', t('tabEdit')]]
@@ -1461,9 +1462,10 @@ function requestCardHtml(g){
     </div>`;
 }
 function renderRequestTab(main, list){
-  // Hoodie items only (categoryFilter is forced to 'Hoodie' by the sidebar
-  // whenever this tab is reachable, so matchesFilters already restricts to
-  // Type==='Hoodie' — same grouping mechanism as every other tab).
+  // Hoodie-family items only (categoryFilter is forced to one of
+  // HOODIE_TYPES by the sidebar whenever this tab is reachable, so
+  // matchesFilters already restricts to that exact type — same grouping
+  // mechanism as every other tab).
   const catLocFiltered = list.filter(r=>matchesFilters({type:r.Type, location:r.Location}));
   const priceValues = Array.from(new Set(
     catLocFiltered.map(r=>Number(r.Price||0)).filter(p=>p>0)
@@ -1589,8 +1591,8 @@ function renderSidebar(){
   el.innerHTML = html;
 }
 function setCategory(c){
-  const wasHoodie = categoryFilter === HOODIE_TYPE;
-  const isHoodie = c === HOODIE_TYPE;
+  const wasHoodie = isHoodieFamily(categoryFilter);
+  const isHoodie = isHoodieFamily(c);
   categoryFilter = c;
   if(isHoodie && !wasHoodie && (currentTab==='display' || currentTab==='storage')){
     currentTab = 'request';
@@ -2362,7 +2364,7 @@ async function submitOnHoldResolve(){
   });
   const changedCodes = Object.keys(updates);
   if(changedCodes.length===0){ closeSheet(); return; }
-  const isHoodieRow = row.Type === HOODIE_TYPE;
+  const isHoodieRow = isHoodieFamily(row.Type);
   pushUndoSnapshot([id]);
   pendingSubmitIds.add(String(id));
   closeSheet();
@@ -2475,7 +2477,7 @@ async function submitResupplyEdit(){
   // the 2 needed to reach 3, not the full 5; entering 1 adds all of it
   // since 1+1=2 doesn't reach the cap. Hoodie items skip this entirely —
   // they never use Display at all, so there's nothing to credit.
-  const isHoodieRow = row.Type === HOODIE_TYPE;
+  const isHoodieRow = isHoodieFamily(row.Type);
   const minCount = Number(row[MIN_COUNT_FIELD_BY_CODE[code]]||0);
   const currentDisplay = Number(row[DISPLAY_FIELD_BY_CODE[code]]||0);
   const newDisplay = Math.min(minCount, currentDisplay + value);
@@ -2641,7 +2643,7 @@ function onItemTypeChange(formPrefix){
   const typeVal = document.getElementById(formPrefix+'Type').value;
   const container = document.getElementById(formPrefix+'SizesSection');
   if(!container) return;
-  if(typeVal === HOODIE_TYPE){
+  if(isHoodieFamily(typeVal)){
     container.innerHTML = hoodieSizesFieldHtml(formPrefix+'Hoodie', 0, []);
   }else{
     const locPicker = document.getElementById(formPrefix+'LocPicker');
@@ -2758,7 +2760,7 @@ async function submitNewItem(){
   const location = LOCS.filter(l=>locCodes.includes(l.code)).map(l=>l.code).join('');
 
   const body = { action:'saveItem', matchIds:[], name, type, location };
-  if(type === HOODIE_TYPE){
+  if(isHoodieFamily(type)){
     const priceEl = document.getElementById('newHoodiePrice');
     const hoodiePrice = priceEl ? Number(priceEl.value||0) : 0;
     const hoodieSizes = Array.from(document.querySelectorAll('#newSizesSection .chip[data-hoodie-size].on')).map(el=>el.dataset.hoodieSize);
@@ -3165,7 +3167,7 @@ function openEditGroup(key){
   editingGroupKey = key;
   const isActive = groupIsActive(g);
   const locCodesOn = LOCS.filter(l=>g.location.indexOf(l.code)!==-1).map(l=>l.code);
-  const isHoodieItem = g.type === HOODIE_TYPE;
+  const isHoodieItem = isHoodieFamily(g.type);
   let hoodiePrice = 0, hoodieSelectedSizes = [];
   const valuesByCode = {};
   LOCS.forEach(l=>{
@@ -3238,7 +3240,7 @@ async function submitEditGroup(){
   const location = LOCS.filter(l=>locCodes.includes(l.code)).map(l=>l.code).join('');
 
   const body = { action:'saveItem', matchIds, name, type, location };
-  if(type === HOODIE_TYPE){
+  if(isHoodieFamily(type)){
     const priceEl = document.getElementById('editHoodiePrice');
     const hoodiePrice = priceEl ? Number(priceEl.value||0) : 0;
     const hoodieSizes = Array.from(document.querySelectorAll('#editSizesSection .chip[data-hoodie-size].on')).map(el=>el.dataset.hoodieSize);
