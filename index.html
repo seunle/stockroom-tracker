@@ -769,7 +769,7 @@ const TRANSLATIONS = {
     newItemTitle:'New item', editItemTitle:'Edit item', deactivatedNotice:'This item is currently deactivated — hidden from Display/Storage/Resupply.',
     fieldName:'Name', fieldType:'Type', fieldLocation:'Location', chooseEllipsis:'Choose…',
     fieldSizesCheck:'Sizes check (minimum on display)', upload:'Upload', pickLocationFirstHint:'Select a location above to enter sizes for it.',
-    addItem:'Add item', save:'Save', enterName:'Enter a name', chooseType:'Choose a type', pickLocation:'Pick at least one location',
+    addItem:'Add item', save:'Save', enterName:'Enter a name', chooseType:'Choose a type', pickLocation:'Pick at least one location', duplicateItemError:'An item with this name and type already exists',
     adding:'Adding…', itemAdded:'Item added', addFailed:'Add failed: ', saving:'Saving…', saved:'Saved', saveFailed:'Save failed: ', unknownError:'unknown error',
     deactivate:'Deactivate', reactivate:'Reactivate', reactivateTitle:'Reactivate', reactivateBody:'This brings it back into Display/Storage/Resupply.',
     deactivateTitle:'Deactivate', deactivateBody:'Hides it from Display/Storage/Resupply. Nothing is deleted from the sheet — you can reactivate it here anytime, or flip the Active column back to 1 directly in Sheets.',
@@ -815,7 +815,7 @@ const TRANSLATIONS = {
     newItemTitle:'새 품목', editItemTitle:'품목 편집', deactivatedNotice:'이 품목은 현재 비활성화되어 진열/재고/보충 탭에서 숨겨져 있습니다.',
     fieldName:'이름', fieldType:'종류', fieldLocation:'매장', chooseEllipsis:'선택…',
     fieldSizesCheck:'사이즈 확인 (진열 최소 수량)', upload:'업로드', pickLocationFirstHint:'위에서 매장을 선택하면 해당 매장의 사이즈를 입력할 수 있습니다.',
-    addItem:'품목 추가', save:'저장', enterName:'이름을 입력하세요', chooseType:'종류를 선택하세요', pickLocation:'매장을 하나 이상 선택하세요',
+    addItem:'품목 추가', save:'저장', enterName:'이름을 입력하세요', chooseType:'종류를 선택하세요', pickLocation:'매장을 하나 이상 선택하세요', duplicateItemError:'같은 이름과 종류의 품목이 이미 존재합니다',
     adding:'추가 중…', itemAdded:'품목이 추가되었습니다', addFailed:'추가 실패: ', saving:'저장 중…', saved:'저장됨', saveFailed:'저장 실패: ', unknownError:'알 수 없는 오류',
     deactivate:'비활성화', reactivate:'재활성화', reactivateTitle:'재활성화', reactivateBody:'진열/재고/보충 탭에 다시 표시됩니다.',
     deactivateTitle:'비활성화', deactivateBody:'진열/재고/보충 탭에서 숨겨집니다. 시트에서 삭제되지는 않으며, 언제든 여기서 재활성화하거나 시트의 Active 열을 직접 1로 바꿀 수 있습니다.',
@@ -1025,6 +1025,19 @@ function buildGroups(list){
 }
 function activeRows(){ return rows.filter(r=>Number(r.Active)===1); }
 function allGroups(){ return buildGroups(rows); } // for Edit tab lookups — includes inactive items
+// Duplicate-item check for the New/Edit item forms — matches on Name +
+// Type only (not Location), case/whitespace-insensitive, against every
+// item including inactive ones. excludeKey skips the item being edited
+// itself, so editing an item without changing its name/type doesn't flag
+// itself as a duplicate of itself.
+function findDuplicateItemGroup(name, type, excludeKey){
+  const normName = name.trim().toLowerCase();
+  return allGroups().find(g =>
+    g.key !== excludeKey &&
+    g.name.trim().toLowerCase() === normName &&
+    g.type === type
+  ) || null;
+}
 function editFilteredRows(){
   if(editFilter==='active') return rows.filter(r=>Number(r.Active)===1);
   if(editFilter==='inactive'){
@@ -2331,6 +2344,8 @@ async function submitNewItem(){
   const type = document.getElementById('newType').value.trim();
   if(!name){ toast(t('enterName')); return; }
   if(!type){ toast(t('chooseType')); return; }
+  const duplicate = findDuplicateItemGroup(name, type, null);
+  if(duplicate){ toast(t('duplicateItemError'), true); return; }
   const locCodes = Array.from(document.querySelectorAll('#newLocPicker .loc-row.on')).map(el=>el.dataset.code);
   if(locCodes.length===0){ toast(t('pickLocation')); return; }
   const location = LOCS.filter(l=>locCodes.includes(l.code)).map(l=>l.code).join('');
@@ -2739,10 +2754,12 @@ async function submitEditGroup(){
   const groups = allGroups();
   const g = groups.find(x=>x.key===editingGroupKey);
   if(!g) return;
-  const matchIds = Object.values(g.rows).map(r=>r.ID);
-  pushUndoSnapshot(matchIds);
   const name = document.getElementById('editName').value.trim();
   const type = document.getElementById('editType').value.trim();
+  const duplicate = findDuplicateItemGroup(name, type, editingGroupKey);
+  if(duplicate){ toast(t('duplicateItemError'), true); return; }
+  const matchIds = Object.values(g.rows).map(r=>r.ID);
+  pushUndoSnapshot(matchIds);
   const locCodes = Array.from(document.querySelectorAll('#editLocPicker .loc-row.on')).map(el=>el.dataset.code);
   const location = LOCS.filter(l=>locCodes.includes(l.code)).map(l=>l.code).join('');
   const sizes = {};
