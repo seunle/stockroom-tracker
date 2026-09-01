@@ -2618,32 +2618,48 @@ function maybeReorderDuringDrag(){
 }
 
 function renderReorderPreview(cardEl){
-  // Re-renders the grid in the dragged-to order. Every card except the one
-  // actually being dragged gets FLIP-animated from its old spot to its
+  // Reorders the grid to match the dragged-to order. Every card except the
+  // one actually being dragged gets FLIP-animated from its old spot to its
   // new one; the dragged card keeps following the pointer directly.
   const grid = document.getElementById('photoGrid');
   if(!grid || !dragReorder) return;
   const before = {};
+  const existingByKey = {};
   grid.querySelectorAll('.card[data-group-key]').forEach(el=>{
+    existingByKey[el.dataset.groupKey] = el;
     if(el===cardEl) return;
     const r = el.getBoundingClientRect();
     before[el.dataset.groupKey] = { left:r.left, top:r.top };
   });
 
+  // MOVE the existing card elements into their new order rather than
+  // destroying and recreating them via innerHTML. appendChild on a node
+  // that's already in the document relocates it, it doesn't clone it —
+  // so every card's <img> stays the exact same element throughout a whole
+  // drag session. Rebuilding fresh <img> tags on every single reorder
+  // step (previously: every ~220ms while shuffling cards) was forcing a
+  // real reload each time on iOS Safari, which evicts decoded image data
+  // far more aggressively than most browsers — that's what was showing up
+  // as a ~2 second flash whenever anything moved.
   const byKey = {};
   allGroups().forEach(g=>{ byKey[g.key]=g; });
-  grid.innerHTML = dragReorder.orderedKeys.map(k=>byKey[k] ? cardHtml(byKey[k]) : '').join('');
+  dragReorder.orderedKeys.forEach(k=>{
+    const existing = existingByKey[k];
+    if(existing){
+      grid.appendChild(existing); // moves, does not clone/recreate
+    }else if(byKey[k]){
+      grid.insertAdjacentHTML('beforeend', cardHtml(byKey[k])); // defensive fallback, shouldn't normally happen mid-reorder
+    }
+  });
 
-  const newCardEl = grid.querySelector(`.card[data-group-key="${CSS.escape(dragReorder.key)}"]`);
+  const newCardEl = existingByKey[dragReorder.key] || grid.querySelector(`.card[data-group-key="${CSS.escape(dragReorder.key)}"]`);
   if(newCardEl){
+    // This is the SAME node from before this call (just moved, not
+    // recreated), so its pointer capture and pointermove/pointerup/
+    // pointercancel listeners — all attached back in beginDragReorder —
+    // are still fully intact. No need to re-request capture or
+    // re-attach anything here anymore.
     newCardEl.classList.add('dragging');
-    newCardEl.removeAttribute('onclick');
-    // The pointer capture set in beginDragReorder was on the OLD element,
-    // which just got destroyed by the innerHTML rebuild above — capture is
-    // implicitly released when its element leaves the DOM, so without
-    // re-capturing here, the drag would stop tracking the finger the
-    // moment it moves outside this new element's bounds.
-    try{ newCardEl.setPointerCapture(dragReorder.pointerId); }catch(err){}
     // The dragged card just landed at a NEW natural grid position (its
     // array index changed), but dragReorder.originLeft/originTop were
     // still the OLD position from drag-start (or the previous reorder).
@@ -2655,9 +2671,6 @@ function renderReorderPreview(cardEl){
     dragReorder.originLeft = freshRect.left;
     dragReorder.originTop = freshRect.top;
     positionDraggedCard(newCardEl, dragReorder.lastX, dragReorder.lastY);
-    newCardEl.addEventListener('pointermove', onDragMove);
-    newCardEl.addEventListener('pointerup', onDragEnd);
-    newCardEl.addEventListener('pointercancel', onDragEnd);
   }
 
   requestAnimationFrame(()=>{
@@ -2688,6 +2701,17 @@ function renderReorderPreview(cardEl){
   });
 }
 
+// Drops the visual "being dragged" state on a card without a full
+// render() — the grid's DOM is already in the correct final order by this
+// point (nodes were moved into place during the drag itself, never
+// rebuilt), so all that's actually left to do is stop following the
+// pointer and let it settle into its slot via normal layout.
+function settleDraggedCard(cardEl){
+  if(!cardEl) return;
+  cardEl.classList.remove('dragging');
+  cardEl.style.transform = '';
+  cardEl.style.transition = '';
+}
 async function onDragEnd(e){
   if(!dragReorder || e.pointerId!==dragReorder.pointerId) return;
   const cardEl = e.currentTarget;
@@ -2718,7 +2742,7 @@ async function onDragEnd(e){
     if(row) row[ORDER_FIELD_BY_CODE[code]] = u.order; // optimistic local update
   });
 
-  render(); // drop the dragging visual state immediately, show the settled order
+  settleDraggedCard(cardEl); // drop the dragging visual state immediately — the grid is already in the correct order (moved during the drag, not rebuilt), so no need for a full render() here
   toast(t('savingOrder'));
   const res = await apiPost({ action:'setGroupOrder', location:code, updates });
   if(res.ok){
@@ -2936,6 +2960,34 @@ function compressImageFallback(file, maxW, quality){
 
 /* ============================= NAV / SETTINGS ============================= */
 let editReorderMode = false;
+// Toggling reorder mode on/off used to go through the full render(), which
+// rebuilds every card's <img> from scratch even though the same items in
+// the same order are still being shown — just their jiggle/tap behavior
+// changes. That rebuild was forcing a visible reload on iOS Safari every
+// single time the Edit button was pressed. This updates only what
+// actually changed, in place, on the existing elements.
+function applyReorderModeToggle(){
+  document.querySelector('.nav-item[data-tab="edit"]').classList.toggle('reorder-active', editReorderMode);
+  const main = document.getElementById('main');
+  main.classList.toggle('reorder-mode', editReorderMode);
+  const grid = document.getElementById('photoGrid');
+  if(grid){
+    grid.querySelectorAll('.card[data-group-key]').forEach(el=>{
+      if(editReorderMode){
+        el.style.animationDelay = `-${(Math.random()*0.26).toFixed(2)}s`;
+        el.removeAttribute('onclick'); // tapping shouldn't open the item while reorder mode is on — only dragging should work
+      }else{
+        el.style.animationDelay = '';
+        el.setAttribute('onclick', "openGroup('" + esc(el.dataset.groupKey) + "')"); // matches cardHtml()'s own onclick exactly
+      }
+    });
+  }
+  const hintEl = document.querySelector('.sticky-title-zone .desc');
+  if(hintEl && locationFilter!=='All'){
+    hintEl.textContent = `${t(editReorderMode?'dragHintOn':'dragHintOff')} ${LOC_NAME_BY_CODE[locationFilter]}`;
+  }
+  syncStickyTitleOffset();
+}
 document.querySelectorAll('.nav-item').forEach(el=>{
   el.addEventListener('click', ()=>{
     const tab = el.dataset.tab;
@@ -2944,11 +2996,12 @@ document.querySelectorAll('.nav-item').forEach(el=>{
       // of just re-selecting the same tab (which would otherwise be a no-op).
       editReorderMode = !editReorderMode;
       hapticTap();
+      applyReorderModeToggle();
     }else{
       editReorderMode = false; // always starts off when entering Edit fresh from elsewhere
       currentTab = tab;
+      render();
     }
-    render();
   });
 });
 // cardHtml's onclick calls openGroup() — only Display and Edit tabs ever
