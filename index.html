@@ -150,7 +150,7 @@
 
   main.grid-area{flex:1; overflow-y:auto; padding:0 0 calc(150px + env(safe-area-inset-bottom)); position:relative;}
   main.grid-area.edit-mode-bg{background:#A39C8C;}
-  .grid-toolbar{display:flex; align-items:center; justify-content:space-between; margin:0 4px 3px;}
+  .grid-toolbar{display:flex; align-items:center; justify-content:space-between; margin:0 4px 3px; padding-bottom:6px; border-bottom:1.5px solid var(--line);}
   /* Filters/zoom controls and the location title stay pinned in place
      while the grid underneath scrolls normally. sticky-title-zone's own
      `top` offset is set dynamically in JS (syncStickyTitleOffset) to match
@@ -175,6 +175,28 @@
      edit, since fixed at the source instead of patched here too. */
   .btn-new-wide-wrap{position:sticky; z-index:15; background:var(--paper); padding:8px 10px;}
   .sticky-title-zone{position:sticky; z-index:15; background:var(--paper); padding-bottom:13.5px;} /* 1.5x the previous 9px */
+  /* Resupply's active-row title sits inside .resupply-active-section,
+     which already provides the correct 10px horizontal inset via its own
+     margin — giving sticky-title-zone its usual 10px padding here too
+     would double it and visibly shift the text away from where the
+     collapsed rows below sit. */
+  .resupply-active-section .sticky-title-zone{padding-left:0; padding-right:0;}
+  /* On Hold's highlight used to be padding on the whole (non-sticky)
+     section, which pushed its text right/down compared to every other
+     location's identical markup, AND — once the title became sticky —
+     would visibly drift out of alignment with the glow during scroll,
+     since the section itself scrolls normally while its sticky child
+     doesn't. Moving the whole effect onto the sticky title fixes both:
+     text now lines up exactly like any other location, and the glow
+     always stays with whatever's actually pinned on screen. The
+     background is an opaque blend of the glow tint over the page's
+     cream (not a translucent rgba) so scrolling cards still can't peek
+     through underneath it, while still visually reading as "glowing".      */
+  .sticky-title-zone.onhold-glow-title{
+    border-radius:18px;
+    background:rgb(234,217,208);
+    box-shadow:0 0 0 3px rgba(174,66,57,0.55), 0 0 40px 10px rgba(174,66,57,0.45);
+  }
   main.grid-area.edit-mode-bg .toolbar-top{background:#A39C8C;}
   main.grid-area.edit-mode-bg .btn-new-wide-wrap{background:#A39C8C;}
   main.grid-area.edit-mode-bg .sticky-title-zone{background:#A39C8C;}
@@ -285,11 +307,6 @@
   .rotate-btn:active{opacity:0.8;}
   .resupply-active-section{margin:0 10px 16px;}
   #resupplyGrid{padding:0;} /* its parent already provides the horizontal inset via margin — the global .photo-grid padding would double it up here */
-  .resupply-active-section.onhold-glow{
-    border-radius:18px; padding:12px 12px 4px;
-    background:rgba(174,66,57,0.13);
-    box-shadow:0 0 0 3px rgba(174,66,57,0.55), 0 0 40px 10px rgba(174,66,57,0.45);
-  }
   .resupply-collapsed-row{cursor:pointer; margin-bottom:14px;}
   #resupplyCollapsedRows{padding:0 10px;}
   .resupply-row-label{
@@ -1850,8 +1867,10 @@ function renderResupplyTab(main, list){
         <div class="chip on-hold-chip ${activeCode===ON_HOLD_CODE?'on':''}" onclick="selectResupplyLocation('${ON_HOLD_CODE}')">${t('onHold')}</div>
       </div>
     </div>
-    <div class="resupply-active-section${activeCode===ON_HOLD_CODE?' onhold-glow':''}">
-      <div class="resupply-row-label active-label">${esc(activeName).toUpperCase()} <span class="resupply-row-count active-count">${activeItems.length}</span></div>
+    <div class="resupply-active-section">
+      <div class="sticky-title-zone${activeCode===ON_HOLD_CODE?' onhold-glow-title':''}">
+        <div class="resupply-row-label active-label">${esc(activeName).toUpperCase()} <span class="resupply-row-count active-count">${activeItems.length}</span></div>
+      </div>
       <div class="photo-grid" id="resupplyGrid" style="--cols:${state.gridColsByTab.resupply};"></div>
     </div>
     <div id="resupplyCollapsedRows"></div>
