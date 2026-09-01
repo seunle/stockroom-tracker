@@ -804,6 +804,7 @@ let categoryFilter = 'All';
 let sidebarEditMode = false;
 let editFilter = 'all'; // 'all' | 'active' | 'inactive' — Edit tab only
 const FIXED_TYPES = ['Men','Women','Youth','Kids','Baby','TankTop','Long Sleeve','Hoodie','Crewneck','Y Hoodie Crewneck','K Hoodie Crewneck','Cap'];
+const HOODIE_TYPE = 'Hoodie'; // must match Code.gs's own HOODIE_TYPE constant exactly — two separate scripts, no shared scope, so this has to be declared independently here too
 const HOODIE_SIZES = ['XS','S','M','L','XL','XXL','XXXL']; // same size list as everything else, just toggled on/off instead of given per-location minimums
 let requestFilter = 'all'; // 'all' | 'price' — Request tab only (Hoodie category)
 let requestPriceFilter = null; // the specific price selected, once requestFilter==='price'
