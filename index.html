@@ -133,12 +133,21 @@
                                shrinks its wrapping instead of overflowing the box */
   }
   .side-cat.active{background:var(--thread); color:#fff;}
-  .side-cat.side-cat-all{height:auto; display:block; padding:9px 6px; font-size:20px;} /* explicitly excluded — keeps its own original auto-sizing */
-  .side-cat .rm{
-    position:absolute; top:3px; right:3px; width:16px;height:16px;border-radius:50%;
-    background:rgba(0,0,0,0.15); color:#fff; font-size:10px; line-height:16px; display:none;
+  /* Static (non-clickable) header sitting where the old "All" tab used to
+     be — just labels the list below it, doesn't filter anything. */
+  .side-type-label{
+    padding:10px 6px; text-align:center; font-size:13px; font-weight:700;
+    letter-spacing:1px; text-transform:uppercase; color:#fff; background:#8A8578; flex-shrink:0;
   }
-  .sidebar.edit-mode .side-cat .rm{display:block;}
+  /* Small grip box, corner of each type box, edit-mode only — press and
+     drag it to reorder that type up/down in the list. */
+  .side-cat .drag-handle{
+    position:absolute; top:3px; right:3px; width:22px; height:22px; border-radius:5px;
+    background:rgba(0,0,0,0.18); color:#fff; font-size:13px; line-height:1;
+    align-items:center; justify-content:center; display:none; touch-action:none; cursor:grab;
+  }
+  .sidebar.edit-mode .side-cat .drag-handle{display:flex;}
+  .side-cat.dragging{opacity:0.45;}
   .side-add{
     padding:12px 6px; text-align:center; font-size:20px; color:var(--ink-soft); flex-shrink:0;
   }
@@ -695,8 +704,12 @@
   .request-photo-wrap img{width:100%; height:100%; object-fit:cover; display:block;}
   .request-size-grid-wrap{display:flex; justify-content:center; width:100%;}
   .request-size-grid{
-    display:grid; grid-template-columns:repeat(7, minmax(0,1fr)); gap:8px;
-    flex:0 1 720px; width:100%; max-width:720px;
+    display:grid; gap:8px;
+    /* grid-template-columns, flex-basis and max-width are set inline per
+       popup, sized to however many sizes are actually active on that item
+       — not a fixed 7 columns — so a 4-size item's grid is only as wide as
+       4 columns and the flex wrapper above centers that actual width,
+       instead of centering a 7-column-wide box with empty trailing tracks. */
   }
   .request-size-col{text-align:center;}
   .request-size-label{
@@ -863,7 +876,7 @@ function applyUiScale(){
 let rows = [];              // flat rows from the sheet
 let currentTab = ['display','storage','resupply'].includes(state.defaultTab) ? state.defaultTab : 'display';
 let locationFilter = state.deviceLocation || 'All'; // 'All' | 'T' | 'P' | 'B' — persisted per device, see pickLocationFilter
-let categoryFilter = 'All';
+let categoryFilter = 'Men'; // sidebar's "All" tab is gone — app always opens on Men now
 let sidebarEditMode = false;
 let editFilter = 'all'; // 'all' | 'active' | 'inactive' — Edit tab only
 const FIXED_TYPES = ['Men','Women','Youth','Kids','Baby','TankTop','Long Sleeve','Hoodie','Crewneck','Y Hoodie Crewneck','K Hoodie Crewneck','Cap'];
@@ -900,7 +913,7 @@ const TRANSLATIONS = {
     emptyEdit:'No items match this filter.', emptyDefault:'Tap "+ New" up top to add your first item.',
     emptyNothingTitle:'Nothing here yet',
     filterAll:'All', filterActive:'Active', filterInactive:'Inactive', filterChecked:'Checked', filterUnchecked:'Unchecked',
-    sidebarEdit:'Edit', sidebarDone:'Done',
+    sidebarEdit:'Edit', sidebarDone:'Done', sidebarTypeLabel:'Type',
     filterByLocation:'Filter by location', locAll:'All',
     nothingToUndo:'Nothing to undo', undoing:'Undoing…', undone:'Undone',
     sessionRefreshed:'Session refreshed — resyncing…', refreshed:'Refreshed', couldNotReach:'Could not reach the sheet', syncFailed:'Sync failed', synced:'Synced ',
@@ -947,7 +960,7 @@ const TRANSLATIONS = {
     emptyEdit:'이 필터에 맞는 품목이 없습니다.', emptyDefault:'위쪽 "+ 추가"를 눌러 첫 품목을 추가하세요.',
     emptyNothingTitle:'아직 항목이 없습니다',
     filterAll:'전체', filterActive:'활성', filterInactive:'비활성', filterChecked:'확인함', filterUnchecked:'미확인',
-    sidebarEdit:'편집', sidebarDone:'완료',
+    sidebarEdit:'편집', sidebarDone:'완료', sidebarTypeLabel:'종류',
     filterByLocation:'매장별 필터', locAll:'전체',
     nothingToUndo:'되돌릴 작업 없음', undoing:'되돌리는 중…', undone:'되돌림',
     sessionRefreshed:'세션 새로고침됨 — 다시 동기화 중…', refreshed:'새로고침됨', couldNotReach:'시트에 연결할 수 없습니다', syncFailed:'동기화 실패', synced:'동기화됨 ',
@@ -1042,11 +1055,12 @@ function loadState(){
           s.gridColsByTab = { display:legacy, storage:legacy, resupply:legacy, edit:legacy, request:legacy };
         }
         if(!s.gridColsByTab.request) s.gridColsByTab.request = 4; // added for the Hoodie Request tab — older saved states won't have this key yet
+        if(!Array.isArray(s.typeOrder)) s.typeOrder = null; // per-device sidebar type order, set via drag handle; null = default FIXED_TYPES order
         return s;
       }
     }
   }catch(e){}
-  return { apiUrl: DEFAULT_API_URL, uiScale: 1, defaultTab: 'display', gridColsByTab: { display:4, storage:4, resupply:4, edit:4, request:4 } }; // falls back to the baked-in URL if nothing saved (or it got cleared)
+  return { apiUrl: DEFAULT_API_URL, uiScale: 1, defaultTab: 'display', gridColsByTab: { display:4, storage:4, resupply:4, edit:4, request:4 }, typeOrder: null }; // falls back to the baked-in URL if nothing saved (or it got cleared)
 }
 function saveState(){ localStorage.setItem(LS_KEY, JSON.stringify(state)); }
 
@@ -1199,8 +1213,13 @@ function editFilteredRows(){
 function categoriesList(){
   // Always the full fixed set (same list the New/Edit item dropdowns use),
   // not just whichever types currently have items — so an empty type like
-  // "Kids" still shows up in the sidebar instead of disappearing.
-  return FIXED_TYPES.slice();
+  // "Kids" still shows up in the sidebar instead of disappearing. Order is
+  // per-device, set via the sidebar's drag handle (state.typeOrder); falls
+  // back to FIXED_TYPES order, and any newly-added FIXED_TYPES not yet in
+  // a saved order get appended so they still show up.
+  const saved = Array.isArray(state.typeOrder) ? state.typeOrder.filter(c=>FIXED_TYPES.includes(c)) : [];
+  FIXED_TYPES.forEach(c=>{ if(!saved.includes(c)) saved.push(c); });
+  return saved;
 }
 function matchesFilters(g, ignoreLocation){
   if(categoryFilter!=='All' && g.type!==categoryFilter) return false;
@@ -1581,11 +1600,13 @@ function sidebarFontSize(c){
 function renderSidebar(){
   const el = document.getElementById('sidebar');
   el.classList.toggle('edit-mode', sidebarEditMode);
-  const cats = categoriesList();
-  let html = `<div class="side-cat side-cat-all ${categoryFilter==='All'?'active':''}" onclick="setCategory('All')">All</div>`;
+  // While a drag is in progress, show the live in-progress order instead of
+  // the last-saved one, so the list visibly reshuffles as you drag.
+  const cats = sidebarDrag ? sidebarDrag.order : categoriesList();
+  let html = `<div class="side-type-label">${t('sidebarTypeLabel')}</div>`;
   html += cats.map(c=>`
-    <div class="side-cat ${categoryFilter===c?'active':''}" style="font-size:${sidebarFontSize(c)}px;" onclick="${sidebarEditMode?'':`setCategory('${esc(c)}')`}">
-      ${sidebarCategoryLabel(c)}${sidebarEditMode?`<div class="rm" onclick="event.stopPropagation();removeCategory('${esc(c)}')">×</div>`:''}
+    <div class="side-cat ${categoryFilter===c?'active':''}${sidebarDrag && sidebarDrag.type===c?' dragging':''}" data-type="${esc(c)}" style="font-size:${sidebarFontSize(c)}px;" onclick="${sidebarEditMode?'':`setCategory('${esc(c)}')`}">
+      ${sidebarCategoryLabel(c)}${sidebarEditMode?`<div class="drag-handle" onpointerdown="startSidebarDrag(event,'${esc(c)}')">⠿</div>`:''}
     </div>`).join('');
   html += `<div class="side-editbtn" onclick="sidebarEditMode=!sidebarEditMode;render();">${sidebarEditMode?t('sidebarDone'):t('sidebarEdit')}</div>`;
   el.innerHTML = html;
@@ -1601,31 +1622,56 @@ function setCategory(c){
   }
   render();
 }
-function removeCategory(c){
-  // Categories are just distinct Type values — "removing" one means no active items use it.
-  // We ask for confirmation since it deactivates every item currently in that category.
-  const affected = activeRows().filter(r=>r.Type===c);
-  if(affected.length===0){ render(); return; }
-  openSheetHtml(`
-    <h2>${t('removeCategoryTitle')} "${esc(c)}"?</h2>
-    <div class="desc">${affected.length} ${t('removeCategoryBody1')}</div>
-    <div class="sheet-actions">
-      <button class="btn btn-ghost" onclick="closeSheet()">${t('cancel')}</button>
-      <button class="btn btn-danger" onclick="confirmRemoveCategory('${esc(c)}')">${t('deactivateAll')}</button>
-    </div>`);
+
+/* ============================= SIDEBAR TYPE REORDER ============================= */
+// Small grip box on the corner of each type box, edit-mode only. Hold and
+// drag it to reorder that type up/down in the sidebar list; the new order
+// is saved per-device in state.typeOrder (see categoriesList).
+let sidebarDrag = null; // { pointerId, type, order } — active drag session, or null
+function startSidebarDrag(e, type){
+  if(!sidebarEditMode) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const handle = e.currentTarget;
+  sidebarDrag = { pointerId: e.pointerId, type, order: categoriesList() };
+  try{ handle.setPointerCapture(e.pointerId); }catch(err){}
+  renderSidebar();
 }
-async function confirmRemoveCategory(c){
-  closeSheet();
-  const ids = activeRows().filter(r=>r.Type===c).map(r=>r.ID);
-  pushUndoSnapshot(ids);
-  ids.forEach(id=>pendingSubmitIds.add(String(id)));
-  render(); // immediately dims/disables every affected card on the now-visible grid
-  for(const id of ids){ await apiPost({action:'setActive', id, active:false}); }
-  toast(t('categoryRemoved'));
-  if(categoryFilter===c) categoryFilter='All';
-  ids.forEach(id=>pendingSubmitIds.delete(String(id)));
-  refresh(false);
+document.addEventListener('pointermove', (e)=>{
+  if(!sidebarDrag || e.pointerId!==sidebarDrag.pointerId) return;
+  const sidebarEl = document.getElementById('sidebar');
+  if(!sidebarEl) return;
+  // Auto-scroll the sidebar itself when dragging near its top/bottom edge —
+  // there are more type boxes than fit on most screens at once.
+  const rect = sidebarEl.getBoundingClientRect();
+  const edge = 36;
+  if(e.clientY < rect.top + edge) sidebarEl.scrollTop -= 10;
+  else if(e.clientY > rect.bottom - edge) sidebarEl.scrollTop += 10;
+  let target = null;
+  sidebarEl.querySelectorAll('.side-cat[data-type]').forEach(el=>{
+    const r = el.getBoundingClientRect();
+    if(e.clientY>=r.top && e.clientY<=r.bottom) target = el;
+  });
+  if(!target) return;
+  const targetType = target.dataset.type;
+  if(targetType===sidebarDrag.type) return;
+  const order = sidebarDrag.order;
+  const fromIdx = order.indexOf(sidebarDrag.type);
+  const toIdx = order.indexOf(targetType);
+  if(fromIdx===-1 || toIdx===-1) return;
+  order.splice(fromIdx,1);
+  order.splice(toIdx,0,sidebarDrag.type);
+  renderSidebar();
+});
+function endSidebarDrag(e){
+  if(!sidebarDrag || e.pointerId!==sidebarDrag.pointerId) return;
+  state.typeOrder = sidebarDrag.order.slice();
+  saveState();
+  sidebarDrag = null;
+  renderSidebar();
 }
+document.addEventListener('pointerup', endSidebarDrag);
+document.addEventListener('pointercancel', endSidebarDrag);
 
 /* ============================= LOCATION FILTER ============================= */
 document.getElementById('btnLocation').addEventListener('click', ()=>{
@@ -1918,6 +1964,13 @@ function openRequestCheck(key){
   activeSizesPresent.forEach(sz=>{
     requestDraft[g.rows[sz].ID] = { current: 0, size: sz };
   });
+  // Grid is only as wide as the number of active sizes (96px/column + 8px
+  // gaps, same per-column width the old fixed 7-column layout used) so the
+  // flex wrapper's justify-content:center centers the REAL width — not a
+  // box padded out to fit 7 columns regardless of how many sizes exist.
+  const reqColCount = activeSizesPresent.length || 1;
+  const reqGridWidthPx = reqColCount*96 + (reqColCount-1)*8;
+  const reqGridStyle = `grid-template-columns:repeat(${reqColCount}, minmax(0,1fr)); flex:0 1 ${reqGridWidthPx}px; width:100%; max-width:${reqGridWidthPx}px;`;
   openSheetHtml(`
     <div class="request-popup">
     <div style="margin-bottom:4px; padding-right:50px;">
@@ -1926,7 +1979,7 @@ function openRequestCheck(key){
     </div>
     <div class="request-photo-wrap">${g.photo?`<img src="${esc(g.photo)}">`:''}</div>
     <div class="request-size-grid-wrap">
-    <div class="request-size-grid">
+    <div class="request-size-grid" style="${reqGridStyle}">
       ${activeSizesPresent.map(sz=>{
         const row = g.rows[sz];
         return `
