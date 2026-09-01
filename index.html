@@ -705,11 +705,15 @@
   .request-size-grid-wrap{display:flex; justify-content:center; width:100%;}
   .request-size-grid{
     display:grid; gap:8px;
-    /* grid-template-columns, flex-basis and max-width are set inline per
-       popup, sized to however many sizes are actually active on that item
-       — not a fixed 7 columns — so a 4-size item's grid is only as wide as
-       4 columns and the flex wrapper above centers that actual width,
-       instead of centering a 7-column-wide box with empty trailing tracks. */
+    /* grid-template-columns is set inline per popup: repeat(N, ...) where N
+       is however many sizes are actually active on that item, using the
+       SAME fixed per-column width the original 7-column layout used
+       (derived from the popup's own container width via cqw, minus the
+       .sheet-scroll padding and gaps) — never a flexible 1fr. That's what
+       keeps individual buttons the same width regardless of N, while the
+       grid's own total width shrinks with N so the flex wrapper's
+       justify-content:center actually centers it instead of centering a
+       box padded out to fit 7 columns with empty trailing tracks. */
   }
   .request-size-col{text-align:center;}
   .request-size-label{
@@ -732,6 +736,15 @@
   }
   .request-size-plus{color:var(--ok); border-color:var(--ok); margin-bottom:6px;}
   .request-size-minus{color:var(--restock); border-color:var(--restock);}
+  /* Same gap-with-faint-line treatment between + and − as the Display
+     popup / New-Edit item form's size steppers (.detail-wrap .size-minus /
+     .size-loc-panel .size-minus) — extra top margin plus a thin centered
+     line drawn in that gap via ::before. */
+  .request-size-minus{margin-top:14px; position:relative;}
+  .request-size-minus::before{
+    content:''; position:absolute; top:-9px; left:12.5%; width:75%; height:1px;
+    background:var(--line);
+  }
   .request-popup .btn-request-submit{font-family:'Oswald'; font-weight:700; font-size:clamp(19px, 3cqw, 24px); letter-spacing:0.5px; text-transform:uppercase;}
 
   .size-count-input::-webkit-outer-spin-button,.size-count-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
@@ -1964,13 +1977,13 @@ function openRequestCheck(key){
   activeSizesPresent.forEach(sz=>{
     requestDraft[g.rows[sz].ID] = { current: 0, size: sz };
   });
-  // Grid is only as wide as the number of active sizes (96px/column + 8px
-  // gaps, same per-column width the old fixed 7-column layout used) so the
-  // flex wrapper's justify-content:center centers the REAL width — not a
-  // box padded out to fit 7 columns regardless of how many sizes exist.
+  // Same per-column width the original always-7-column layout used
+  // (derived from the popup's own container width via cqw, minus the
+  // .sheet-scroll padding and the 6 gaps a 7-column row would have) —
+  // fixed, not 1fr, so the grid's total width is only ever N columns
+  // wide and doesn't stretch out to fill the leftover space when N<7.
   const reqColCount = activeSizesPresent.length || 1;
-  const reqGridWidthPx = reqColCount*96 + (reqColCount-1)*8;
-  const reqGridStyle = `grid-template-columns:repeat(${reqColCount}, minmax(0,1fr)); flex:0 1 ${reqGridWidthPx}px; width:100%; max-width:${reqGridWidthPx}px;`;
+  const reqGridStyle = `grid-template-columns:repeat(${reqColCount}, minmax(0, calc((100cqw - 84px)/7)));`;
   openSheetHtml(`
     <div class="request-popup">
     <div style="margin-bottom:4px; padding-right:50px;">
