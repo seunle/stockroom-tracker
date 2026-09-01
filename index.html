@@ -193,9 +193,16 @@
     position:absolute; top:6px; right:6px; background:rgba(37,36,31,0.75); color:#fff;
     font-family:'Oswald'; font-weight:700; font-size:11px; padding:3px 7px; border-radius:8px;
   }
-  .price-pick-photo{
-    font-family:'Oswald'; font-weight:800; color:var(--thread-dark);
-    font-size:clamp(18px, 7cqw, 30px);
+  /* Price filter — a native <select> so tapping it opens the same familiar
+     list the Type field uses, styled to look like the app's other chips.
+     Width is deliberately NOT fixed — a <select>'s natural width already
+     tracks whatever its currently selected option's text is, so "Price"
+     and "$1,299.99" both fit without any extra sizing logic needed. */
+  .request-price-select{
+    -webkit-appearance:none; appearance:none; cursor:pointer;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236B655A' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 14px center; background-size:16px;
+    padding-right:44px;
   }
   .card.inactive-card{opacity:0.5;}
   .card.card-pending{opacity:0.35; pointer-events:none;}
@@ -317,7 +324,7 @@
      padding) keeps the label genuinely centered regardless of safe-area
      insets on notched devices. */
   .nav-item{
-    flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
     padding:30px 2px calc(30px + env(safe-area-inset-bottom)); color:var(--ink-soft);
   }
   .nav-item[data-tab="edit"]{flex:0.7;} /* Edit is used less often — narrower, the other three share the freed-up width evenly */
@@ -669,30 +676,45 @@
   }
   .size-count-input.zero-val{color:var(--ink-soft); background:var(--line); border-color:var(--line);}
   .size-label.zero-val{color:var(--ink-soft); opacity:0.55;}
-  /* Hoodie Request popup: mirror the roomy MEN Edit size controls, but keep
-     this styling isolated to Request so Display/Storage/Resupply popups are
-     unchanged. The size columns are centered in the available popup space
-     instead of being forced against the right edge. */
-  .request-popup .detail-wrap{justify-content:center;}
-  .request-popup .size-grid{flex:0 1 auto; width:min(720px, 100%); max-width:720px; min-width:0; gap:8px; margin:0 auto;}
-  .request-popup .size-col{border-right:none; padding:0 7px;}
-  .request-popup .size-minus{margin-top:4px;}
-  .request-popup .size-minus::before{display:none;}
-  .request-popup .size-plus,.request-popup .size-minus{height:clamp(38px, 7cqw, 66px); border-radius:9px;}
-  .request-popup .size-count-input{height:clamp(38px, 7cqw, 66px); box-sizing:border-box; padding:5px 0; font-size:clamp(18px, 3.2cqw, 30px); border-radius:10px;}
-  .request-popup .size-label.zero-val{color:#A6A6A6; opacity:1;}
-  .request-popup .size-count-input.zero-val{background:#D1D1D1; border-color:#C2C2C2; color:#8F8F8F;}
-  .request-popup .btn-request-submit{font-family:'Oswald'; font-weight:700; font-size:clamp(19px, 3cqw, 24px); letter-spacing:0.5px; text-transform:uppercase;}
-  /* Backup for the column-layout switch above (normally driven by the
-     @container rule near .detail-wrap) — container-query measurement can
-     behave inconsistently in combination with the popup's own zoom
-     scaling on some phones. This produces the identical result, so it's
-     a safe reinforcement whether or not the container query is already
-     firing correctly. */
-  @media (max-width:420px){
-    .request-popup .detail-wrap{flex-direction:column;}
-    .request-popup .detail-photo{width:100%; max-width:340px; margin:0 auto 8px;}
+  /* Hoodie Request popup: built as its own completely independent layout,
+     not a set of overrides on top of the Display popup's .detail-wrap —
+     that approach kept getting undermined by cascade/specificity issues
+     between the two. None of these classes are shared with any other
+     popup, so nothing else on the page can ever affect this again. Photo
+     and the size grid are unconditionally stacked (not a row that
+     switches to a column at some breakpoint), which also means there's
+     no responsive threshold left to get wrong on any given phone. */
+  .request-photo-wrap{
+    width:100%; max-width:280px; aspect-ratio:4/5; border-radius:10px; overflow:hidden;
+    background:var(--line); margin:0 auto 18px; display:block;
   }
+  .request-photo-wrap img{width:100%; height:100%; object-fit:cover; display:block;}
+  .request-size-grid{
+    display:grid; grid-template-columns:repeat(7, minmax(0,1fr)); gap:8px;
+    width:100%; max-width:720px; margin:0 auto;
+  }
+  .request-size-col{text-align:center;}
+  .request-size-label{
+    font-family:'Oswald'; font-weight:700; font-size:clamp(14px, 4.2cqw, 30px);
+    margin-bottom:5px; color:var(--ink);
+  }
+  .request-size-label.zero-val{color:#8C8C8C;} /* pushed further grey than the Display popup's own zero-val, per request */
+  .request-size-count-input{
+    width:100%; box-sizing:border-box; text-align:center; font-weight:800; font-family:'Inter';
+    font-size:clamp(16px, 3.2cqw, 26px); border:1.5px solid var(--line); border-radius:10px;
+    height:clamp(36px, 7cqw, 58px); padding:5px 0; background:var(--paper); color:var(--ink);
+    -moz-appearance:textfield; margin-bottom:6px;
+  }
+  .request-size-count-input.zero-val{background:#C7C7C7; border-color:#B8B8B8; color:#7A7A7A;} /* more grey than before, per request */
+  .request-size-count-input::-webkit-outer-spin-button,.request-size-count-input::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
+  .request-size-plus,.request-size-minus{
+    width:100%; border-radius:9px; border:1.5px solid var(--line); background:var(--paper);
+    font-size:clamp(18px, 5cqw, 36px); font-weight:800; height:clamp(34px, 7cqw, 58px); padding:0;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .request-size-plus{color:var(--ok); border-color:var(--ok); margin-bottom:6px;}
+  .request-size-minus{color:var(--restock); border-color:var(--restock);}
+  .request-popup .btn-request-submit{font-family:'Oswald'; font-weight:700; font-size:clamp(19px, 3cqw, 24px); letter-spacing:0.5px; text-transform:uppercase;}
 
   .size-count-input::-webkit-outer-spin-button,.size-count-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
 
@@ -1391,19 +1413,23 @@ function setCheckedFilter(v){ checkedFilter=v; render(); }
 function setStorageSizeFilter(v){ storageSizeFilter=v; render(); }
 
 /* ============================= REQUEST TAB (Hoodie category) ============================= */
-function setRequestFilter(v){
-  requestFilter = v;
-  requestPriceFilter = null; // switching filter mode always resets which specific price (if any) was picked
+function onRequestPriceSelectChange(el){
+  const val = el.value;
+  if(val===''){
+    requestFilter = 'all';
+    requestPriceFilter = null;
+  }else{
+    requestFilter = 'price';
+    requestPriceFilter = Number(val);
+  }
   render();
 }
-function selectRequestPrice(p){
-  requestPriceFilter = p;
-  render();
-}
-function requestFilterChipsHtml(){
+function requestFilterChipsHtml(priceValues){
   return `<div class="chiprow">
-    <div class="chip ${requestFilter==='all'?'on':''}" onclick="setRequestFilter('all')">${t('filterAll')}</div>
-    <div class="chip ${requestFilter==='price'?'on':''}" onclick="setRequestFilter('price')">${t('filterPrice')}</div>
+    <select id="requestPriceSelect" class="chip request-price-select" onchange="onRequestPriceSelectChange(this)">
+      <option value="">${t('filterPrice')}</option>
+      ${priceValues.map(p=>`<option value="${p}" ${requestPriceFilter===p?'selected':''}>$${p.toFixed(2)}</option>`).join('')}
+    </select>
   </div>`;
 }
 function requestCardHtml(g){
@@ -1438,32 +1464,20 @@ function renderRequestTab(main, list){
   }
   groups = applyCustomOrder(groups, locationFilter);
 
-  const showingPricePicker = requestFilter==='price' && requestPriceFilter==null;
-  const count = showingPricePicker ? priceValues.length : groups.length;
-
   main.innerHTML = `
     <div class="toolbar-top">
-      ${requestFilterChipsHtml()}
+      ${requestFilterChipsHtml(priceValues)}
       <div class="scale-ctrl">
         <button class="scale-btn" onclick="adjustScale(1)">−</button>
         <button class="scale-btn" onclick="adjustScale(-1)">+</button>
       </div>
     </div>
     <div class="grid-toolbar">
-      <div class="grid-title loc-title-big">${tabTitle()} <span class="loc-title-count">${count}</span></div>
+      <div class="grid-title loc-title-big">${tabTitle()} <span class="loc-title-count">${groups.length}</span></div>
     </div>
     <div class="photo-grid" id="photoGrid" style="--cols:${state.gridColsByTab.request};"></div>
   `;
   const grid = document.getElementById('photoGrid');
-
-  if(showingPricePicker){
-    if(priceValues.length===0){ grid.outerHTML = emptyState(); return; }
-    grid.innerHTML = priceValues.map(p=>`
-      <div class="card price-pick-card" onclick="selectRequestPrice(${p})">
-        <div class="photo price-pick-photo">$${p.toFixed(2)}</div>
-      </div>`).join('');
-    return;
-  }
 
   if(groups.length===0){ grid.outerHTML = emptyState(); return; }
   grid.innerHTML = groups.map(g=>requestCardHtml(g)).join('');
@@ -1897,20 +1911,18 @@ function openRequestCheck(key){
       <h2 style="margin:0 0 1px 0;">${esc(g.name)}</h2>
       <div class="desc" style="margin:0;">${esc(g.type)} · ${esc(g.location)} · ${t('editingDisplay')} <b>${esc(LOC_NAME_BY_CODE[locationFilter])}</b></div>
     </div>
-    <div class="detail-wrap">
-      <div class="detail-photo">${g.photo?`<img src="${esc(g.photo)}">`:''}</div>
-      <div class="size-grid">
-        ${activeSizesPresent.map(sz=>{
-          const row = g.rows[sz];
-          return `
-            <div class="size-col">
-              <div class="size-label zero-val" id="reqlabel-${row.ID}">${SIZE_SHORT_LABEL[sz]}</div>
-              <input type="number" class="size-count-input zero-val" id="req-${row.ID}" value="0" readonly>
-              <button type="button" class="size-plus" onclick="stepRequestDraft('${row.ID}',1)">+</button>
-              <button type="button" class="size-minus" onclick="stepRequestDraft('${row.ID}',-1)">−</button>
-            </div>`;
-        }).join('')}
-      </div>
+    <div class="request-photo-wrap">${g.photo?`<img src="${esc(g.photo)}">`:''}</div>
+    <div class="request-size-grid">
+      ${activeSizesPresent.map(sz=>{
+        const row = g.rows[sz];
+        return `
+          <div class="request-size-col">
+            <div class="request-size-label zero-val" id="reqlabel-${row.ID}">${SIZE_SHORT_LABEL[sz]}</div>
+            <input type="number" class="request-size-count-input zero-val" id="req-${row.ID}" value="0" readonly>
+            <button type="button" class="request-size-plus" onclick="stepRequestDraft('${row.ID}',1)">+</button>
+            <button type="button" class="request-size-minus" onclick="stepRequestDraft('${row.ID}',-1)">−</button>
+          </div>`;
+      }).join('')}
     </div>
     <div class="sheet-actions" style="margin-top:16px;">
       <button class="btn-check-toggle${sessionCheckedKeys.has(sessionCheckKey(locationFilter,key))?' on':''}" onclick="toggleCheckedAndClose('${esc(key)}','${locationFilter}')">✓</button>
