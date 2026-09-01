@@ -92,7 +92,7 @@
   /* Wide +New button, Edit tab only — replaces the old permanent top-bar
      button, since item creation is really an Edit-tab task. */
   .btn-new-wide{
-    display:block; width:calc(100% - 8px); margin:0 4px 10px; padding:14px 0;
+    display:block; width:100%; padding:14px 0;
     background:var(--paper); color:var(--thread-dark); border:1.5px solid var(--thread-dark); border-radius:12px;
     font-family:'Oswald'; font-weight:700; font-size:18px; letter-spacing:0.6px; text-transform:uppercase;
   }
@@ -165,10 +165,18 @@
     padding-left:10px; padding-right:10px;
   }
   .toolbar-top, .resupply-toolbar-portrait{position:sticky; top:0; z-index:16; background:var(--paper); padding-top:12px;}
-  .btn-new-wide{position:sticky; z-index:15; background:var(--paper); margin-left:14px; margin-right:14px;} /* offset set dynamically in JS, stacks right below .toolbar-top; margin widened from 4px since the container no longer supplies its own 10px */
-  .sticky-title-zone{position:sticky; z-index:15; background:var(--paper); padding-bottom:9px;}
+  /* The button itself used to be sticky directly, with its own horizontal
+     margin — but a rounded button has transparent corners outside its own
+     shape, so a scrolling card behind it could still peek through right at
+     those corners. A flat, edge-to-edge wrapper (like the other sticky
+     bars) fully covers that area; the button sits inside it as a normal,
+     non-sticky child. This also fixes the button rendering wider than the
+     screen: its width and margin had drifted out of sync in an earlier
+     edit, since fixed at the source instead of patched here too. */
+  .btn-new-wide-wrap{position:sticky; z-index:15; background:var(--paper); padding:8px 10px;}
+  .sticky-title-zone{position:sticky; z-index:15; background:var(--paper); padding-bottom:13.5px;} /* 1.5x the previous 9px */
   main.grid-area.edit-mode-bg .toolbar-top{background:#A39C8C;}
-  main.grid-area.edit-mode-bg .btn-new-wide{background:#A39C8C;}
+  main.grid-area.edit-mode-bg .btn-new-wide-wrap{background:#A39C8C;}
   main.grid-area.edit-mode-bg .sticky-title-zone{background:#A39C8C;}
   .grid-title{font-size:12px; font-weight:600; letter-spacing:1.2px; text-transform:uppercase; color:var(--ink-soft);}
   /* Display/Storage tab titles get this — same size/weight as the Resupply
@@ -1175,10 +1183,10 @@ function syncStickyTitleOffset(){
     const h = el.getBoundingClientRect().height / uiScale;
     if(h > cumulative) cumulative = h;
   });
-  const newBtn = document.querySelector('main.grid-area .btn-new-wide');
-  if(newBtn){
-    newBtn.style.top = cumulative + 'px';
-    cumulative += newBtn.getBoundingClientRect().height / uiScale;
+  const newBtnWrap = document.querySelector('main.grid-area .btn-new-wide-wrap');
+  if(newBtnWrap){
+    newBtnWrap.style.top = cumulative + 'px';
+    cumulative += newBtnWrap.getBoundingClientRect().height / uiScale;
   }
   document.querySelectorAll('main.grid-area .sticky-title-zone').forEach(el=>{
     el.style.top = cumulative + 'px';
@@ -1311,7 +1319,7 @@ function renderInner(){
         <button class="scale-btn" onclick="adjustScale(-1)">+</button>
       </div>
     </div>
-    ${currentTab==='edit' ? `<button class="btn-new-wide" onclick="openNewItemForm()">+ ${t('newBtn')}</button>` : ''}
+    ${currentTab==='edit' ? `<div class="btn-new-wide-wrap"><button class="btn-new-wide" onclick="openNewItemForm()">+ ${t('newBtn')}</button></div>` : ''}
     <div class="sticky-title-zone">
       <div class="grid-toolbar">
         <div class="grid-title${currentTab==='display'?' loc-title-big':''}">${tabTitle()} <span class="loc-title-count">${groups.length}</span></div>
