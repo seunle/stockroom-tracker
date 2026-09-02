@@ -486,7 +486,7 @@
   .chip.checkmark-chip{width:64px; padding:0;}
   .chip.checkmark-chip.filter-unchecked{background:#E2766D; border-color:#E2766D; color:#fff;}
   .chip.checkmark-chip.filter-checked{background:#7CB88A; border-color:#7CB88A; color:#fff;}
-  .chip.storage-all-chip{padding:0 20px; font-size:20px;} /* ~1/5 narrower than the default chip — Storage tab's All filter specifically */
+  .chip.storage-all-chip{padding:0 20px; font-size:20px;} /* ~1/5 narrower than the default chip — used by the Storage tab's All filter and the Display tab's All filter, so the two match */
   .chip.chip-default-tab{height:48px; padding:0 20px; border-radius:18px; font-size:19px;}
   /* Hoodie New/Edit forms: compact size availability toggles. */
   #newSizesSection .chip[data-hoodie-size],
@@ -1267,17 +1267,31 @@ function showDeviceBlockedScreen(){
 }
 
 /* ============================= API ============================= */
+// Reads are safe to retry (idempotent — asking twice never double-applies
+// anything), so a single transient network hiccup gets one automatic
+// retry before actually reporting failure. This matters most right after
+// a write: several people submitting quickly in a row can occasionally
+// hit real contention on Apps Script's end and see a slow/dropped
+// response even though the underlying write already went through — if
+// the FOLLOW-UP refresh() that's supposed to resync also stumbles on that
+// same hiccup, the screen is left showing stale data until something else
+// happens to trigger another refresh (or the app gets restarted, which is
+// exactly what was being reported). One retry closes most of that gap.
 async function apiGet(){
   if(!state.apiUrl) return {ok:false,error:'no-url'};
-  try{
-    const sep = state.apiUrl.indexOf('?')!==-1 ? '&' : '?';
-    const url = state.apiUrl + sep + 'token=' + encodeURIComponent(getDeviceToken());
-    const res = await fetch(url,{method:'GET'});
-    const data = await res.json();
-    if(data && data.unauthorized) await confirmUnauthorizedThenBlock();
-    return data;
+  for(let attempt=0; attempt<2; attempt++){
+    try{
+      const sep = state.apiUrl.indexOf('?')!==-1 ? '&' : '?';
+      const url = state.apiUrl + sep + 'token=' + encodeURIComponent(getDeviceToken());
+      const res = await fetch(url,{method:'GET'});
+      const data = await res.json();
+      if(data && data.unauthorized) await confirmUnauthorizedThenBlock();
+      return data;
+    }catch(e){
+      if(attempt===0) await new Promise(r=>setTimeout(r,600));
+      else return {ok:false,error:String(e)};
+    }
   }
-  catch(e){ return {ok:false,error:String(e)}; }
 }
 async function apiPost(body){
   if(!state.apiUrl) return {ok:false,error:'no-url'};
@@ -1669,7 +1683,7 @@ function setEditFilter(v){ editFilter=v; render(); }
 function checkedFilterChipsHtml(){
   const stateClass = checkedFilter==='unchecked' ? ' filter-unchecked' : checkedFilter==='checked' ? ' filter-checked' : '';
   return `<div class="chiprow">
-    <div class="chip ${checkedFilter==='all'?'on':''}" onclick="setCheckedFilter('all')">${t('filterAll')}</div>
+    <div class="chip storage-all-chip ${checkedFilter==='all'?'on':''}" onclick="setCheckedFilter('all')">${t('filterAll')}</div>
     <div class="chip checkmark-chip${stateClass}" onclick="toggleCheckedFilterButton()" title="${t('filterChecked')}">
       <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 13 9.5 18.5 20 6"></polyline></svg>
     </div>
@@ -3104,14 +3118,19 @@ async function submitResupply(id){
 
   toast(t('requesting'));
   const res = await apiPost({action:'requestResupply', id, requestQty, location:locationFilter});
+  pendingSubmitIds.delete(String(id));
   if(res.ok){
     toast(`${t('resupplyRequestedFor')} ${LOC_NAME_BY_CODE[locationFilter]} ${t('displayPlus')}${res.increase}`);
-    pendingSubmitIds.delete(String(id));
-    refresh(false);
   }else{
-    pendingSubmitIds.delete(String(id));
     toast(t('couldNotSubmit') + (res.error||t('unknownError')), true);
   }
+  // Always resync after a submit attempt, success OR failure — a reported
+  // failure doesn't necessarily mean the write didn't actually go through
+  // on the server (see apiGet's retry comment above); refreshing either
+  // way means the screen corrects itself within a moment instead of
+  // possibly sitting on stale/wrong data until something else happens to
+  // trigger a refresh.
+  refresh(false);
 }
 
 /* ============================= NEW ITEM ============================= */
@@ -3323,8 +3342,10 @@ async function submitNewItem(){
   if(res.ok){
     if(res.newIds) pushUndoSnapshot(res.newIds); // marks them as "new" for undo (rows not in local cache yet)
     toast(t('itemAdded'));
-    refresh(false);
-  }else{ toast(t('addFailed') + (res.error||t('unknownError')), true); }
+  }else{
+    toast(t('addFailed') + (res.error||t('unknownError')), true);
+  }
+  refresh(false); // resync either way — a reported failure doesn't necessarily mean the write didn't actually land server-side
 }
 
 /* ============================= EDIT TAB: DRAG TO REORDER ============================= */
