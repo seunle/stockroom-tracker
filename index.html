@@ -1807,6 +1807,7 @@ document.getElementById('btnLocation').addEventListener('click', ()=>{
     </div>`);
 });
 function pickLocationFilter(code){
+  if(pendingOrderCommit) flushPendingOrderCommit(); // don't leave a just-dragged order stranded in the debounce window when switching away from the location it belongs to
   locationFilter = code;
   state.deviceLocation = code; // saved to this device's localStorage — stays put across refreshes/reopens
   saveState();
@@ -3394,6 +3395,38 @@ async function onDragEnd(e){
   });
 
   settleDraggedCard(cardEl); // drop the dragging visual state immediately — the grid is already in the correct order (moved during the drag, not rebuilt), so no need for a full render() here
+  // Debounced, not sent immediately — see scheduleOrderCommit. Dragging
+  // several cards in quick succession used to fire one full network write
+  // PER drag (every visible row's Order column gets rewritten each time,
+  // not just the one that moved), and since a new drag could start before
+  // the previous write had finished, several of those full-grid writes
+  // could end up in flight at once — Apps Script serializes concurrent
+  // writes to the same sheet, so they'd queue up and each one would take
+  // longer than the last, which is exactly the "gets slower and slower,
+  // then breaks" symptom. Coalescing rapid drags into one write (sent
+  // shortly after the LAST one settles) fixes that without needing to
+  // slow down or pace out how fast you actually drag.
+  scheduleOrderCommit(code, updates);
+}
+let pendingOrderCommit = null; // { code, updates } — the not-yet-sent result of the most recent drag
+let pendingOrderCommitTimer = null;
+const ORDER_COMMIT_DEBOUNCE_MS = 700;
+function scheduleOrderCommit(code, updates){
+  pendingOrderCommit = { code, updates };
+  clearTimeout(pendingOrderCommitTimer);
+  pendingOrderCommitTimer = setTimeout(flushPendingOrderCommit, ORDER_COMMIT_DEBOUNCE_MS);
+}
+// Sends whatever the LATEST pending order is (ignores any superseded ones
+// in between — only the final settled order after a burst of drags
+// actually needs to reach the sheet). Also called immediately when
+// something else needs the order committed right away (leaving the Edit
+// tab, switching location) instead of waiting out the debounce window.
+async function flushPendingOrderCommit(){
+  clearTimeout(pendingOrderCommitTimer);
+  pendingOrderCommitTimer = null;
+  if(!pendingOrderCommit) return;
+  const { code, updates } = pendingOrderCommit;
+  pendingOrderCommit = null;
   toast(t('savingOrder'));
   const res = await apiPost({ action:'setGroupOrder', location:code, updates });
   if(res.ok){
@@ -3662,6 +3695,13 @@ function applyReorderModeToggle(){
     hintEl.textContent = `${t(editReorderMode?'dragHintOn':'dragHintOff')} ${LOC_NAME_BY_CODE[locationFilter]}`;
   }
 }
+// Best-effort safety net for the order-commit debounce above: if the app
+// gets backgrounded/closed (phone home button, switching apps, closing the
+// tab) while a drag's write is still sitting in its debounce window, flush
+// it immediately instead of risking it never being sent at all.
+document.addEventListener('visibilitychange', ()=>{
+  if(document.hidden && pendingOrderCommit) flushPendingOrderCommit();
+});
 document.querySelector('nav.bottomnav').addEventListener('click', (e)=>{
   const el = e.target.closest('.nav-item');
   if(!el) return;
@@ -3674,6 +3714,7 @@ document.querySelector('nav.bottomnav').addEventListener('click', (e)=>{
     applyReorderModeToggle();
   }else{
     const prevTab = currentTab;
+    if(prevTab==='edit' && pendingOrderCommit) flushPendingOrderCommit(); // don't leave a just-dragged order stranded in the debounce window when navigating away from Edit
     editReorderMode = false; // always starts off when entering Edit fresh from elsewhere
     currentTab = tab;
     syncLocationAcrossResupplySwitch(prevTab, tab);
