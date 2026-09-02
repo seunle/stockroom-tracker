@@ -1767,6 +1767,19 @@ function toggleTypeSystem(){
     if(!res.ok) toast(t('saveFailed') + (res.error||t('unknownError')), true);
   });
 }
+// The Direct/Indirect toggle is a temporary, "just for while I'm actively
+// looking at this Type" flip, not a permanent change — the moment you
+// leave (switch to a different Type, or navigate off the Display/Request
+// tab to Storage/Resupply/Edit while staying on the same Type), it resets
+// back to that Type's own default. No-ops if the Type has no override to
+// clear (already at its default).
+function clearTypeSystemOverride(type){
+  if(!(type in typeSystemOverrides)) return;
+  delete typeSystemOverrides[type];
+  apiPost({action:'setTypeSystem', type, system:null}).then(res=>{
+    if(!res.ok) toast(t('saveFailed') + (res.error||t('unknownError')), true);
+  });
+}
 // Single-shake visual cue (not the continuous reorder-mode wobble — see
 // cardJiggleOnce) applied to every card currently in the grid at once,
 // then cleaned up once the animation finishes.
@@ -1907,8 +1920,9 @@ function renderSidebar(){
   el.innerHTML = html;
 }
 function setCategory(c){
-  const wasHoodie = isDirectSystem(categoryFilter);
-  const isHoodie = isDirectSystem(c);
+  const wasHoodie = isDirectSystem(categoryFilter); // read BEFORE clearing — reflects what was actually showing for the type we're leaving
+  clearTypeSystemOverride(categoryFilter); // leaving this Type — its Direct/Indirect override resets to default
+  const isHoodie = isDirectSystem(c); // the new Type's own default (any override on it should already be clear from a prior visit)
   categoryFilter = c;
   if(isHoodie && !wasHoodie && (currentTab==='display' || currentTab==='storage')){
     currentTab = 'request';
@@ -3902,6 +3916,13 @@ document.querySelector('nav.bottomnav').addEventListener('click', (e)=>{
   }else{
     const prevTab = currentTab;
     if(prevTab==='edit' && pendingOrderCommit) flushPendingOrderCommit(); // don't leave a just-dragged order stranded in the debounce window when navigating away from Edit
+    // Leaving the Display/Request tab (to Storage, Resupply, or Edit)
+    // resets the current Type's Direct/Indirect override back to its
+    // default — the toggle only sticks while you're actively looking at
+    // that Type's Display or Request tab, not once you navigate away.
+    if((prevTab==='display' || prevTab==='request') && tab!==prevTab){
+      clearTypeSystemOverride(categoryFilter);
+    }
     editReorderMode = false; // always starts off when entering Edit fresh from elsewhere
     currentTab = tab;
     syncLocationAcrossResupplySwitch(prevTab, tab);
