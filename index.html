@@ -230,8 +230,11 @@
      being saved, every card dims and stops responding to taps/drags —
      see setOrderSaveLocked/commitOrderNow. Applied to the whole grid
      (not just the card that moved) since the drag gesture itself is what's
-     blocked, not just that one card's data. */
-  .photo-grid.order-saving .card{
+     blocked, not just that one card's data. Same treatment, different
+     trigger, for Storage/Resupply/On Hold's single-item actions — see
+     setItemActionLocked. */
+  .photo-grid.order-saving .card,
+  .photo-grid.action-saving .card{
     opacity:0.4; filter:grayscale(0.7); pointer-events:none; transition:opacity 0.15s, filter 0.15s;
   }
   .card{
@@ -2829,6 +2832,7 @@ function onHoldBadgeFontSize(sizeKey){
   return 'clamp(18px, 6.5cqw, 27px)'; // 3+ chars, e.g. 2XL / 3XL
 }
 function openOnHoldItem(id){
+  if(itemActionLocked) return; // a previous submission is still saving — see setItemActionLocked
   const row = rows.find(r=>sameId(r.ID,id));
   if(!row) return;
   const original = {
@@ -2893,36 +2897,47 @@ async function submitOnHoldResolve(){
   const isHoodieRow = isDirectSystem(row.Type);
   pushUndoSnapshot([id]);
   pendingSubmitIds.add(String(id));
+  setItemActionLocked(true); // whole grid dims/blocks until this submission's write+resync fully finishes — see setItemActionLocked
   closeSheet();
   render(); // immediately dims/disables the card on the now-visible On Hold row
   toast(t('saving'));
-  for(const code of changedCodes){
-    // The amount being resolved for THIS location (original minus what's
-    // left on hold) is credited onto THIS location's own Display count,
-    // capped at THIS location's own Min Count — same rule as the regular
-    // per-location Resupply popup, just applied per column here since one
-    // On Hold item can span all three locations at once. Hoodie items
-    // skip this — they never use Display at all.
-    const stepperVal = original[code] - updates[code];
-    row[ON_HOLD_FIELD_BY_CODE[code]] = updates[code];
-    let newDisplay;
-    if(!isHoodieRow){
-      const minCount = Number(row[MIN_COUNT_FIELD_BY_CODE[code]]||0);
-      const currentDisplay = Number(row[DISPLAY_FIELD_BY_CODE[code]]||0);
-      newDisplay = Math.min(minCount, currentDisplay + stepperVal);
-      row[DISPLAY_FIELD_BY_CODE[code]] = newDisplay;
+  try{
+    for(const code of changedCodes){
+      // The amount being resolved for THIS location (original minus what's
+      // left on hold) is credited onto THIS location's own Display count,
+      // capped at THIS location's own Min Count — same rule as the regular
+      // per-location Resupply popup, just applied per column here since one
+      // On Hold item can span all three locations at once. Hoodie items
+      // skip this — they never use Display at all.
+      const stepperVal = original[code] - updates[code];
+      row[ON_HOLD_FIELD_BY_CODE[code]] = updates[code];
+      let newDisplay;
+      if(!isHoodieRow){
+        const minCount = Number(row[MIN_COUNT_FIELD_BY_CODE[code]]||0);
+        const currentDisplay = Number(row[DISPLAY_FIELD_BY_CODE[code]]||0);
+        newDisplay = Math.min(minCount, currentDisplay + stepperVal);
+        row[DISPLAY_FIELD_BY_CODE[code]] = newDisplay;
+      }
+      await apiPost({action:'setResupplyForLocation', id, location:code, onHold:updates[code], displayValue:newDisplay});
     }
-    await apiPost({action:'setResupplyForLocation', id, location:code, onHold:updates[code], displayValue:newDisplay});
+    toast(t('updated'));
+    pendingSubmitIds.delete(String(id));
+    render(); // clears this card's dimmed/pending look right away, independent of whatever refresh() below ends up doing
+    await refresh(false);
+  }finally{
+    // Guaranteed to run even if something above throws — a stuck-true lock
+    // would grey out and disable the ENTIRE grid permanently until reload,
+    // which would be a far worse outcome than whatever the original error was.
+    pendingSubmitIds.delete(String(id));
+    setItemActionLocked(false);
   }
-  toast(t('updated'));
-  pendingSubmitIds.delete(String(id));
-  refresh(false);
 }
 // open, so the stepper can live-update the On Hold preview and Done can
 // compute the same shortfall it just showed. Cleared on close/submit.
 let resupplyEditContext = null; // { id, code, requiredQty }
 
 function openResupplyItem(id, code){
+  if(itemActionLocked) return; // a previous submission is still saving — see setItemActionLocked
   const row = rows.find(r=>sameId(r.ID,id));
   if(!row) return;
 
@@ -3010,30 +3025,40 @@ async function submitResupplyEdit(){
 
   pushUndoSnapshot([id]);
   pendingSubmitIds.add(String(id));
+  setItemActionLocked(true); // whole grid dims/blocks until this submission's write+resync fully finishes — see setItemActionLocked
   closeSheet();
   render(); // immediately dims/disables the card on the now-visible grid, before the API round-trip even starts
   toast(t('saving'));
 
-  // Done must not alter Resupply beyond closing it out. Only write the
-  // selected location's On Hold field when a shortfall actually applies,
-  // and always credit the Display count for this location — except for
-  // Hoodies, which never touch Display.
-  if(onHold > 0){
-    row[ON_HOLD_FIELD_BY_CODE[code]] = onHold;
-  }
-  if(!isHoodieRow) row[DISPLAY_FIELD_BY_CODE[code]] = newDisplay;
+  try{
+    // Done must not alter Resupply beyond closing it out. Only write the
+    // selected location's On Hold field when a shortfall actually applies,
+    // and always credit the Display count for this location — except for
+    // Hoodies, which never touch Display.
+    if(onHold > 0){
+      row[ON_HOLD_FIELD_BY_CODE[code]] = onHold;
+    }
+    if(!isHoodieRow) row[DISPLAY_FIELD_BY_CODE[code]] = newDisplay;
 
-  const res = await apiPost({
-    action:'setResupplyForLocation',
-    id,
-    location:code,
-    onHold,
-    applyOnHold: onHold > 0,
-    displayValue: isHoodieRow ? undefined : newDisplay
-  });
-  toast(res.ok ? t('saved') : t('saveFailed') + (res.error||t('unknownError')), !res.ok);
-  pendingSubmitIds.delete(String(id));
-  refresh(false);
+    const res = await apiPost({
+      action:'setResupplyForLocation',
+      id,
+      location:code,
+      onHold,
+      applyOnHold: onHold > 0,
+      displayValue: isHoodieRow ? undefined : newDisplay
+    });
+    toast(res.ok ? t('saved') : t('saveFailed') + (res.error||t('unknownError')), !res.ok);
+    pendingSubmitIds.delete(String(id));
+    render(); // clears this card's dimmed/pending look right away, independent of whatever refresh() below ends up doing
+    await refresh(false);
+  }finally{
+    // Guaranteed to run even if something above throws — a stuck-true lock
+    // would grey out and disable the ENTIRE grid permanently until reload,
+    // which would be a far worse outcome than whatever the original error was.
+    pendingSubmitIds.delete(String(id));
+    setItemActionLocked(false);
+  }
 }
 
 /* ============================= STORAGE TAB: REQUEST / RESUPPLY POPUP ============================= */
@@ -3042,6 +3067,7 @@ const SIZE_FULL_NAMES = {
   XL: 'Extra Large', XXL: 'Double X Large', XXXL: 'Triple X Large'
 };
 function openStorageItem(id){
+  if(itemActionLocked) return; // a previous submission is still saving — see setItemActionLocked
   if(locationFilter==='All'){
     toast(t('selectLocationResupply'), true);
     return;
@@ -3086,6 +3112,7 @@ function stepRequest(delta){
   el.value = Math.max(0, Math.min(6, Number(el.value||0)+delta));
 }
 async function submitResupply(id){
+  if(itemActionLocked) return;
   if(locationFilter==='All'){
     toast(t('selectLocationResupply'), true);
     return;
@@ -3097,40 +3124,51 @@ async function submitResupply(id){
   const currentOnHold = Number(row[onHoldField]||0);
   pushUndoSnapshot([id]); // so a premature press can be undone (reverts Display/Resupply/On Hold)
   pendingSubmitIds.add(String(id));
+  setItemActionLocked(true); // whole grid dims/blocks until this submission's write+resync fully finishes — see setItemActionLocked
   closeSheet();
   render(); // immediately dims/disables the card on the now-visible grid, before the API round-trip even starts
 
-  if(currentOnHold > 0){
-    // This item is already On Hold for this location — a resupply request
-    // here does NOT go to Storage/Display at all (no Display bump, no
-    // Resupply column write). It just adds the requested quantity onto
-    // the existing On Hold amount for this location, capped at 6 (matching
-    // the backend's own cap on the On Hold column).
-    toast(t('addingToHold'));
-    const newOnHold = Math.min(6, currentOnHold + requestQty);
-    row[onHoldField] = newOnHold;
-    const res = await apiPost({action:'setResupplyForLocation', id, location:locationFilter, onHold:newOnHold});
-    toast(res.ok ? `${t('onHoldForNowIs')} ${LOC_NAME_BY_CODE[locationFilter]} ${t('isNow')} ${newOnHold}` : t('couldNotUpdateHold') + (res.error||t('unknownError')), !res.ok);
-    pendingSubmitIds.delete(String(id));
-    refresh(false);
-    return;
-  }
+  try{
+    if(currentOnHold > 0){
+      // This item is already On Hold for this location — a resupply request
+      // here does NOT go to Storage/Display at all (no Display bump, no
+      // Resupply column write). It just adds the requested quantity onto
+      // the existing On Hold amount for this location, capped at 6 (matching
+      // the backend's own cap on the On Hold column).
+      toast(t('addingToHold'));
+      const newOnHold = Math.min(6, currentOnHold + requestQty);
+      row[onHoldField] = newOnHold;
+      const res = await apiPost({action:'setResupplyForLocation', id, location:locationFilter, onHold:newOnHold});
+      toast(res.ok ? `${t('onHoldForNowIs')} ${LOC_NAME_BY_CODE[locationFilter]} ${t('isNow')} ${newOnHold}` : t('couldNotUpdateHold') + (res.error||t('unknownError')), !res.ok);
+      pendingSubmitIds.delete(String(id));
+      render(); // clears this card's dimmed/pending look right away, independent of whatever refresh() below ends up doing
+      await refresh(false);
+      return;
+    }
 
-  toast(t('requesting'));
-  const res = await apiPost({action:'requestResupply', id, requestQty, location:locationFilter});
-  pendingSubmitIds.delete(String(id));
-  if(res.ok){
-    toast(`${t('resupplyRequestedFor')} ${LOC_NAME_BY_CODE[locationFilter]} ${t('displayPlus')}${res.increase}`);
-  }else{
-    toast(t('couldNotSubmit') + (res.error||t('unknownError')), true);
+    toast(t('requesting'));
+    const res = await apiPost({action:'requestResupply', id, requestQty, location:locationFilter});
+    pendingSubmitIds.delete(String(id));
+    if(res.ok){
+      toast(`${t('resupplyRequestedFor')} ${LOC_NAME_BY_CODE[locationFilter]} ${t('displayPlus')}${res.increase}`);
+    }else{
+      toast(t('couldNotSubmit') + (res.error||t('unknownError')), true);
+    }
+    render(); // clears this card's dimmed/pending look right away, independent of whatever refresh() below ends up doing
+    // Always resync after a submit attempt, success OR failure — a reported
+    // failure doesn't necessarily mean the write didn't actually go through
+    // on the server (see apiGet's retry comment above); refreshing either
+    // way means the screen corrects itself within a moment instead of
+    // possibly sitting on stale/wrong data until something else happens to
+    // trigger a refresh.
+    await refresh(false);
+  }finally{
+    // Guaranteed to run even if something above throws — a stuck-true lock
+    // would grey out and disable the ENTIRE grid permanently until reload,
+    // which would be a far worse outcome than whatever the original error was.
+    pendingSubmitIds.delete(String(id));
+    setItemActionLocked(false);
   }
-  // Always resync after a submit attempt, success OR failure — a reported
-  // failure doesn't necessarily mean the write didn't actually go through
-  // on the server (see apiGet's retry comment above); refreshing either
-  // way means the screen corrects itself within a moment instead of
-  // possibly sitting on stale/wrong data until something else happens to
-  // trigger a refresh.
-  refresh(false);
 }
 
 /* ============================= NEW ITEM ============================= */
@@ -3741,6 +3779,29 @@ function setOrderSaveLocked(locked){
   orderSaveLocked = locked;
   const grid = document.getElementById('photoGrid');
   if(grid) grid.classList.toggle('order-saving', locked);
+}
+
+// Storage/Resupply/On Hold single-item actions (submitResupply,
+// submitResupplyEdit, submitOnHoldResolve) each fire their own write
+// followed by their own refresh() — tapping through several items quickly
+// used to let multiple of these overlap, and refresh()'s own generation
+// guard (which exists to discard STALE responses arriving late) could end
+// up discarding a string of otherwise-valid ones in a row if each new tap
+// kept bumping the generation counter before the previous refresh's
+// response had a chance to land. Net effect: items that WERE correctly
+// resupplied server-side never actually showed as such on screen (looking
+// like they "disappeared"), and cards stuck on their dimmed/pending look
+// even after the write had genuinely finished — because a discarded
+// refresh() also skips the render() that would've cleared that look.
+// Locking the grid (same dim-and-block treatment as order saves) for the
+// full duration of a submission's write+resync means only one of these is
+// ever in flight at a time, which removes the race entirely instead of
+// just narrowing the window for it.
+let itemActionLocked = false;
+function setItemActionLocked(locked){
+  itemActionLocked = locked;
+  const grid = document.getElementById('photoGrid');
+  if(grid) grid.classList.toggle('action-saving', locked);
 }
 
 /* ============================= EDIT TAB ============================= */
