@@ -226,6 +226,14 @@
     display:grid; gap:9px;
     grid-template-columns:repeat(var(--cols,4), 1fr);
   }
+  /* Edit tab, reorder mode: while a just-dropped card's new position is
+     being saved, every card dims and stops responding to taps/drags —
+     see setOrderSaveLocked/commitOrderNow. Applied to the whole grid
+     (not just the card that moved) since the drag gesture itself is what's
+     blocked, not just that one card's data. */
+  .photo-grid.order-saving .card{
+    opacity:0.4; filter:grayscale(0.7); pointer-events:none; transition:opacity 0.15s, filter 0.15s;
+  }
   .card{
     background:var(--paper-raised); border:1.5px solid var(--line); border-radius:12px;
     overflow:hidden; position:relative; aspect-ratio:1/1.12;
@@ -1680,19 +1688,53 @@ function requestFilterChipsHtml(priceValues){
 function requestCardHtml(g){
   const inactive = !groupIsActive(g);
   const checked = locationFilter!=='All' && isGroupChecked(g, locationFilter);
-  const locBadge = locationFilter==='All' ? `<div class="loc-tag">${esc(g.location)}</div>` : '';
+  // __scopeSizes marks a price-filter-only pseudo-card (see
+  // buildPriceScopedGroups) — same item, but only showing the size(s) that
+  // actually match the selected price (e.g. just XXL, when its +3 upcharge
+  // gives it a different price than the item's other sizes). The "All"
+  // filter never produces one of these — g is always the real, full,
+  // every-size group there, so this whole branch is simply unused then.
+  const scopeSizes = g.__scopeSizes || null;
+  const locBadge = (!scopeSizes && locationFilter==='All') ? `<div class="loc-tag">${esc(g.location)}</div>` : '';
+  const sizeBadge = scopeSizes ? `<div class="size-badge">${esc(scopeSizes.map(sz=>SIZE_SHORT_LABEL[sz]||sz).join('/'))}</div>` : '';
   const photo = g.photo ? `<img src="${esc(g.photo)}" loading="lazy">` : '👕';
   const pending = Object.values(g.rows).some(r=>pendingSubmitIds.has(String(r.ID)));
   const priceVal = Object.values(g.rows).map(r=>Number(r.Price||0)).find(p=>p>0) || 0;
   const priceBadge = priceVal>0 ? `<div class="request-price-badge">$${priceVal.toFixed(2)}</div>` : '';
+  const scopeArg = scopeSizes ? `,'${scopeSizes.join(',')}'` : '';
   return `
-    <div class="card${inactive?' inactive-card':''}${checked?' session-checked':''}${pending?' card-pending':''}" data-group-key="${esc(g.key)}" ${pending?'':`onclick="openRequestCheck('${esc(g.key)}')"`}>
+    <div class="card${inactive?' inactive-card':''}${checked?' session-checked':''}${pending?' card-pending':''}" data-group-key="${esc(g.key)}" ${pending?'':`onclick="openRequestCheck('${esc(g.key)}'${scopeArg})"`}>
       <div class="photo">${photo}</div>
       ${priceBadge}
+      ${sizeBadge}
       ${locBadge}
       ${inactive?'<div class="loc-tag" style="left:auto;right:6px;top:auto;bottom:34px;background:rgba(174,66,57,0.85);">OFF</div>':''}
       <div class="cap">${esc(g.name)}</div>
     </div>`;
+}
+// Splits each group into either its normal full-item form, or a scoped
+// pseudo-card containing ONLY the sizes that share the given price — used
+// when a specific price is selected in the Request tab's Price filter, so
+// a +3-upcharged XXL/XXXL shows as its own separate card under its own
+// (different) price instead of being lumped into the base-price item.
+// A group where every size already shares this exact price (the common
+// case) is returned completely unchanged — no upcharge sizes, or the
+// price selected just happens to be the shared base price.
+function buildPriceScopedGroups(groups, targetPrice){
+  const result = [];
+  groups.forEach(g=>{
+    const allSizes = Object.keys(g.rows);
+    const matchingSizes = allSizes.filter(sz=>Number(g.rows[sz].Price||0)===targetPrice);
+    if(matchingSizes.length===0) return;
+    if(matchingSizes.length===allSizes.length){
+      result.push(g);
+    }else{
+      const scopedRows = {};
+      matchingSizes.forEach(sz=>{ scopedRows[sz] = g.rows[sz]; });
+      result.push({ key:g.key, name:g.name, type:g.type, location:g.location, photo:g.photo, rows:scopedRows, __scopeSizes:matchingSizes });
+    }
+  });
+  return result;
 }
 function renderRequestTab(main, list){
   // Direct-system items only (any Type, not just the Hoodie-family
@@ -1712,7 +1754,7 @@ function renderRequestTab(main, list){
   const priceFilterActive = usesPriceFilter(categoryFilter);
   if(priceFilterActive){
     if(requestFilter==='price' && requestPriceFilter!=null){
-      groups = groups.filter(g=>Object.values(g.rows).some(r=>Number(r.Price||0)===requestPriceFilter));
+      groups = buildPriceScopedGroups(groups, requestPriceFilter);
     }
   }else if(checkedFilter!=='all'){
     groups = groups.filter(g => checkedFilter==='checked' ? isGroupChecked(g,locationFilter) : !isGroupChecked(g,locationFilter));
@@ -2000,7 +2042,6 @@ document.getElementById('btnLocation').addEventListener('click', ()=>{
     </div>`);
 });
 function pickLocationFilter(code){
-  if(pendingOrderCommit) flushPendingOrderCommit(); // don't leave a just-dragged order stranded in the debounce window when switching away from the location it belongs to
   locationFilter = code;
   state.deviceLocation = code; // saved to this device's localStorage — stays put across refreshes/reopens
   saveState();
@@ -2313,7 +2354,7 @@ async function toggleCheckedAndClose(key, code){
 // whatever's entered straight onto Resupply (or On Hold, if that
 // location already has some) the instant Request is pressed. No
 // diminishing-returns math, no Display writes.
-function openRequestCheck(key){
+function openRequestCheck(key, scopeSizesCsv){
   if(locationFilter==='All'){
     toast(t('selectLocationDisplay'), true);
     return;
@@ -2321,10 +2362,15 @@ function openRequestCheck(key){
   const groups = buildGroups(activeRows());
   const g = groups.find(x=>x.key===key);
   if(!g) return;
+  // scopeSizesCsv: set when opened from a price-filtered pseudo-card (see
+  // buildPriceScopedGroups/requestCardHtml) — restricts the popup to just
+  // that size (or sizes), e.g. only XXL's +3-upcharged price was clicked,
+  // so only XXL is steppable here even though the item has other sizes too.
+  const scopeSizes = scopeSizesCsv ? scopeSizesCsv.split(',') : null;
   requestDraftGroupKey = key;
   requestDraftLocation = locationFilter;
   requestDraft = {};
-  const activeSizesPresent = HOODIE_SIZES.filter(sz=>g.rows[sz]);
+  const activeSizesPresent = HOODIE_SIZES.filter(sz=>g.rows[sz] && (!scopeSizes || scopeSizes.includes(sz)));
   activeSizesPresent.forEach(sz=>{
     requestDraft[g.rows[sz].ID] = { current: 0, size: sz };
   });
@@ -3264,12 +3310,13 @@ async function submitNewItem(){
 // reordering while Bears is selected (top bar) only ever touches Bears'
 // own Order column — Tangle and Parkway are untouched.
 let dragReorder = null; // active drag session, or null when nothing's being dragged
+let orderSaveLocked = false; // true while an order save is in flight (+ short cooldown after) — see setOrderSaveLocked/commitOrderNow
 let lastOrderCommitTime = 0; // guards the periodic auto-poll from racing a just-sent order write (see setInterval below)
 const DRAG_LONG_PRESS_MS = 150;
 const DRAG_MOVE_CANCEL_PX = 8;
 
 document.addEventListener('pointerdown', (e)=>{
-  if(currentTab!=='edit' || !editReorderMode) return;
+  if(currentTab!=='edit' || !editReorderMode || orderSaveLocked) return;
   const cardEl = e.target.closest('#photoGrid .card[data-group-key]:not(.card-pending)');
   if(!cardEl) return;
   if(e.pointerType==='mouse' && e.button!==0) return; // left-click only for mouse
@@ -3302,7 +3349,7 @@ document.addEventListener('pointerdown', (e)=>{
 });
 
 function beginDragReorder(cardEl, e){
-  if(dragReorder) return; // a drag session is already active — never start a second one for the same or an overlapping gesture
+  if(dragReorder || orderSaveLocked) return; // a drag session is already active, or the grid is locked while a previous reorder saves — never start a second one
   if(locationFilter==='All'){
     toast(t('pickLocationForOrder'), true);
     return;
@@ -3604,38 +3651,22 @@ async function onDragEnd(e){
   });
 
   settleDraggedCard(cardEl); // drop the dragging visual state immediately — the grid is already in the correct order (moved during the drag, not rebuilt), so no need for a full render() here
-  // Debounced, not sent immediately — see scheduleOrderCommit. Dragging
-  // several cards in quick succession used to fire one full network write
-  // PER drag (every visible row's Order column gets rewritten each time,
-  // not just the one that moved), and since a new drag could start before
-  // the previous write had finished, several of those full-grid writes
-  // could end up in flight at once — Apps Script serializes concurrent
-  // writes to the same sheet, so they'd queue up and each one would take
-  // longer than the last, which is exactly the "gets slower and slower,
-  // then breaks" symptom. Coalescing rapid drags into one write (sent
-  // shortly after the LAST one settles) fixes that without needing to
-  // slow down or pace out how fast you actually drag.
-  scheduleOrderCommit(code, updates);
+  await commitOrderNow(code, updates);
 }
-let pendingOrderCommit = null; // { code, updates } — the not-yet-sent result of the most recent drag
-let pendingOrderCommitTimer = null;
-const ORDER_COMMIT_DEBOUNCE_MS = 700;
-function scheduleOrderCommit(code, updates){
-  pendingOrderCommit = { code, updates };
-  clearTimeout(pendingOrderCommitTimer);
-  pendingOrderCommitTimer = setTimeout(flushPendingOrderCommit, ORDER_COMMIT_DEBOUNCE_MS);
-}
-// Sends whatever the LATEST pending order is (ignores any superseded ones
-// in between — only the final settled order after a burst of drags
-// actually needs to reach the sheet). Also called immediately when
-// something else needs the order committed right away (leaving the Edit
-// tab, switching location) instead of waiting out the debounce window.
-async function flushPendingOrderCommit(){
-  clearTimeout(pendingOrderCommitTimer);
-  pendingOrderCommitTimer = null;
-  if(!pendingOrderCommit) return;
-  const { code, updates } = pendingOrderCommit;
-  pendingOrderCommit = null;
+// Sends the order write immediately and locks the whole grid (dimmed,
+// nothing draggable or tappable) for the entire round trip, plus a short
+// cooldown afterward — see setOrderSaveLocked. Guarantees only one
+// order-commit request is ever in flight at a time: reordering quickly in
+// succession used to let a new drag start before the previous write had
+// actually landed, so several full-grid writes could end up overlapping —
+// Apps Script serializes concurrent writes to the same sheet, so they'd
+// queue up and each one would take longer than the last, which is exactly
+// the "gets slower and slower" symptom. Locking the grid until each write
+// is truly done (not just debounced/scheduled) removes the possibility of
+// that overlap entirely, instead of just narrowing the window for it.
+const ORDER_SAVE_COOLDOWN_MS = 400; // extra buffer after the write completes, giving it a moment to fully settle before the grid unlocks
+async function commitOrderNow(code, updates){
+  setOrderSaveLocked(true);
   toast(t('savingOrder'));
   const res = await apiPost({ action:'setGroupOrder', location:code, updates });
   if(res.ok){
@@ -3653,6 +3684,16 @@ async function flushPendingOrderCommit(){
     toast(t('saveFailed') + (res.error||t('unknownError')), true);
     refresh(false); // the write failed — the optimistic local state may be wrong, so resync with the server's real data
   }
+  setTimeout(()=>setOrderSaveLocked(false), ORDER_SAVE_COOLDOWN_MS);
+}
+// Dims every card in the grid and disables pointer interaction with all
+// of them (dragging AND regular tap-to-edit) while an order save is in
+// flight — see commitOrderNow. beginDragReorder also checks this directly
+// as a second line of defense.
+function setOrderSaveLocked(locked){
+  orderSaveLocked = locked;
+  const grid = document.getElementById('photoGrid');
+  if(grid) grid.classList.toggle('order-saving', locked);
 }
 
 /* ============================= EDIT TAB ============================= */
@@ -3904,13 +3945,6 @@ function applyReorderModeToggle(){
     hintEl.textContent = `${t(editReorderMode?'dragHintOn':'dragHintOff')} ${LOC_NAME_BY_CODE[locationFilter]}`;
   }
 }
-// Best-effort safety net for the order-commit debounce above: if the app
-// gets backgrounded/closed (phone home button, switching apps, closing the
-// tab) while a drag's write is still sitting in its debounce window, flush
-// it immediately instead of risking it never being sent at all.
-document.addEventListener('visibilitychange', ()=>{
-  if(document.hidden && pendingOrderCommit) flushPendingOrderCommit();
-});
 document.querySelector('nav.bottomnav').addEventListener('click', (e)=>{
   const el = e.target.closest('.nav-item');
   if(!el) return;
@@ -3923,7 +3957,6 @@ document.querySelector('nav.bottomnav').addEventListener('click', (e)=>{
     applyReorderModeToggle();
   }else{
     const prevTab = currentTab;
-    if(prevTab==='edit' && pendingOrderCommit) flushPendingOrderCommit(); // don't leave a just-dragged order stranded in the debounce window when navigating away from Edit
     // Leaving the Display/Request tab (to Storage, Resupply, or Edit)
     // resets the current Type's Direct/Indirect override back to its
     // default — the toggle only sticks while you're actively looking at
