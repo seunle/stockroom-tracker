@@ -193,35 +193,34 @@
     width:78px;height:78px;border-radius:14px;background:var(--paper-raised);border:1.5px solid var(--line);
     font-size:42px;font-weight:700;color:var(--thread-dark);
   }
-  /* Direct/Indirect system toggle — Display and Request tabs only, glued
-     to the immediate left of the scale +/- controls (one flex unit, gap:0
-     between them, so they read as a single connected control). Blue with
-     the thumb on the left = this type's own default system, unchanged.
-     Red-with-glow and the thumb slid right = overridden away from that
-     default — same red used for the On Hold / resupply-alert glow
-     elsewhere, so "this isn't the normal state" reads consistently. */
-  .system-toggle-wrap{display:flex; align-items:center; gap:0;}
-  .system-toggle-wrap .scale-ctrl{gap:4px;}
-  .system-toggle-wrap .scale-btn:first-child{border-radius:0 14px 14px 0;}
+  /* Direct/Indirect system toggle — Display and Request tabs only. Its own
+     standalone pill now (previously glued to the scale +/- controls; no
+     longer attached), sized to match the height of the other filter chips
+     (e.g. "All") rather than the taller scale buttons, with 2x the text
+     size. Blue with the slider thumb on the left = this type's own
+     default system, unchanged. Red-with-glow and the thumb slid right =
+     overridden away from that default — same red used for the On Hold /
+     resupply-alert glow elsewhere, so "this isn't the normal state" reads
+     consistently. */
   .system-toggle{
-    height:78px; box-sizing:border-box; display:flex; align-items:center; gap:10px;
-    padding:0 18px; border-radius:14px 0 0 14px; border:1.5px solid var(--thread); border-right:none;
+    height:64px; box-sizing:border-box; display:inline-flex; align-items:center; gap:16px;
+    padding:0 24px; border-radius:24px; border:1.5px solid var(--thread);
     background:var(--thread); color:#fff; cursor:pointer;
-    font-family:'Oswald'; font-weight:700; font-size:19px; text-transform:uppercase; letter-spacing:0.4px;
+    font-family:'Oswald'; font-weight:700; font-size:38px; text-transform:uppercase; letter-spacing:0.4px;
   }
   .system-toggle.overridden{
     background:var(--restock); border-color:var(--restock); color:#fff;
     box-shadow:0 0 0 3px rgba(174,66,57,0.35), 0 0 18px 5px rgba(174,66,57,0.5);
   }
   .system-toggle-track{
-    width:36px; height:20px; border-radius:11px; background:rgba(255,255,255,0.35);
+    width:44px; height:24px; border-radius:13px; background:rgba(255,255,255,0.35);
     position:relative; flex-shrink:0;
   }
   .system-toggle-thumb{
-    position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%;
+    position:absolute; top:2px; left:2px; width:20px; height:20px; border-radius:50%;
     background:#fff; transition:left 0.18s ease;
   }
-  .system-toggle.overridden .system-toggle-thumb{left:18px;}
+  .system-toggle.overridden .system-toggle-thumb{left:22px;}
 
   .photo-grid{
     display:grid; gap:9px;
@@ -285,6 +284,18 @@
     0%{transform:rotate(-1deg);}
     50%{transform:rotate(1.2deg);}
     100%{transform:rotate(-1deg);}
+  }
+  /* One-shot version — a single shake as a visual "something changed" cue
+     (used when the Direct/Indirect system toggle is pressed), as opposed
+     to cardJiggle's continuous wobble during reorder mode. */
+  .card.jiggle-once{animation:cardJiggleOnce 0.4s ease-in-out;}
+  @keyframes cardJiggleOnce{
+    0%{transform:rotate(0deg);}
+    20%{transform:rotate(-3deg);}
+    40%{transform:rotate(3deg);}
+    60%{transform:rotate(-2deg);}
+    80%{transform:rotate(2deg);}
+    100%{transform:rotate(0deg);}
   }
   main.grid-area.edit-mode-bg .card[data-group-key] img{
     -webkit-user-drag:none; pointer-events:none; /* the image itself should never intercept a drag or offer its own native save/drag behavior */
@@ -531,6 +542,14 @@
   .detail-wrap .size-grid{gap:2px;}
   .detail-wrap .size-col{border-right:1.5px solid var(--line); padding:0 6px;}
   .detail-wrap .size-col:last-child{border-right:none;}
+  /* Youth/Kids/Baby: 2 of the 7 grid tracks are blank spacers (one each
+     side) instead of real sizes — see displaySizesForType/openDisplayCheck.
+     Both need their border suppressed too: the spacer's own (nothing to
+     visually divide from, since there's no column before/after it) and
+     the last REAL column's (it's no longer the literal :last-child once a
+     spacer follows it, so the default rule above wouldn't otherwise catch it). */
+  .detail-wrap .size-col.size-col-spacer,
+  .detail-wrap .size-col.size-col-last-visible{border-right:none;}
   /* Display popup only (scoped via .detail-wrap, unique to this popup) —
      "min X" forced onto one line with a shrinking font so it never wraps,
      the label/count squeezed a little tighter, and the freed-up vertical
@@ -962,6 +981,17 @@ const SIZE_COLORS = {
 // stays "XXL"/"XXXL" (used for sorting, matching, colors, etc.); only the
 // text shown to the user is shortened, to save horizontal room.
 const SIZE_SHORT_LABEL = { XS:'XS', S:'S', M:'M', L:'L', XL:'XL', XXL:'2XL', XXXL:'3XL' };
+// Youth/Kids/Baby never carry 2XL/3XL — those sizes just don't make sense
+// for those types, so the Display popup and the New/Edit min-count grid
+// both drop them for these three specifically. Column WIDTH stays
+// identical to the regular 7-size layout (still 7 grid tracks under the
+// hood — see openDisplayCheck/locationTabbedSizeGridHtml) with one blank
+// spacer track on each side taking up where 2XL/3XL used to be, which is
+// what actually centers the remaining 5 without stretching them wider.
+const REDUCED_SIZE_TYPES = ['Youth', 'Kids', 'Baby'];
+function displaySizesForType(type){
+  return REDUCED_SIZE_TYPES.includes(type) ? SIZES.slice(0, 5) : SIZES;
+}
 
 let state = loadState();
 function applyUiScale(){
@@ -1513,12 +1543,19 @@ function render(){
   }
 
   let groups = buildGroups(list).filter(g=>matchesFilters(g, currentTab==='edit'));
+  // See usesPriceFilter — a Display-tab Type shows the Price filter
+  // instead of the checkmark one if THAT'S its default, e.g. a
+  // Hoodie-family item currently toggled to Indirect.
+  const displayPriceValues = (currentTab==='display' && usesPriceFilter(categoryFilter))
+    ? Array.from(new Set(list.filter(r=>matchesFilters({type:r.Type, location:r.Location})).map(r=>Number(r.Price||0)).filter(p=>p>0))).sort((a,b)=>a-b)
+    : [];
 
   main.innerHTML = `
     <div class="toolbar-top">
       ${currentTab==='edit' ? editFilterChipsHtml() : ''}
-      ${currentTab==='display' ? checkedFilterChipsHtml() : ''}
-      ${currentTab==='display' ? systemToggleHtml() : `<div class="scale-ctrl"><button class="scale-btn" onclick="adjustScale(1)">−</button><button class="scale-btn" onclick="adjustScale(-1)">+</button></div>`}
+      ${currentTab==='display' ? (usesPriceFilter(categoryFilter) ? requestFilterChipsHtml(displayPriceValues) : checkedFilterChipsHtml()) : ''}
+      ${currentTab==='display' ? systemToggleHtml() : ''}
+      <div class="scale-ctrl"><button class="scale-btn" onclick="adjustScale(1)">−</button><button class="scale-btn" onclick="adjustScale(-1)">+</button></div>
     </div>
     ${currentTab==='edit' ? `<button class="btn-new-wide" onclick="openNewItemForm()">+ ${t('newBtn')}</button>` : ''}
     <div class="grid-toolbar">
@@ -1529,8 +1566,14 @@ function render(){
   `;
   const grid = document.getElementById('photoGrid');
 
-  if(currentTab==='display' && checkedFilter!=='all'){
-    groups = groups.filter(g => checkedFilter==='checked' ? isGroupChecked(g,locationFilter) : !isGroupChecked(g,locationFilter));
+  if(currentTab==='display'){
+    if(usesPriceFilter(categoryFilter)){
+      if(requestFilter==='price' && requestPriceFilter!=null){
+        groups = groups.filter(g=>Object.values(g.rows).some(r=>Number(r.Price||0)===requestPriceFilter));
+      }
+    }else if(checkedFilter!=='all'){
+      groups = groups.filter(g => checkedFilter==='checked' ? isGroupChecked(g,locationFilter) : !isGroupChecked(g,locationFilter));
+    }
   }
   groups = applyCustomOrder(groups, locationFilter); // no-op when locationFilter is 'All' — order is per-location, so there's no single order to apply
 
@@ -1540,6 +1583,17 @@ function render(){
   }
 
   grid.innerHTML = groups.map(g=>cardHtml(g)).join('');
+}
+// Which filter row a Type shows (checkmark vs Price) is based on that
+// Type's DEFAULT system, never whichever system it's CURRENTLY using —
+// the Direct/Indirect toggle is explicitly meant to leave filters alone,
+// so a Men item toggled to Direct still filters by checked/unchecked (its
+// natural filter), not Price, and vice versa for a Hoodie-family item
+// toggled to Indirect. Used by both render()'s Display block and
+// renderRequestTab() so the same rule applies regardless of which one
+// currentTab actually routes to.
+function usesPriceFilter(type){
+  return HOODIE_TYPES.includes(type);
 }
 function editFilterChipsHtml(){
   const opts = [['all',t('filterAll')],['active',t('filterActive')],['inactive',t('filterInactive')]];
@@ -1622,22 +1676,31 @@ function renderRequestTab(main, list){
   // defaults — categoryFilter is only ever reachable here when its
   // CURRENT effective system is Direct, see renderBottomNav/setCategory/
   // toggleTypeSystem, so matchesFilters already restricts to that exact
-  // type — same grouping mechanism as every other tab).
+  // type — same grouping mechanism as every other tab). Which FILTER
+  // shows (Price vs checkmark) is still based on the Type's DEFAULT
+  // system though, per usesPriceFilter — e.g. a Men item currently
+  // toggled to Direct still filters by checked/unchecked here, not Price.
   const catLocFiltered = list.filter(r=>matchesFilters({type:r.Type, location:r.Location}));
   const priceValues = Array.from(new Set(
     catLocFiltered.map(r=>Number(r.Price||0)).filter(p=>p>0)
   )).sort((a,b)=>a-b);
 
   let groups = buildGroups(list).filter(g=>matchesFilters(g));
-  if(requestFilter==='price' && requestPriceFilter!=null){
-    groups = groups.filter(g=>Object.values(g.rows).some(r=>Number(r.Price||0)===requestPriceFilter));
+  const priceFilterActive = usesPriceFilter(categoryFilter);
+  if(priceFilterActive){
+    if(requestFilter==='price' && requestPriceFilter!=null){
+      groups = groups.filter(g=>Object.values(g.rows).some(r=>Number(r.Price||0)===requestPriceFilter));
+    }
+  }else if(checkedFilter!=='all'){
+    groups = groups.filter(g => checkedFilter==='checked' ? isGroupChecked(g,locationFilter) : !isGroupChecked(g,locationFilter));
   }
   groups = applyCustomOrder(groups, locationFilter);
 
   main.innerHTML = `
     <div class="toolbar-top">
-      ${requestFilterChipsHtml(priceValues)}
+      ${priceFilterActive ? requestFilterChipsHtml(priceValues) : checkedFilterChipsHtml()}
       ${systemToggleHtml()}
+      <div class="scale-ctrl"><button class="scale-btn" onclick="adjustScale(1)">−</button><button class="scale-btn" onclick="adjustScale(-1)">+</button></div>
     </div>
     <div class="grid-toolbar">
       <div class="grid-title loc-title-big">${tabTitle()} <span class="loc-title-count">${groups.length}</span></div>
@@ -1654,9 +1717,10 @@ function activeLocationTitleWord(){
   return locationFilter==='All' ? t('locAll') : LOC_NAME_BY_CODE[locationFilter];
 }
 // Direct/Indirect system toggle — Display and Request tabs only (see
-// render()/renderRequestTab). Clicking always just flips the CURRENT
-// type's effective system; whether it renders blue (this type's own
-// default) or red-with-glow (overridden away from it) is purely a
+// render()/renderRequestTab). Its own standalone pill, not attached to
+// the scale +/- controls next to it. Clicking always just flips the
+// CURRENT type's effective system; whether it renders blue (this type's
+// own default) or red-with-glow (overridden away from it) is purely a
 // function of whether that flip landed back on the default or not.
 function systemToggleHtml(){
   const type = categoryFilter;
@@ -1664,15 +1728,9 @@ function systemToggleHtml(){
   const isDefault = HOODIE_TYPES.includes(type) === direct;
   const label = direct ? t('systemDirect') : t('systemIndirect');
   return `
-    <div class="system-toggle-wrap">
-      <div class="system-toggle${isDefault?'':' overridden'}" onclick="toggleTypeSystem()">
-        <span class="system-toggle-track"><span class="system-toggle-thumb"></span></span>
-        <span class="system-toggle-label">${label}</span>
-      </div>
-      <div class="scale-ctrl">
-        <button class="scale-btn" onclick="adjustScale(1)">−</button>
-        <button class="scale-btn" onclick="adjustScale(-1)">+</button>
-      </div>
+    <div class="system-toggle${isDefault?'':' overridden'}" onclick="toggleTypeSystem()">
+      <span class="system-toggle-label">${label}</span>
+      <span class="system-toggle-track"><span class="system-toggle-thumb"></span></span>
     </div>`;
 }
 function toggleTypeSystem(){
@@ -1689,9 +1747,24 @@ function toggleTypeSystem(){
     currentTab = 'display';
   }
   render();
+  jiggleAllCardsOnce(); // one shake across the whole grid — a visual cue that something just changed, since the entire tab/popup behavior for this type just did
   apiPost({action:'setTypeSystem', type, system:next}).then(res=>{
     if(!res.ok) toast(t('saveFailed') + (res.error||t('unknownError')), true);
   });
+}
+// Single-shake visual cue (not the continuous reorder-mode wobble — see
+// cardJiggleOnce) applied to every card currently in the grid at once,
+// then cleaned up once the animation finishes.
+function jiggleAllCardsOnce(){
+  const grid = document.getElementById('photoGrid');
+  if(!grid) return;
+  const cards = grid.querySelectorAll('.card[data-group-key]');
+  cards.forEach(el=>{
+    el.classList.remove('jiggle-once');
+    void el.offsetWidth; // forces a reflow so re-adding the class restarts the animation even if one's already mid-play
+    el.classList.add('jiggle-once');
+  });
+  setTimeout(()=>{ cards.forEach(el=>el.classList.remove('jiggle-once')); }, 420);
 }
 function tabTitle(){
   // The location word is wrapped so it can be styled darker/more prominent
@@ -1980,7 +2053,11 @@ function openDisplayCheck(key){
   displayDraftGroupKey = key;
   displayDraftLocation = locationFilter;
   displayDraft = {};
-  Object.values(g.rows).forEach(row=>{
+  const popupSizes = displaySizesForType(g.type);
+  const sizesReduced = popupSizes.length < SIZES.length;
+  popupSizes.forEach(sz=>{
+    const row = g.rows[sz];
+    if(!row) return;
     displayDraft[row.ID] = { original:Number(row[displayField]||0), current:Number(row[displayField]||0), minCount:Number(row[MIN_COUNT_FIELD_BY_CODE[locationFilter]]||0) };
   });
   // If NOTHING has a Min Count set yet at this location (every present
@@ -1999,13 +2076,15 @@ function openDisplayCheck(key){
       <div class="detail-photo">${g.photo?`<img src="${esc(g.photo)}">`:''}</div>
       <div class="size-grid-wrap${noMinSet?' no-min-set':''}">
       <div class="size-grid">
-        ${SIZES.map(sz=>{
+        ${sizesReduced?'<div class="size-col size-col-spacer"></div>':''}
+        ${popupSizes.map((sz, idx)=>{
+          const lastVisibleCls = (sizesReduced && idx===popupSizes.length-1) ? ' size-col-last-visible' : '';
           const row = g.rows[sz];
-          if(!row) return `<div class="size-col" style="opacity:0.3;"><div class="size-label">${SIZE_SHORT_LABEL[sz]}</div><div class="size-count">—</div></div>`;
+          if(!row) return `<div class="size-col${lastVisibleCls}" style="opacity:0.3;"><div class="size-label">${SIZE_SHORT_LABEL[sz]}</div><div class="size-count">—</div></div>`;
           const d = displayDraft[row.ID];
           const belowMin = d.current < d.minCount;
           return `
-            <div class="size-col">
+            <div class="size-col${lastVisibleCls}">
               <div class="size-label">${SIZE_SHORT_LABEL[sz]}</div>
               <div class="size-count ${belowMin?'low':''}" id="cnt-${row.ID}">${d.current}</div>
               <button class="size-plus" onclick="stepDisplayDraft('${row.ID}',1)">+</button>
@@ -2013,12 +2092,13 @@ function openDisplayCheck(key){
               <div class="size-min">${t('minLabel')} ${d.minCount}</div>
             </div>`;
         }).join('')}
+        ${sizesReduced?'<div class="size-col size-col-spacer"></div>':''}
       </div>
       ${noMinSet?`<div class="no-min-overlay">${t('noMinCountMsg')}</div>`:''}
       </div>
     </div>
     <div class="sheet-actions" style="margin-top:16px;">
-      <button class="btn-check-toggle${isGroupChecked(g,locationFilter)?' on':''}" id="displayCheckToggle" onclick="toggleCheckedAndClose('${esc(key)}','${locationFilter}')">✓</button>
+      <button class="btn-check-toggle${isGroupChecked(g,locationFilter)?' on':''}" id="displayCheckToggle" onclick="toggleCheckedAndClose('${esc(key)}','${locationFilter}')"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 13 9.5 18.5 20 6"></polyline></svg></button>
       <button class="btn btn-confirm btn-wide3 btn-display-update" onclick="commitDisplayCheck()">${t('doneBtn')}</button>
     </div>
   `, 'display');
@@ -2971,15 +3051,21 @@ function onItemTypeChange(formPrefix){
   }else{
     const locPicker = document.getElementById(formPrefix+'LocPicker');
     const locCodesOn = locPicker ? Array.from(locPicker.querySelectorAll('.loc-row.on')).map(el=>el.dataset.code) : [];
-    container.innerHTML = `<label>${t('fieldSizesCheck')}</label>` + locationTabbedSizeGridHtml(formPrefix+'Size', locCodesOn, {}, formPrefix==='edit' ? locationFilter : undefined);
+    container.innerHTML = `<label>${t('fieldSizesCheck')}</label>` + locationTabbedSizeGridHtml(formPrefix+'Size', locCodesOn, {}, formPrefix==='edit' ? locationFilter : undefined, typeVal);
   }
 }
-function locationTabbedSizeGridHtml(prefix, enabledCodes, valuesByCode, preferredCode){
+function locationTabbedSizeGridHtml(prefix, enabledCodes, valuesByCode, preferredCode, type){
   // preferredCode: if given and it's one of the enabled locations, it wins
   // over the normal "first enabled location in T/P/B order" default — used
   // by the Edit popup to default to whichever location the app itself is
   // currently set to, when this item already has that location active.
   const initialActive = (preferredCode && enabledCodes.includes(preferredCode)) ? preferredCode : (LOCS.map(l=>l.code).find(c=>enabledCodes.includes(c)) || null);
+  // Youth/Kids/Baby drop 2XL/3XL here too (see displaySizesForType) — a
+  // blank spacer column on each side keeps the remaining 5 the exact same
+  // width as every other type's 7, just centered in the box instead of
+  // stretched wider to fill the space the missing two left behind.
+  const panelSizes = displaySizesForType(type);
+  const spacerHtml = panelSizes.length < SIZES.length ? '<div class="size-col size-col-spacer"></div>' : '';
   return `
     <div class="size-loc-tabs" id="${prefix}Tabs">
       ${LOCS.map(l=>`<div class="size-loc-tab${enabledCodes.includes(l.code)?'':' disabled'}${l.code===initialActive?' active':''}" data-tab-code="${l.code}" onclick="switchSizeLocTab('${prefix}','${l.code}')">${l.name}</div>`).join('')}
@@ -2988,7 +3074,9 @@ function locationTabbedSizeGridHtml(prefix, enabledCodes, valuesByCode, preferre
       const values = valuesByCode[l.code] || {};
       return `<div class="size-loc-panel" data-panel-code="${l.code}" data-prefix="${prefix}" style="display:${l.code===initialActive?'block':'none'};">
         <div class="size-grid">
-          ${SIZES.map(s=>sizeStepperFormHtml(s, values[s]||0, prefix+'-'+l.code)).join('')}
+          ${spacerHtml}
+          ${panelSizes.map(s=>sizeStepperFormHtml(s, values[s]||0, prefix+'-'+l.code)).join('')}
+          ${spacerHtml}
         </div>
       </div>`;
     }).join('')}
@@ -3557,7 +3645,7 @@ function openEditGroup(key){
   }
   const sizesSectionHtml = isHoodieItem
     ? hoodieSizesFieldHtml('editHoodie', hoodiePrice, hoodieSelectedSizes)
-    : `<label>${t('fieldSizesCheck')}</label>${locationTabbedSizeGridHtml('editSize', locCodesOn, valuesByCode, locationFilter)}`;
+    : `<label>${t('fieldSizesCheck')}</label>${locationTabbedSizeGridHtml('editSize', locCodesOn, valuesByCode, locationFilter, g.type)}`;
   openSheetHtml(`
     <h2>${t('editItemTitle')}</h2>
     ${isActive?'':`<div class="desc" style="color:var(--restock);font-weight:600;">${t('deactivatedNotice')}</div>`}
@@ -3956,7 +4044,7 @@ function hapticTap(){
 // re-rendered, instead of wiring vibration into each individual onclick.
 document.addEventListener('click', (e)=>{
   const el = e.target.closest(
-    'button, .card, .chip, .nav-item, .top-btn, .side-cat, .loc-row, ' +
+    'button, .card, .chip, .nav-item, .top-btn, .side-cat, .loc-row, .system-toggle, ' +
     '.rotate-btn, .session-refresh-btn, .size-plus, .size-minus, .rq-minus, .rq-plus, .scale-btn, .size-loc-tab:not(.disabled), .btn-new-wide, .resupply-collapsed-row'
   );
   if(el) hapticTap();
