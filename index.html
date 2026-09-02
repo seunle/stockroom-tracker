@@ -452,6 +452,12 @@
   .btn-danger{background:var(--restock);color:#fff;}
   .btn-ok{background:var(--ok);color:#fff;}
   .btn-confirm{background:#B7D9C2; color:#2E7D32; border:1.5px solid #2E7D32;}
+  /* Display popup's Update button specifically — 1.5x the base .btn size
+     (font 13px→19.5px, padding scaled to match) so it reads as a genuinely
+     bigger button, not just bigger text squeezed into the same box. Scoped
+     to this one button, not shared with Request's identically-styled
+     .btn-confirm (that one stays the normal .btn size). */
+  .btn-display-update{font-size:19.5px; padding:16.5px 21px;}
   .btn:active{opacity:0.75;}
   /* Checkmark toggle — takes roughly 1/4 of the action row (flex:1 next to
      the Done/Request button's flex:3), icon-only, toggles like a filter
@@ -509,6 +515,18 @@
     background:var(--line);
   }
   .detail-wrap .size-min{white-space:nowrap; font-size:clamp(6.5px, 1.7cqw, 9.5px); margin-top:1px;}
+  /* Wraps .size-grid inside the Display popup only, so the "no Min Count
+     set yet" overlay can sit on top of just the sizes (not the photo) —
+     see openDisplayCheck. Takes over the flex:1/min-width:0 role .size-grid
+     itself normally carries, since it's now the actual flex child here. */
+  .detail-wrap .size-grid-wrap{position:relative; flex:1; min-width:0;}
+  .detail-wrap .size-grid-wrap.no-min-set .size-grid{opacity:0.3; filter:grayscale(1); pointer-events:none;}
+  .no-min-overlay{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    text-align:center; padding:6% 8%; font-family:'Oswald'; font-weight:700;
+    font-size:clamp(11px, 3.4cqw, 20px); text-transform:uppercase; letter-spacing:0.3px;
+    line-height:1.35; color:var(--restock);
+  }
   .size-col{text-align:center;}
   .size-label{font-family:'Oswald';font-weight:700;font-size:clamp(15px, 4.2cqw, 39px);margin-bottom:5px;}
   .size-plus,.size-minus{
@@ -872,7 +890,7 @@
   </div>
   <button class="session-refresh-btn" id="btnRefreshSession" title="Refresh Session (also resyncs)"><span class="refresh-arrow">↻</span> Refresh Session</button>
   <div class="top-actions">
-    <button class="top-btn" id="btnLocation">All Locs</button>
+    <button class="top-btn" id="btnLocation">Tangle</button>
     <button class="top-btn icon-only" id="btnUndo" title="Undo last action">Undo</button>
     <button class="top-btn icon-only" id="btnSettings" title="Settings">⚙</button>
   </div>
@@ -923,7 +941,7 @@ function applyUiScale(){
 }
 let rows = [];              // flat rows from the sheet
 let currentTab = ['display','storage','resupply'].includes(state.defaultTab) ? state.defaultTab : 'display';
-let locationFilter = state.deviceLocation || 'All'; // 'All' | 'T' | 'P' | 'B' — persisted per device, see pickLocationFilter
+let locationFilter = (state.deviceLocation && state.deviceLocation !== 'All') ? state.deviceLocation : 'T'; // 'T' | 'P' | 'B' — persisted per device, see pickLocationFilter. "All Locs" used to be a valid value here too, but that option's gone now — falls back to Tangle for any device that still has the old 'All' saved.
 let categoryFilter = 'Men'; // sidebar's "All" tab is gone — app always opens on Men now
 let sidebarEditMode = false;
 let editFilter = 'all'; // 'all' | 'active' | 'inactive' — Edit tab only
@@ -977,7 +995,8 @@ const TRANSLATIONS = {
     deactivateTitle:'Deactivate', deactivateBody:'Hides it from Display/Storage/Resupply. Nothing is deleted from the sheet — you can reactivate it here anytime, or flip the Active column back to 1 directly in Sheets.',
     reactivating:'Reactivating…', deactivating:'Deactivating…', reactivated:'Reactivated', deactivatedToast:'Deactivated',
     selectLocationDisplay:'Select a specific location (top bar) before checking Display counts',
-    editingDisplay:'editing Display -', checkedBtn:'✓ Checked', doneBtn:'Done', markedChecked:'Marked checked', checkedToast:'Checked', minLabel:'min',
+    editingDisplay:'editing Display -', checkedBtn:'✓ Checked', doneBtn:'Update', markedChecked:'Marked checked', checkedToast:'Checked', minLabel:'min',
+    noMinCountMsg:'Please Provide a Min Count in Edit',
     photoReady:'Photo ready — tap Save/Add to finish', photoError:'Could not read that photo (', photoErrorSuffix:'). Try a JPG or PNG, not HEIC.', processingPhoto:'Processing photo…',
     connectFirst:'Connect your sheet first',
     need:'Need', hold:'Hold', onHold:'On Hold', resupplyFor:'Resupply for', requestFor:'Request for', resupplyBtn:'Resupply', requestBtn:'Request', stockBtn:'Stock', requestSentToast:'Requested',
@@ -1024,7 +1043,8 @@ const TRANSLATIONS = {
     deactivateTitle:'비활성화', deactivateBody:'진열/재고/보충 탭에서 숨겨집니다. 시트에서 삭제되지는 않으며, 언제든 여기서 재활성화하거나 시트의 Active 열을 직접 1로 바꿀 수 있습니다.',
     reactivating:'재활성화 중…', deactivating:'비활성화 중…', reactivated:'재활성화됨', deactivatedToast:'비활성화됨',
     selectLocationDisplay:'진열 수량을 확인하려면 상단에서 매장을 선택하세요',
-    editingDisplay:'진열 수정 -', checkedBtn:'✓ 확인함', doneBtn:'완료', markedChecked:'확인 완료로 표시함', checkedToast:'확인함', minLabel:'최소',
+    editingDisplay:'진열 수정 -', checkedBtn:'✓ 확인함', doneBtn:'업데이트', markedChecked:'확인 완료로 표시함', checkedToast:'확인함', minLabel:'최소',
+    noMinCountMsg:'편집에서 최소 수량을 입력해주세요',
     photoReady:'사진 준비 완료 — 저장/추가를 눌러 마무리하세요', photoError:'사진을 읽을 수 없습니다 (', photoErrorSuffix:'). HEIC 대신 JPG나 PNG를 사용해 보세요.', processingPhoto:'사진 처리 중…',
     connectFirst:'먼저 시트를 연결하세요',
     need:'필요', hold:'보류', onHold:'보류 중', resupplyFor:'보충 대상:', requestFor:'요청 대상:', resupplyBtn:'보충', requestBtn:'요청', stockBtn:'입고', requestSentToast:'요청됨',
@@ -1326,7 +1346,7 @@ function renderBottomNav(){
 function render(){
   renderSidebar();
   renderBottomNav();
-  document.getElementById('btnLocation').textContent = locationFilter==='All' ? t('allLocs') : LOCS.find(l=>l.code===locationFilter).name;
+  document.getElementById('btnLocation').textContent = LOCS.find(l=>l.code===locationFilter).name;
   document.getElementById('btnLocation').style.display = currentTab==='resupply' ? 'none' : '';
 
   const main = document.getElementById('main');
@@ -1783,7 +1803,6 @@ document.getElementById('btnLocation').addEventListener('click', ()=>{
   openSheetHtml(`
     <h2>${t('filterByLocation')}</h2>
     <div class="chiprow">
-      <div class="chip ${locationFilter==='All'?'on':''}" onclick="pickLocationFilter('All')">${t('locAll')}</div>
       ${LOCS.map(l=>`<div class="chip ${locationFilter===l.code?'on':''}" onclick="pickLocationFilter('${l.code}')">${l.name}</div>`).join('')}
     </div>`);
 });
@@ -1880,6 +1899,13 @@ function openDisplayCheck(key){
   Object.values(g.rows).forEach(row=>{
     displayDraft[row.ID] = { original:Number(row[displayField]||0), current:Number(row[displayField]||0), minCount:Number(row[MIN_COUNT_FIELD_BY_CODE[locationFilter]]||0) };
   });
+  // If NOTHING has a Min Count set yet at this location (every present
+  // size still at the default 0 — i.e. nobody has been into Edit for this
+  // item/location yet), the size steppers are meaningless: everything
+  // would show as "below min" the moment it's touched. Grey the whole
+  // grid out and point at Edit instead of letting someone start adjusting
+  // display counts against a min that was never actually set.
+  const noMinSet = Object.values(displayDraft).every(d=>d.minCount===0);
   openSheetHtml(`
     <div style="margin-bottom:4px; padding-right:50px;">
       <h2 style="margin:0 0 1px 0;">${esc(g.name)}</h2>
@@ -1887,6 +1913,7 @@ function openDisplayCheck(key){
     </div>
     <div class="detail-wrap">
       <div class="detail-photo">${g.photo?`<img src="${esc(g.photo)}">`:''}</div>
+      <div class="size-grid-wrap${noMinSet?' no-min-set':''}">
       <div class="size-grid">
         ${SIZES.map(sz=>{
           const row = g.rows[sz];
@@ -1903,10 +1930,12 @@ function openDisplayCheck(key){
             </div>`;
         }).join('')}
       </div>
+      ${noMinSet?`<div class="no-min-overlay">${t('noMinCountMsg')}</div>`:''}
+      </div>
     </div>
     <div class="sheet-actions" style="margin-top:16px;">
       <button class="btn-check-toggle${isGroupChecked(g,locationFilter)?' on':''}" id="displayCheckToggle" onclick="toggleCheckedAndClose('${esc(key)}','${locationFilter}')">✓</button>
-      <button class="btn btn-confirm btn-wide3" onclick="commitDisplayCheck()">${t('doneBtn')}</button>
+      <button class="btn btn-confirm btn-wide3 btn-display-update" onclick="commitDisplayCheck()">${t('doneBtn')}</button>
     </div>
   `, 'display');
   scrollSheetToBottom();
