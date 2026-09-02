@@ -133,6 +133,15 @@
                                shrinks its wrapping instead of overflowing the box */
   }
   .side-cat.active{background:var(--thread); color:#fff;}
+  /* Resupply-tab-only alert: at least one active item of this Type needs
+     resupply at some real location (On Hold doesn't count). Only ever
+     applied while the Resupply tab is open — see renderSidebar. Placed
+     after .side-cat.active and matched with equal specificity so it wins
+     the tie-break even on the currently-active (blue) tab. */
+  .side-cat.resupply-alert{
+    color:var(--restock);
+    text-shadow:0 0 6px rgba(174,66,57,0.85), 0 0 14px rgba(174,66,57,0.55);
+  }
   /* Static (non-clickable) header sitting where the old "All" tab used to
      be — just labels the list below it, doesn't filter anything. */
   .side-type-label{
@@ -301,6 +310,13 @@
      bolder than the collapsed rows' — makes it unmistakable at a glance
      which location you're currently looking at. */
   .resupply-row-label.active-label{font-size:52px; font-weight:800;}
+  /* Resupply-tab per-location alert: this location has items needing
+     resupply (On Hold excluded). Deliberately doesn't touch `color` —
+     the label keeps whatever color it already has (grey for a collapsed
+     row, dark for the active one); this only layers a red glow behind it. */
+  .resupply-row-label.has-need{
+    text-shadow:0 0 6px rgba(174,66,57,0.85), 0 0 14px rgba(174,66,57,0.55);
+  }
   .resupply-row-count{
     display:inline-block; vertical-align:middle; background:var(--line); color:var(--ink); font-weight:800;
     font-size:15px; padding:2px 12px; border-radius:12px; margin-left:8px;
@@ -1610,15 +1626,27 @@ function sidebarFontSize(c){
   if(longest<=7) return 25;
   return 22; // 8+ chars, e.g. "CREWNECK", "Y HOODIE"
 }
+// Resupply-tab sidebar alert: does this Type have at least one active item
+// needing resupply at some real location right now? On Hold deliberately
+// doesn't count — matches resupplyItemsForCode's own definition of "needs
+// resupply", just checked across T/P/B instead of one specific code.
+function typeHasResupplyItems(type){
+  return activeRows().some(r => r.Type===type && ['T','P','B'].some(c => Number(r[RESUPPLY_FIELD_BY_CODE[c]]||0) > 0));
+}
 function renderSidebar(){
   const el = document.getElementById('sidebar');
   el.classList.toggle('edit-mode', sidebarEditMode);
   // While a drag is in progress, show the live in-progress order instead of
   // the last-saved one, so the list visibly reshuffles as you drag.
   const cats = sidebarDrag ? sidebarDrag.order : categoriesList();
+  // Resupply-tab-only: which types currently have at least one item needing
+  // resupply at some real location (On Hold excluded) — those get the red
+  // glow. Computed fresh each render, and only while the Resupply tab is
+  // actually open, so switching to Display/Storage/Edit never shows it.
+  const resupplyAlertTypes = currentTab==='resupply' ? new Set(cats.filter(typeHasResupplyItems)) : null;
   let html = `<div class="side-type-label">${t('sidebarTypeLabel')}</div>`;
   html += cats.map(c=>`
-    <div class="side-cat ${categoryFilter===c?'active':''}${sidebarDrag && sidebarDrag.type===c?' dragging':''}" data-type="${esc(c)}" style="font-size:${sidebarFontSize(c)}px;" onclick="${sidebarEditMode?'':`setCategory('${esc(c)}')`}">
+    <div class="side-cat ${categoryFilter===c?'active':''}${sidebarDrag && sidebarDrag.type===c?' dragging':''}${resupplyAlertTypes && resupplyAlertTypes.has(c)?' resupply-alert':''}" data-type="${esc(c)}" style="font-size:${sidebarFontSize(c)}px;" onclick="${sidebarEditMode?'':`setCategory('${esc(c)}')`}">
       ${sidebarCategoryLabel(c)}${sidebarEditMode?`<div class="drag-handle" onpointerdown="startSidebarDrag(event,'${esc(c)}')">⠿</div>`:''}
     </div>`).join('');
   html += `<div class="side-editbtn" onclick="sidebarEditMode=!sidebarEditMode;render();">${sidebarEditMode?t('sidebarDone'):t('sidebarEdit')}</div>`;
@@ -1633,6 +1661,7 @@ function setCategory(c){
   }else if(!isHoodie && wasHoodie && currentTab==='request'){
     currentTab = 'display';
   }
+  if(currentTab==='resupply') autoSelectResupplyLocationForCategory();
   render();
 }
 
@@ -2177,7 +2206,7 @@ function renderResupplyTab(main, list){
       </div>
     </div>
     <div class="resupply-active-section${activeCode===ON_HOLD_CODE?' onhold-glow':''}">
-      <div class="resupply-row-label active-label">${esc(activeName).toUpperCase()} <span class="resupply-row-count active-count">${activeItems.length}</span></div>
+      <div class="resupply-row-label active-label${activeCode!==ON_HOLD_CODE && activeItems.length>0?' has-need':''}">${esc(activeName).toUpperCase()} <span class="resupply-row-count active-count">${activeItems.length}</span></div>
       <div class="photo-grid" id="resupplyGrid" style="--cols:${state.gridColsByTab.resupply};"></div>
     </div>
     <div id="resupplyCollapsedRows"></div>
@@ -2194,7 +2223,7 @@ function renderResupplyTab(main, list){
     const count = resupplyItemsFor(code).length;
     const name = code===ON_HOLD_CODE ? t('onHold') : LOC_NAME_BY_CODE[code];
     return `<div class="resupply-collapsed-row" data-loc-row="${code}" onclick="selectResupplyLocation('${code}')">
-      <div class="resupply-row-label">${esc(name.toUpperCase())} <span class="resupply-row-count">${count}</span></div>
+      <div class="resupply-row-label${code!==ON_HOLD_CODE && count>0?' has-need':''}">${esc(name.toUpperCase())} <span class="resupply-row-count">${count}</span></div>
     </div>`;
   }).join('');
 
@@ -2343,6 +2372,20 @@ function nextResupplyLocation(){
   const currentIdx = withItems.indexOf(activeResupplyLocation);
   const nextCode = withItems[(currentIdx === -1 ? 0 : currentIdx + 1) % withItems.length];
   selectResupplyLocation(nextCode);
+}
+// Called after switching Type while already on the Resupply tab (see
+// setCategory). If whatever location is currently active has no items for
+// the newly-selected Type, jump to whichever real location (T/P/B, On Hold
+// excluded) DOES have some — so clicking a red/glowing sidebar Type lands
+// you looking at an actual item instead of an empty grid. Leaves the
+// selection alone if it already has items, or if nothing has any (On Hold
+// selection is also left untouched either way).
+function autoSelectResupplyLocationForCategory(){
+  if(activeResupplyLocation!==ON_HOLD_CODE && resupplyItemsFor(activeResupplyLocation).length>0) return;
+  const withItems = LOC_FILTER_CHIP_ORDER.filter(code=>resupplyItemsFor(code).length>0);
+  if(withItems.length===0) return;
+  activeResupplyLocation = withItems[0];
+  resupplyPrevLocation = activeResupplyLocation;
 }
 
 // On Hold resolve popup — the ONLY popup opened from tapping an On Hold
