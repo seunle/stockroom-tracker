@@ -431,6 +431,13 @@
   }
   .chip.on{background:var(--thread);border-color:var(--thread);color:#fff;}
   .chip.on-hold-chip.on{background:var(--restock);border-color:var(--restock);color:#fff;}
+  /* Display tab's checked-filter toggle — icon-only, same height as every
+     other filter chip (64px), just narrower/square since there's no label.
+     Off = plain unselected chip look. Filtering-for-unchecked = light red;
+     filtering-for-checked = light green — both white icon via currentColor. */
+  .chip.checkmark-chip{width:64px; padding:0;}
+  .chip.checkmark-chip.filter-unchecked{background:#E2766D; border-color:#E2766D; color:#fff;}
+  .chip.checkmark-chip.filter-checked{background:#7CB88A; border-color:#7CB88A; color:#fff;}
   .chip.chip-default-tab{height:48px; padding:0 20px; border-radius:18px; font-size:19px;}
   /* Hoodie New/Edit forms: compact size availability toggles. */
   #newSizesSection .chip[data-hoodie-size],
@@ -1056,7 +1063,6 @@ function applyLanguage(){
   if(!state.apiUrl){ const sync=document.getElementById('lastSync'); if(sync) sync.textContent = t('notConnected'); }
 }
 
-let sessionCheckedKeys = new Set(); // composite "<locationCode>::<groupKey>" entries — see sessionCheckKey()
 // IDs currently mid-submission (Storage's Resupply button, Resupply tab's
 // Done button) — there's a real delay between pressing the button and the
 // item actually disappearing once refresh() completes, and re-clicking the
@@ -1065,10 +1071,6 @@ let sessionCheckedKeys = new Set(); // composite "<locationCode>::<groupKey>" en
 // until refresh() clears them from this set.
 let pendingSubmitIds = new Set();
 let checkedFilter = 'all'; // 'all' | 'checked' | 'unchecked' — Display tab only
-// "Checked" is scoped to whichever location was being reviewed, not just
-// the item — checking an item's Bears count shouldn't show it as checked
-// when someone then looks at its Parkway count on the same device/session.
-function sessionCheckKey(locCode, groupKey){ return locCode+'::'+groupKey; }
 let storageSizeFilter = 'All'; // 'All' | 'XS' | ... — Storage tab only
 // Storage-tab eligibility is a per-location 1/0 flag stored in the sheet's
 // own Storage Tangle/Parkway/Bears columns (previously unused) — set the
@@ -1226,6 +1228,18 @@ function buildGroups(list){
   return Object.values(map);
 }
 function activeRows(){ return rows.filter(r=>Number(r.Active)===1); }
+// "Checked" is now a real per-location sheet column (Checked Tangle/
+// Parkway/Bears), not client-only localStorage — it survives an app
+// restart and is shared across every device. A group counts as checked at
+// a location if ANY of its size rows have that location's column set to 1
+// (writes always set every row in the group together, so in practice
+// they're always consistent with each other).
+const CHECKED_FIELD_BY_CODE = { T:'CheckedTangle', P:'CheckedParkway', B:'CheckedBears' };
+function isGroupChecked(g, code){
+  if(code==='All') return false; // no single per-location value to show without a location picked
+  const field = CHECKED_FIELD_BY_CODE[code];
+  return Object.values(g.rows).some(r=>Number(r[field]||0)===1);
+}
 function allGroups(){ return buildGroups(rows); } // for Edit tab lookups — includes inactive items
 // Duplicate-item check for the New/Edit item forms — matches on Name +
 // Type only (not Location), case/whitespace-insensitive, against every
@@ -1451,7 +1465,7 @@ function render(){
   const grid = document.getElementById('photoGrid');
 
   if(currentTab==='display' && checkedFilter!=='all'){
-    groups = groups.filter(g => checkedFilter==='checked' ? sessionCheckedKeys.has(sessionCheckKey(locationFilter,g.key)) : !sessionCheckedKeys.has(sessionCheckKey(locationFilter,g.key)));
+    groups = groups.filter(g => checkedFilter==='checked' ? isGroupChecked(g,locationFilter) : !isGroupChecked(g,locationFilter));
   }
   groups = applyCustomOrder(groups, locationFilter); // no-op when locationFilter is 'All' — order is per-location, so there's no single order to apply
 
@@ -1469,13 +1483,30 @@ function editFilterChipsHtml(){
   </div>`;
 }
 function setEditFilter(v){ editFilter=v; render(); }
+// Display tab's checked filter: an "All" chip (resets to no filter) plus a
+// single icon-only toggle button that cycles between filtering for
+// unchecked and checked items — replaces the old 3-chip All/Checked/
+// Unchecked row to free up space for another button later. Off (All
+// selected) looks like a normal unselected chip; the toggle itself turns
+// light red (filtering for unchecked, like the old "Unchecked" chip) or
+// light green (filtering for checked, like the old "Checked" chip).
 function checkedFilterChipsHtml(){
-  const opts = [['all',t('filterAll')],['checked',t('filterChecked')],['unchecked',t('filterUnchecked')]];
+  const stateClass = checkedFilter==='unchecked' ? ' filter-unchecked' : checkedFilter==='checked' ? ' filter-checked' : '';
   return `<div class="chiprow">
-    ${opts.map(([v,label])=>`<div class="chip ${checkedFilter===v?'on':''}" onclick="setCheckedFilter('${v}')">${label}</div>`).join('')}
+    <div class="chip ${checkedFilter==='all'?'on':''}" onclick="setCheckedFilter('all')">${t('filterAll')}</div>
+    <div class="chip checkmark-chip${stateClass}" onclick="toggleCheckedFilterButton()" title="${t('filterChecked')}">
+      <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 13 9.5 18.5 20 6"></polyline></svg>
+    </div>
   </div>`;
 }
 function setCheckedFilter(v){ checkedFilter=v; render(); }
+// Toggles back and forth between filtering for unchecked and checked items
+// every press — starts at "unchecked" the first time it's pressed from
+// the neutral All state, then just flips from there.
+function toggleCheckedFilterButton(){
+  checkedFilter = checkedFilter==='unchecked' ? 'checked' : 'unchecked';
+  render();
+}
 function setStorageSizeFilter(v){ storageSizeFilter=v; render(); }
 
 /* ============================= REQUEST TAB (Hoodie category) ============================= */
@@ -1506,7 +1537,7 @@ function requestFilterChipsHtml(priceValues){
 }
 function requestCardHtml(g){
   const inactive = !groupIsActive(g);
-  const checked = locationFilter!=='All' && sessionCheckedKeys.has(sessionCheckKey(locationFilter,g.key));
+  const checked = locationFilter!=='All' && isGroupChecked(g, locationFilter);
   const locBadge = locationFilter==='All' ? `<div class="loc-tag">${esc(g.location)}</div>` : '';
   const photo = g.photo ? `<img src="${esc(g.photo)}" loading="lazy">` : '👕';
   const pending = Object.values(g.rows).some(r=>pendingSubmitIds.has(String(r.ID)));
@@ -1576,7 +1607,7 @@ function emptyState(compact){
 function cardHtml(g){
   const status = groupStatus(g);
   const inactive = !groupIsActive(g);
-  const checked = currentTab==='display' && locationFilter!=='All' && sessionCheckedKeys.has(sessionCheckKey(locationFilter,g.key));
+  const checked = currentTab==='display' && locationFilter!=='All' && isGroupChecked(g, locationFilter);
   const locBadge = locationFilter==='All' ? `<div class="loc-tag">${esc(g.location)}</div>` : '';
   const photo = g.photo ? `<img src="${esc(g.photo)}" loading="lazy">` : '👕';
   const pending = Object.values(g.rows).some(r=>pendingSubmitIds.has(String(r.ID)));
@@ -1789,7 +1820,19 @@ document.getElementById('btnUndo').addEventListener('click', async ()=>{
 });
 
 document.getElementById('btnRefreshSession').addEventListener('click', async ()=>{
-  sessionCheckedKeys.clear();
+  // Scoped now — only the currently-selected Type (sidebar tab) at the
+  // currently-selected location gets its Checked flag cleared, matching
+  // the sheet-backed per-location Checked columns. Everything else (other
+  // Types, other locations, even this same Type at a different location)
+  // keeps whatever checked state it already had. With "All Locs" picked
+  // there's no single location to scope the clear to, so it's skipped.
+  if(locationFilter!=='All'){
+    const field = CHECKED_FIELD_BY_CODE[locationFilter];
+    rows.forEach(r=>{ if(r.Type===categoryFilter) r[field] = 0; }); // optimistic — matches what the server is about to do
+    render();
+    const res = await apiPost({action:'clearCheckedForType', type:categoryFilter, location:locationFilter});
+    if(!res.ok){ toast(t('saveFailed') + (res.error||t('unknownError')), true); }
+  }
   toast(t('sessionRefreshed'));
   await refresh(true);
 });
@@ -1862,7 +1905,7 @@ function openDisplayCheck(key){
       </div>
     </div>
     <div class="sheet-actions" style="margin-top:16px;">
-      <button class="btn-check-toggle${sessionCheckedKeys.has(sessionCheckKey(locationFilter,key))?' on':''}" id="displayCheckToggle" onclick="toggleCheckedAndClose('${esc(key)}','${locationFilter}')">✓</button>
+      <button class="btn-check-toggle${isGroupChecked(g,locationFilter)?' on':''}" id="displayCheckToggle" onclick="toggleCheckedAndClose('${esc(key)}','${locationFilter}')">✓</button>
       <button class="btn btn-confirm btn-wide3" onclick="commitDisplayCheck()">${t('doneBtn')}</button>
     </div>
   `, 'display');
@@ -1950,7 +1993,7 @@ async function commitDisplayCheck(){
   // 8-10+ sequential calls before the UI settled); now it's exactly one,
   // regardless of how many sizes were reviewed.
   const reviewUpdates = Object.keys(draft).map(id=>{
-    const u = { id };
+    const u = { id, checked: 1 };
     if(changedIds.includes(id)) u.displayValue = draft[id].current;
     if(onHoldUpdates[id] !== undefined){
       u.onHold = onHoldUpdates[id];
@@ -1966,7 +2009,7 @@ async function commitDisplayCheck(){
 
   const affectedIds = Object.keys(draft);
   if(affectedIds.length>0){
-    pushUndoSnapshot(affectedIds); // one batch undo covering Display, On Hold, Resupply, and Storage changes from this check
+    pushUndoSnapshot(affectedIds); // one batch undo covering Display, On Hold, Resupply, Storage, and Checked changes from this check
     // Optimistic local updates, matching what the server is about to do.
     reviewUpdates.forEach(u=>{
       const row = rows.find(r=>sameId(r.ID,u.id));
@@ -1975,12 +2018,14 @@ async function commitDisplayCheck(){
       if(u.storageActive!==undefined) row[storageField] = u.storageActive;
       if(u.onHold!==undefined) row[onHoldField] = u.onHold;
       if(u.resupplyIncrement) row[resupplyField] = Number(row[resupplyField]||0) + u.resupplyIncrement;
+      row[CHECKED_FIELD_BY_CODE[locForDraft]] = 1;
     });
   }
   // Pressing Done always marks the item checked now — the separate
   // "force checked without changes" button doesn't exist anymore, that
-  // role is covered by the standalone checkmark toggle instead.
-  sessionCheckedKeys.add(sessionCheckKey(locForDraft, groupKeyForDraft));
+  // role is covered by the standalone checkmark toggle instead. Sent as
+  // part of the same combined commitDisplayReview request below (u.checked),
+  // not a separate round trip.
   // Show the grey/Checked state RIGHT NOW — the local data above is
   // already correct, so there's no reason to wait on the network before
   // rendering it. Previously this only happened after the awaited apiPost
@@ -2006,14 +2051,29 @@ async function commitDisplayCheck(){
 // status without doing a full review. Deliberately discards any pending
 // size draft (same "closing without Done/Request discards changes"
 // philosophy as X or tapping outside) and closes immediately.
-function toggleCheckedAndClose(groupKey, code){
-  const key = sessionCheckKey(code, groupKey);
-  if(sessionCheckedKeys.has(key)) sessionCheckedKeys.delete(key);
-  else sessionCheckedKeys.add(key);
+// The standalone checkmark toggle — a quick way to flip an item's checked
+// status without doing a full review. Deliberately discards any pending
+// size draft (same "closing without Done/Request discards changes"
+// philosophy as X or tapping outside) and closes immediately. Writes
+// straight to the sheet's Checked column for every size row in the group —
+// this is the ONLY user action (besides Refresh Session) that ever clears
+// a checked flag once it's set.
+async function toggleCheckedAndClose(key, code){
   displayDraft = null; displayDraftGroupKey = null; displayDraftLocation = null;
   requestDraft = null; requestDraftGroupKey = null; requestDraftLocation = null;
   closeSheet();
+  if(code==='All') return; // popups always require a specific location — shouldn't happen
+  const field = CHECKED_FIELD_BY_CODE[code];
+  const groupRows = rows.filter(r=>groupKey(r)===key);
+  if(groupRows.length===0){ render(); return; }
+  const newValue = groupRows.some(r=>Number(r[field]||0)===1) ? 0 : 1;
+  groupRows.forEach(r=>{ r[field] = newValue; }); // optimistic — matches what the server is about to do
   render();
+  const res = await apiPost({action:'setChecked', ids:groupRows.map(r=>r.ID), location:code, value:newValue});
+  if(!res.ok){
+    toast(t('saveFailed') + (res.error||t('unknownError')), true);
+    refresh(false);
+  }
 }
 
 /* ============================= REQUEST TAB: ITEM POPUP (Hoodie category) ============================= */
@@ -2067,7 +2127,7 @@ function openRequestCheck(key){
     </div>
     </div>
     <div class="sheet-actions" style="margin-top:16px;">
-      <button class="btn-check-toggle${sessionCheckedKeys.has(sessionCheckKey(locationFilter,key))?' on':''}" onclick="toggleCheckedAndClose('${esc(key)}','${locationFilter}')">✓</button>
+      <button class="btn-check-toggle${isGroupChecked(g,locationFilter)?' on':''}" onclick="toggleCheckedAndClose('${esc(key)}','${locationFilter}')">✓</button>
       <button class="btn btn-confirm btn-wide3 btn-request-submit" onclick="commitRequestCheck()">${t('requestBtn')}</button>
     </div>
     </div>
@@ -2091,15 +2151,25 @@ async function commitRequestCheck(){
   if(!draft) return;
   const resupplyField = RESUPPLY_FIELD_BY_CODE[locForDraft];
   const onHoldField = ON_HOLD_FIELD_BY_CODE[locForDraft];
+  const checkedField = CHECKED_FIELD_BY_CODE[locForDraft];
   const requests = Object.keys(draft).filter(id=>draft[id].current>0).map(id=>({id, qty:draft[id].current}));
+  const checkedIds = Object.keys(draft); // every size in the popup, not just the ones actually requested
 
   // Pressing Request always marks the item checked, even if every size was
   // left at 0 — same "visual feedback that it was a success" idea as Done.
-  sessionCheckedKeys.add(sessionCheckKey(locForDraft, groupKeyForDraft));
+  checkedIds.forEach(id=>{
+    const row = rows.find(r=>sameId(r.ID,id));
+    if(row) row[checkedField] = 1; // optimistic — matches what the server is about to do
+  });
 
   if(requests.length===0){
     render();
     toast(t('checkedToast'));
+    const res = await apiPost({action:'requestHoodieSizes', location:locForDraft, requests:[], checkedIds});
+    if(!res.ok){
+      toast(t('saveFailed') + (res.error||t('unknownError')), true);
+      refresh(false);
+    }
     return;
   }
 
@@ -2116,7 +2186,7 @@ async function commitRequestCheck(){
   });
   render();
   toast(t('requestSentToast'));
-  const res = await apiPost({action:'requestHoodieSizes', location:locForDraft, requests});
+  const res = await apiPost({action:'requestHoodieSizes', location:locForDraft, requests, checkedIds});
   if(!res.ok){
     toast(t('saveFailed') + (res.error||t('unknownError')), true);
     refresh(false);
@@ -2127,8 +2197,7 @@ async function commitRequestCheck(){
 const RESUPPLY_FIELD_BY_CODE = { T:'ResupplyTangle', P:'ResupplyParkway', B:'ResupplyBears' };
 const DISPLAY_FIELD_BY_CODE = { T:'DisplayTangle', P:'DisplayParkway', B:'DisplayBears' };
 const ON_HOLD_FIELD_BY_CODE = { T:'OnHoldTangle', P:'OnHoldParkway', B:'OnHoldBears' };
-const MIN_COUNT_FIELD_BY_CODE = { T:'MinCountTangle', P:'MinCountParkway', B:'MinCountBears' };
-const ORDER_FIELD_BY_CODE = { T:'OrderTangle', P:'OrderParkway', B:'OrderBears' };
+const MIN_COUNT_FIELD_BY_CODE = { T:'MinCountTangle', P:'MinCountParkway', B:'MinCountBears' };const ORDER_FIELD_BY_CODE = { T:'OrderTangle', P:'OrderParkway', B:'OrderBears' };
 // Custom per-location Display order, set via drag-and-drop in the Edit tab.
 // Reads any row in the group — a group's rows always carry the same order
 // value for a given location, since reordering writes it to every size row
@@ -3560,11 +3629,40 @@ document.querySelector('nav.bottomnav').addEventListener('click', (e)=>{
     hapticTap();
     applyReorderModeToggle();
   }else{
+    const prevTab = currentTab;
     editReorderMode = false; // always starts off when entering Edit fresh from elsewhere
     currentTab = tab;
+    syncLocationAcrossResupplySwitch(prevTab, tab);
     render();
   }
 });
+// Keeps locationFilter (Display/Storage/Edit's shared location) and
+// activeResupplyLocation (Resupply's own per-location selection) in sync
+// with each other across a bottom-nav tab switch — but ONLY at the moment
+// of switching, never continuously. Two directions:
+//   - Entering Resupply FROM Display/Storage/Edit: carries over whatever
+//     real location (T/P/B) was showing there, so an accidental tap into
+//     Resupply doesn't silently jump you to a different location. This
+//     happens BEFORE and instead of Resupply's own "auto-pick a location
+//     with items" behavior (see autoSelectResupplyLocationForCategory) —
+//     that only kicks in afterward, when a Type is actually changed while
+//     already inside Resupply.
+//   - Leaving Resupply TO Display/Storage/Edit: carries the opposite way
+//     — whatever location Resupply ended up on (manually picked, or
+//     auto-picked by a Type switch) becomes the shared locationFilter. If
+//     Resupply was showing On Hold (not a real location the other tabs
+//     understand), falls back to the last real location it was on instead.
+function syncLocationAcrossResupplySwitch(prevTab, newTab){
+  const LOC_SYNCED_TABS = ['display','storage','edit'];
+  if(newTab==='resupply' && LOC_SYNCED_TABS.includes(prevTab)){
+    if(locationFilter!=='All'){
+      activeResupplyLocation = locationFilter;
+      resupplyPrevLocation = locationFilter;
+    }
+  }else if(prevTab==='resupply' && LOC_SYNCED_TABS.includes(newTab)){
+    locationFilter = activeResupplyLocation===ON_HOLD_CODE ? resupplyPrevLocation : activeResupplyLocation;
+  }
+}
 // cardHtml's onclick calls openGroup() — only Display and Edit tabs ever
 // render cards through that path now (Storage and Resupply have their own
 // dedicated click handlers), so this just routes between the two.
