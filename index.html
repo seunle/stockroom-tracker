@@ -228,14 +228,21 @@
   }
   /* Edit tab, reorder mode: while a just-dropped card's new position is
      being saved, every card dims and stops responding to taps/drags —
-     see setOrderSaveLocked/commitOrderNow. Applied to the whole grid
-     (not just the card that moved) since the drag gesture itself is what's
-     blocked, not just that one card's data. Same treatment, different
-     trigger, for Storage/Resupply/On Hold's single-item actions — see
-     setItemActionLocked. */
-  .photo-grid.order-saving .card,
-  .photo-grid.action-saving .card{
+     see setOrderSaveLocked/commitOrderNow. */
+  .photo-grid.order-saving .card{
     opacity:0.4; filter:grayscale(0.7); pointer-events:none; transition:opacity 0.15s, filter 0.15s;
+  }
+  /* Storage/Resupply/On Hold single-item actions — same idea, but the ONE
+     card actually being submitted (see actionInProgressId/
+     setItemActionLocked) stays at the stronger dim, while every OTHER card
+     in the grid gets a lighter one — makes it clearer at a glance which
+     specific item is the one doing something, versus everything else that's
+     just along for the ride, disabled but not the focus. */
+  .photo-grid.action-saving .card{
+    opacity:0.65; filter:grayscale(0.35); pointer-events:none; transition:opacity 0.15s, filter 0.15s;
+  }
+  .photo-grid.action-saving .card.card-action-active{
+    opacity:0.4; filter:grayscale(0.7);
   }
   /* Spinning-arrow overlay for the ONE specific card actively being
      submitted (see actionInProgressId/setItemActionLocked) — everything
@@ -1942,7 +1949,7 @@ function storageCardHtml(row){
   const need = Math.max(0, Number(row[MIN_COUNT_FIELD_BY_CODE[locationFilter]]||0) - Number(row[displayField]||0) - Number(row[ON_HOLD_FIELD_BY_CODE[locationFilter]]||0));
   const pending = pendingSubmitIds.has(String(row.ID));
   return `
-    <div class="card storage-card${pending?' card-pending':''}" data-card-key="${esc(row.ID)}" style="border-color:${color}; box-shadow:0 0 0 3px ${color}55;" ${pending?'':`onclick="openStorageItem('${esc(row.ID)}')"`}>
+    <div class="card storage-card${pending?' card-pending':''}${isActionCurrent(row.ID)?' card-action-active':''}" data-card-key="${esc(row.ID)}" style="border-color:${color}; box-shadow:0 0 0 3px ${color}55;" ${pending?'':`onclick="openStorageItem('${esc(row.ID)}')"`}>
       <div class="photo" style="background:${color}33;">${photo}</div>
       <div class="size-badge" style="background:${color}CC;">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
       <div class="qty-badge">${need}</div>
@@ -2691,7 +2698,7 @@ function resupplyCardHtml(row, code, field){
   const color = SIZE_COLORS[row.Size] || '#DDD';
   const pending = pendingSubmitIds.has(String(row.ID));
   return `
-    <div class="card resupply-card${pending?' card-pending':''}" data-card-key="${esc(row.ID)}_${code}" style="border-color:${color}; box-shadow:0 0 0 3px ${color}55;" ${pending?'':`onclick="openResupplyItem('${esc(row.ID)}','${code}')"`}>
+    <div class="card resupply-card${pending?' card-pending':''}${isActionCurrent(row.ID)?' card-action-active':''}" data-card-key="${esc(row.ID)}_${code}" style="border-color:${color}; box-shadow:0 0 0 3px ${color}55;" ${pending?'':`onclick="openResupplyItem('${esc(row.ID)}','${code}')"`}>
       <div class="photo">${photo}</div>
       <div class="size-badge" style="background:${color}CC;">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
       <div class="qty-badge">${qty}</div>
@@ -2708,7 +2715,7 @@ function onHoldCardHtml(row){
   const color = SIZE_COLORS[row.Size] || '#DDD';
   const pending = pendingSubmitIds.has(String(row.ID));
   return `
-    <div class="card resupply-card${pending?' card-pending':''}" data-card-key="onhold_${esc(row.ID)}" style="border-color:${color}; box-shadow:0 0 0 3px ${color}55;" ${pending?'':`onclick="openOnHoldItem('${esc(row.ID)}')"`}>
+    <div class="card resupply-card${pending?' card-pending':''}${isActionCurrent(row.ID)?' card-action-active':''}" data-card-key="onhold_${esc(row.ID)}" style="border-color:${color}; box-shadow:0 0 0 3px ${color}55;" ${pending?'':`onclick="openOnHoldItem('${esc(row.ID)}')"`}>
       <div class="photo">${photo}</div>
       <div class="size-badge" style="background:${color}CC;">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
       <div class="qty-badge">${onHold}</div>
@@ -3839,12 +3846,21 @@ function setItemActionLocked(locked, id){
     if(grid) grid.classList.toggle('action-saving', locked);
   });
 }
+// Whether the given row is the ONE card currently mid-submission (see
+// setItemActionLocked/actionInProgressId) — every other card in a locked
+// grid is just passively disabled, this is the one actually doing
+// something, so it gets its own distinct treatment (spinner + darker dim).
+function isActionCurrent(rowId){
+  return actionInProgressId !== null && String(rowId) === String(actionInProgressId);
+}
 // Small spinning-arrow overlay, shown ONLY on the specific card currently
-// being submitted (see actionInProgressId) — everything else in the grid
-// is just plain dimmed, this is the one card actively doing something.
+// being submitted — everything else in the grid is just plain dimmed,
+// this is the one card actively doing something. A simple open ring (not
+// a near-complete circle) so there's a clear, deliberate gap between its
+// two ends rather than them nearly touching.
 function actionSpinnerHtml(rowId){
-  if(String(rowId) !== String(actionInProgressId)) return '';
-  return `<div class="action-spinner"><svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg></div>`;
+  if(!isActionCurrent(rowId)) return '';
+  return `<div class="action-spinner"><svg viewBox="0 0 24 24" width="68" height="68" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="9" stroke-dasharray="26 32"/></svg></div>`;
 }
 
 /* ============================= EDIT TAB ============================= */
