@@ -486,6 +486,7 @@
   .chip.checkmark-chip{width:64px; padding:0;}
   .chip.checkmark-chip.filter-unchecked{background:#E2766D; border-color:#E2766D; color:#fff;}
   .chip.checkmark-chip.filter-checked{background:#7CB88A; border-color:#7CB88A; color:#fff;}
+  .chip.storage-all-chip{padding:0 20px; font-size:20px;} /* ~1/5 narrower than the default chip — Storage tab's All filter specifically */
   .chip.chip-default-tab{height:48px; padding:0 20px; border-radius:18px; font-size:19px;}
   /* Hoodie New/Edit forms: compact size availability toggles. */
   #newSizesSection .chip[data-hoodie-size],
@@ -1524,7 +1525,8 @@ function render(){
     // Only show a size chip for a size that's actually present among the
     // current Storage-eligible rows (before the size filter itself is
     // applied — otherwise picking one size would hide every other chip).
-    // No rows at all means no chips at all, not even "All".
+    // "All" always shows regardless — even with zero rows, so the toolbar
+    // never leaves a blank gap where the chip row would normally be.
     const presentSizes = SIZES.filter(s => storageRows.some(r=>r.Size===s));
     if(storageSizeFilter!=='All' && !presentSizes.includes(storageSizeFilter)){
       storageSizeFilter = 'All'; // the size we were filtering on no longer has any rows — fall back rather than showing an empty grid with no way back except the (now-hidden) chip
@@ -1547,7 +1549,7 @@ function render(){
     main.innerHTML = `
       <div class="toolbar-top">
         <div class="chiprow">
-          ${presentSizes.length>0 ? `<div class="chip ${storageSizeFilter==='All'?'on':''}" onclick="setStorageSizeFilter('All')">All</div>` : ''}
+          <div class="chip storage-all-chip ${storageSizeFilter==='All'?'on':''}" onclick="setStorageSizeFilter('All')">All</div>
           ${presentSizes.map(s=>`<div class="chip ${storageSizeFilter===s?'on':''}" onclick="setStorageSizeFilter('${s}')">${SIZE_SHORT_LABEL[s]}</div>`).join('')}
         </div>
         <div class="scale-ctrl">
