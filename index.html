@@ -142,6 +142,16 @@
     color:var(--restock);
     text-shadow:0 0 6px rgba(174,66,57,0.85), 0 0 14px rgba(174,66,57,0.55);
   }
+  /* Same idea, Storage tab, blue instead of red: at least one active item
+     of this Type is currently a genuine Storage-tab trigger for whichever
+     location is selected (same rules renderResupplyTab's Storage branch
+     uses — see typeHasStorageItems). Only applied while the Storage tab is
+     open with a specific location picked; "All Locs" has no single
+     Storage list to check against, so it's skipped there too. */
+  .side-cat.storage-alert:not(.active){
+    color:var(--thread);
+    text-shadow:0 0 6px rgba(62,92,118,0.85), 0 0 14px rgba(62,92,118,0.55);
+  }
   /* Static (non-clickable) header sitting where the old "All" tab used to
      be — just labels the list below it, doesn't filter anything. */
   .side-type-label{
@@ -1635,6 +1645,25 @@ function sidebarFontSize(c){
 function typeHasResupplyItems(type){
   return activeRows().some(r => r.Type===type && ['T','P','B'].some(c => Number(r[RESUPPLY_FIELD_BY_CODE[c]]||0) > 0));
 }
+// Storage-tab sidebar alert: does this Type have at least one active item
+// that's a genuine Storage-tab trigger for the currently-selected location
+// right now? Mirrors render()'s own Storage-branch filter exactly (below
+// min, an explicit Display-tab change actually caused it, no resupply
+// already requested, no On Hold) — just checked per-Type instead of
+// building the whole Storage list.
+function typeHasStorageItems(type){
+  if(locationFilter==='All') return false;
+  const displayField = DISPLAY_FIELD_BY_CODE[locationFilter];
+  const resupplyField = RESUPPLY_FIELD_BY_CODE[locationFilter];
+  return activeRows().some(r=>{
+    if(r.Type!==type || r.Location.indexOf(locationFilter)===-1) return false;
+    const belowMin = Number(r[displayField]||0) < Number(r[MIN_COUNT_FIELD_BY_CODE[locationFilter]]||0);
+    const onHold = Number(r[ON_HOLD_FIELD_BY_CODE[locationFilter]]||0) > 0;
+    const resupplyRequested = Number(r[resupplyField]||0) > 0;
+    const displayWasChanged = hasCurrentStorageDisplayTrigger(r, locationFilter);
+    return belowMin && displayWasChanged && !resupplyRequested && !onHold;
+  });
+}
 function renderSidebar(){
   const el = document.getElementById('sidebar');
   el.classList.toggle('edit-mode', sidebarEditMode);
@@ -1646,9 +1675,10 @@ function renderSidebar(){
   // glow. Computed fresh each render, and only while the Resupply tab is
   // actually open, so switching to Display/Storage/Edit never shows it.
   const resupplyAlertTypes = currentTab==='resupply' ? new Set(cats.filter(typeHasResupplyItems)) : null;
+  const storageAlertTypes = currentTab==='storage' ? new Set(cats.filter(typeHasStorageItems)) : null;
   let html = `<div class="side-type-label">${t('sidebarTypeLabel')}</div>`;
   html += cats.map(c=>`
-    <div class="side-cat ${categoryFilter===c?'active':''}${sidebarDrag && sidebarDrag.type===c?' dragging':''}${resupplyAlertTypes && resupplyAlertTypes.has(c)?' resupply-alert':''}" data-type="${esc(c)}" style="font-size:${sidebarFontSize(c)}px;" onclick="${sidebarEditMode?'':`setCategory('${esc(c)}')`}">
+    <div class="side-cat ${categoryFilter===c?'active':''}${sidebarDrag && sidebarDrag.type===c?' dragging':''}${resupplyAlertTypes && resupplyAlertTypes.has(c)?' resupply-alert':''}${storageAlertTypes && storageAlertTypes.has(c)?' storage-alert':''}" data-type="${esc(c)}" style="font-size:${sidebarFontSize(c)}px;" onclick="${sidebarEditMode?'':`setCategory('${esc(c)}')`}">
       ${sidebarCategoryLabel(c)}${sidebarEditMode?`<div class="drag-handle" onpointerdown="startSidebarDrag(event,'${esc(c)}')">⠿</div>`:''}
     </div>`).join('');
   html += `<div class="side-editbtn" onclick="sidebarEditMode=!sidebarEditMode;render();">${sidebarEditMode?t('sidebarDone'):t('sidebarEdit')}</div>`;
