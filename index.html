@@ -1716,8 +1716,8 @@ function requestCardHtml(g){
   const checked = locationFilter!=='All' && isGroupChecked(g, locationFilter);
   // __scopeSizes marks a price-filter-only pseudo-card (see
   // buildPriceScopedGroups) — same item, but only showing the size(s) that
-  // actually match the selected price (e.g. just XXL, when its +3 upcharge
-  // gives it a different price than the item's other sizes). The "All"
+  // actually match the selected price (e.g. just XXL or XXXL, when their
+  // upcharge gives them a different price than the item's other sizes). The "All"
   // filter never produces one of these — g is always the real, full,
   // every-size group there, so this whole branch is simply unused then.
   const scopeSizes = g.__scopeSizes || null;
@@ -1741,7 +1741,7 @@ function requestCardHtml(g){
 // Splits each group into either its normal full-item form, or a scoped
 // pseudo-card containing ONLY the sizes that share the given price — used
 // when a specific price is selected in the Request tab's Price filter, so
-// a +3-upcharged XXL/XXXL shows as its own separate card under its own
+// an upcharged XXL or XXXL shows as its own separate card under its own
 // (different) price instead of being lumped into the base-price item.
 // A group where every size already shares this exact price (the common
 // case) is returned completely unchanged — no upcharge sizes, or the
@@ -2390,7 +2390,7 @@ function openRequestCheck(key, scopeSizesCsv){
   if(!g) return;
   // scopeSizesCsv: set when opened from a price-filtered pseudo-card (see
   // buildPriceScopedGroups/requestCardHtml) — restricts the popup to just
-  // that size (or sizes), e.g. only XXL's +3-upcharged price was clicked,
+  // that size (or sizes), e.g. only XXL's upcharged price was clicked,
   // so only XXL is steppable here even though the item has other sizes too.
   const scopeSizes = scopeSizesCsv ? scopeSizesCsv.split(',') : null;
   requestDraftGroupKey = key;
