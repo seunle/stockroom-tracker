@@ -2887,11 +2887,15 @@ function onItemTypeChange(formPrefix){
   }else{
     const locPicker = document.getElementById(formPrefix+'LocPicker');
     const locCodesOn = locPicker ? Array.from(locPicker.querySelectorAll('.loc-row.on')).map(el=>el.dataset.code) : [];
-    container.innerHTML = `<label>${t('fieldSizesCheck')}</label>` + locationTabbedSizeGridHtml(formPrefix+'Size', locCodesOn, {});
+    container.innerHTML = `<label>${t('fieldSizesCheck')}</label>` + locationTabbedSizeGridHtml(formPrefix+'Size', locCodesOn, {}, formPrefix==='edit' ? locationFilter : undefined);
   }
 }
-function locationTabbedSizeGridHtml(prefix, enabledCodes, valuesByCode){
-  const initialActive = LOCS.map(l=>l.code).find(c=>enabledCodes.includes(c)) || null;
+function locationTabbedSizeGridHtml(prefix, enabledCodes, valuesByCode, preferredCode){
+  // preferredCode: if given and it's one of the enabled locations, it wins
+  // over the normal "first enabled location in T/P/B order" default — used
+  // by the Edit popup to default to whichever location the app itself is
+  // currently set to, when this item already has that location active.
+  const initialActive = (preferredCode && enabledCodes.includes(preferredCode)) ? preferredCode : (LOCS.map(l=>l.code).find(c=>enabledCodes.includes(c)) || null);
   return `
     <div class="size-loc-tabs" id="${prefix}Tabs">
       ${LOCS.map(l=>`<div class="size-loc-tab${enabledCodes.includes(l.code)?'':' disabled'}${l.code===initialActive?' active':''}" data-tab-code="${l.code}" onclick="switchSizeLocTab('${prefix}','${l.code}')">${l.name}</div>`).join('')}
@@ -2983,9 +2987,20 @@ function openNewItemForm(){
     </div>
   `, 'display');
 }
+// Toggling a location on/off in the New/Edit picker. Turning one ON always
+// jumps the min-count tab below to follow it (even if a different tab was
+// already active and still valid) — clicking Tangle then Bears then
+// Parkway should walk the min-count view through each in turn. Turning one
+// OFF just falls back to updateSizeLocTabAvailability's normal behavior
+// (switch to whatever's still enabled, or show the hint if nothing is).
 function toggleLocRow(el){
   el.classList.toggle('on');
-  updateSizeLocTabAvailability(el.closest('.loc-picker'));
+  const picker = el.closest('.loc-picker');
+  updateSizeLocTabAvailability(picker);
+  if(el.classList.contains('on')){
+    const prefix = picker.id==='newLocPicker' ? 'newSize' : 'editSize';
+    switchSizeLocTab(prefix, el.dataset.code);
+  }
 }
 async function submitNewItem(){
   const name = document.getElementById('newName').value.trim();
@@ -3426,7 +3441,7 @@ function openEditGroup(key){
   }
   const sizesSectionHtml = isHoodieItem
     ? hoodieSizesFieldHtml('editHoodie', hoodiePrice, hoodieSelectedSizes)
-    : `<label>${t('fieldSizesCheck')}</label>${locationTabbedSizeGridHtml('editSize', locCodesOn, valuesByCode)}`;
+    : `<label>${t('fieldSizesCheck')}</label>${locationTabbedSizeGridHtml('editSize', locCodesOn, valuesByCode, locationFilter)}`;
   openSheetHtml(`
     <h2>${t('editItemTitle')}</h2>
     ${isActive?'':`<div class="desc" style="color:var(--restock);font-weight:600;">${t('deactivatedNotice')}</div>`}
