@@ -1005,6 +1005,21 @@ let categoryFilter = 'Men'; // sidebar's "All" tab is gone — app always opens 
 let sidebarEditMode = false;
 let editFilter = 'all'; // 'all' | 'active' | 'inactive' — Edit tab only
 const FIXED_TYPES = ['Men','Women','Youth','Kids','Baby','TankTop','Long Sleeve','Hoodie','Crewneck','Y Hoodie Crewneck','K Hoodie Crewneck','Cap'];
+// New items only — the entered name gets this Type's prefix stuck on the
+// front automatically (space included, so it doesn't run into the rest of
+// the name), before it's ever sent to the sheet. E.g. "White Bear" under
+// Men becomes "M. White Bear". Editing an existing item never re-applies
+// or changes a prefix — whatever's already in the Name field is left
+// exactly as typed.
+const TYPE_NAME_PREFIX = {
+  'Men':'M. ', 'Women':'W. ', 'Youth':'Y. ', 'Kids':'K. ', 'Baby':'B. ',
+  'TankTop':'TT. ', 'Long Sleeve':'LS. ', 'Hoodie':'H. ', 'Crewneck':'CN. ',
+  'Y Hoodie Crewneck':'YHCN. ', 'K Hoodie Crewneck':'KHCN. ', 'Cap':'CAP. '
+};
+function prefixedItemName(name, type){
+  const prefix = TYPE_NAME_PREFIX[type];
+  return prefix ? prefix + name : name;
+}
 const HOODIE_TYPES = ['Hoodie', 'Crewneck', 'Y Hoodie Crewneck', 'K Hoodie Crewneck']; // the types that DEFAULT to the Direct system — every type can now use either system (see typeSystemOverrides), this is just each type's starting point. Must match Code.gs's own HOODIE_TYPES exactly (two separate scripts, no shared scope, so this has to be declared independently here too).
 // Per-type override of which workflow a type uses right now — 'direct' or
 // 'indirect' — loaded from the sheet's Type Systems tab (see refresh()) and
@@ -2159,7 +2174,7 @@ async function commitDisplayCheck(){
     if(!anyLocationOnHold) return; // no location has this on hold yet — Resupply check below applies instead
     const currentOnHold = Number(row[onHoldField]||0); // this location's own value — may itself still be 0
     const decrease = Math.max(0, draft[id].original - draft[id].current);
-    if(decrease > 0) onHoldUpdates[id] = Math.min(5, currentOnHold + decrease); // backend caps On Hold at 5
+    if(decrease > 0) onHoldUpdates[id] = Math.min(6, currentOnHold + decrease); // backend caps On Hold at 6
   });
 
   // Same idea, one tier down: for anything NOT already On Hold, check
@@ -2210,7 +2225,7 @@ async function commitDisplayCheck(){
       if(u.displayValue!==undefined) row[displayField] = u.displayValue;
       if(u.storageActive!==undefined) row[storageField] = u.storageActive;
       if(u.onHold!==undefined) row[onHoldField] = u.onHold;
-      if(u.resupplyIncrement) row[resupplyField] = Number(row[resupplyField]||0) + u.resupplyIncrement;
+      if(u.resupplyIncrement) row[resupplyField] = Math.min(6, Number(row[resupplyField]||0) + u.resupplyIncrement); // backend caps Resupply at 6
       row[CHECKED_FIELD_BY_CODE[locForDraft]] = 1;
     });
   }
@@ -2320,7 +2335,7 @@ function openRequestCheck(key){
     </div>
     </div>
     <div class="sheet-actions" style="margin-top:16px;">
-      <button class="btn-check-toggle${isGroupChecked(g,locationFilter)?' on':''}" onclick="toggleCheckedAndClose('${esc(key)}','${locationFilter}')">✓</button>
+      <button class="btn-check-toggle${isGroupChecked(g,locationFilter)?' on':''}" onclick="toggleCheckedAndClose('${esc(key)}','${locationFilter}')"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 13 9.5 18.5 20 6"></polyline></svg></button>
       <button class="btn btn-confirm btn-wide3 btn-request-submit" onclick="commitRequestCheck()">${t('requestBtn')}</button>
     </div>
     </div>
@@ -2330,7 +2345,7 @@ function openRequestCheck(key){
 function stepRequestDraft(id, delta){
   const d = requestDraft && requestDraft[id];
   if(!d) return;
-  d.current = Math.max(0, d.current + delta);
+  d.current = Math.max(0, Math.min(6, d.current + delta)); // Resupply is capped at 6 per location
   const input = document.getElementById('req-'+id);
   const label = document.getElementById('reqlabel-'+id);
   const isZero = d.current === 0;
@@ -2374,8 +2389,8 @@ async function commitRequestCheck(){
     const row = rows.find(x=>sameId(x.ID,r.id));
     if(!row) return;
     const currentOnHold = Number(row[onHoldField]||0);
-    if(currentOnHold>0){ row[onHoldField] = Math.min(5, currentOnHold + r.qty); }
-    else{ row[resupplyField] = Number(row[resupplyField]||0) + r.qty; }
+    if(currentOnHold>0){ row[onHoldField] = Math.min(6, currentOnHold + r.qty); }
+    else{ row[resupplyField] = Math.min(6, Number(row[resupplyField]||0) + r.qty); } // backend caps Resupply at 6
   });
   render();
   toast(t('requestSentToast'));
@@ -2812,7 +2827,7 @@ function openResupplyItem(id, code){
 
   // On Hold is the shortfall between the original location-specific
   // Resupply requirement and the quantity currently shown in the stepper.
-  const onHoldPreview = Math.min(5, Math.max(0, requiredQty - current));
+  const onHoldPreview = Math.min(6, Math.max(0, requiredQty - current));
   resupplyEditContext = { id, code, requiredQty };
 
   const photo = row.Photo ? `<img src="${esc(row.Photo)}">` : '';
@@ -2859,8 +2874,8 @@ function updateOnHoldPreview(){
   if(!resupplyEditContext) return;
   const value = Number(document.getElementById('resupplyEditQty').value||0);
   // ON HOLD = location's original Resupply quantity - on-screen quantity.
-  // Never allow a negative value and cap the stored/displayed amount at 5.
-  const onHold = Math.min(5, Math.max(0, resupplyEditContext.requiredQty - value));
+  // Never allow a negative value and cap the stored/displayed amount at 6.
+  const onHold = Math.min(6, Math.max(0, resupplyEditContext.requiredQty - value));
   const el = document.getElementById('onHoldNum');
   if(el) el.textContent = formatHoldDisplay(onHold);
 }
@@ -2869,7 +2884,7 @@ async function submitResupplyEdit(){
   if(!resupplyEditContext) return;
   const { id, code, requiredQty } = resupplyEditContext;
   const value = Number(document.getElementById('resupplyEditQty').value||0);
-  const onHold = Math.min(5, Math.max(0, requiredQty - value));
+  const onHold = Math.min(6, Math.max(0, requiredQty - value));
   const row = rows.find(r=>sameId(r.ID,id));
   resupplyEditContext = null;
   if(!row){ closeSheet(); return; }
@@ -2981,10 +2996,10 @@ async function submitResupply(id){
     // This item is already On Hold for this location — a resupply request
     // here does NOT go to Storage/Display at all (no Display bump, no
     // Resupply column write). It just adds the requested quantity onto
-    // the existing On Hold amount for this location, capped at 5 (matching
+    // the existing On Hold amount for this location, capped at 6 (matching
     // the backend's own cap on the On Hold column).
     toast(t('addingToHold'));
-    const newOnHold = Math.min(5, currentOnHold + requestQty);
+    const newOnHold = Math.min(6, currentOnHold + requestQty);
     row[onHoldField] = newOnHold;
     const res = await apiPost({action:'setResupplyForLocation', id, location:locationFilter, onHold:newOnHold});
     toast(res.ok ? `${t('onHoldForNowIs')} ${LOC_NAME_BY_CODE[locationFilter]} ${t('isNow')} ${newOnHold}` : t('couldNotUpdateHold') + (res.error||t('unknownError')), !res.ok);
@@ -3175,10 +3190,11 @@ function toggleLocRow(el){
   }
 }
 async function submitNewItem(){
-  const name = document.getElementById('newName').value.trim();
+  const enteredName = document.getElementById('newName').value.trim();
   const type = document.getElementById('newType').value.trim();
-  if(!name){ toast(t('enterName')); return; }
+  if(!enteredName){ toast(t('enterName')); return; }
   if(!type){ toast(t('chooseType')); return; }
+  const name = prefixedItemName(enteredName, type);
   const duplicate = findDuplicateItemGroup(name, type, null);
   if(duplicate){ toast(t('duplicateItemError'), true); return; }
   const locCodes = Array.from(document.querySelectorAll('#newLocPicker .loc-row.on')).map(el=>el.dataset.code);
