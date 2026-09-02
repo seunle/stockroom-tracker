@@ -135,10 +135,10 @@
   .side-cat.active{background:var(--thread); color:#fff;}
   /* Resupply-tab-only alert: at least one active item of this Type needs
      resupply at some real location (On Hold doesn't count). Only ever
-     applied while the Resupply tab is open — see renderSidebar. Placed
-     after .side-cat.active and matched with equal specificity so it wins
-     the tie-break even on the currently-active (blue) tab. */
-  .side-cat.resupply-alert{
+     applied while the Resupply tab is open — see renderSidebar. Excludes
+     the currently-selected Type (:not(.active)) — that one just stays its
+     normal white-on-blue, since you're already looking at it. */
+  .side-cat.resupply-alert:not(.active){
     color:var(--restock);
     text-shadow:0 0 6px rgba(174,66,57,0.85), 0 0 14px rgba(174,66,57,0.55);
   }
@@ -311,10 +311,12 @@
      which location you're currently looking at. */
   .resupply-row-label.active-label{font-size:52px; font-weight:800;}
   /* Resupply-tab per-location alert: this location has items needing
-     resupply (On Hold excluded). Deliberately doesn't touch `color` —
-     the label keeps whatever color it already has (grey for a collapsed
-     row, dark for the active one); this only layers a red glow behind it. */
+     resupply (On Hold excluded). Only ever applied to the COLLAPSED rows
+     (see renderResupplyTab) — the active/expanded location never gets it,
+     since you're already looking at it. Red text plus a red glow, for
+     visibility. */
   .resupply-row-label.has-need{
+    color:var(--restock);
     text-shadow:0 0 6px rgba(174,66,57,0.85), 0 0 14px rgba(174,66,57,0.55);
   }
   .resupply-row-count{
@@ -2206,7 +2208,7 @@ function renderResupplyTab(main, list){
       </div>
     </div>
     <div class="resupply-active-section${activeCode===ON_HOLD_CODE?' onhold-glow':''}">
-      <div class="resupply-row-label active-label${activeCode!==ON_HOLD_CODE && activeItems.length>0?' has-need':''}">${esc(activeName).toUpperCase()} <span class="resupply-row-count active-count">${activeItems.length}</span></div>
+      <div class="resupply-row-label active-label">${esc(activeName).toUpperCase()} <span class="resupply-row-count active-count">${activeItems.length}</span></div>
       <div class="photo-grid" id="resupplyGrid" style="--cols:${state.gridColsByTab.resupply};"></div>
     </div>
     <div id="resupplyCollapsedRows"></div>
