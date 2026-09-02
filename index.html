@@ -1273,7 +1273,7 @@ async function apiGet(){
     const url = state.apiUrl + sep + 'token=' + encodeURIComponent(getDeviceToken());
     const res = await fetch(url,{method:'GET'});
     const data = await res.json();
-    if(data && data.unauthorized) showDeviceBlockedScreen();
+    if(data && data.unauthorized) await confirmUnauthorizedThenBlock();
     return data;
   }
   catch(e){ return {ok:false,error:String(e)}; }
@@ -1283,9 +1283,33 @@ async function apiPost(body){
   try{
     const res = await fetch(state.apiUrl,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({...body, token:getDeviceToken()})});
     const data = await res.json();
-    if(data && data.unauthorized) showDeviceBlockedScreen();
+    if(data && data.unauthorized) await confirmUnauthorizedThenBlock();
     return data;
   }catch(e){ return {ok:false,error:String(e)}; }
+}
+// A single unauthorized response could in theory be a transient blip (a
+// slow or overlapping request, a brief hiccup reading the Devices sheet)
+// rather than a genuine revocation — and showDeviceBlockedScreen() is a
+// one-way door for the rest of the session, since it replaces the whole
+// page. One quick, isolated re-check before actually committing to that
+// avoids locking an already-approved device out over a fluke; a device
+// that's genuinely been revoked just fails this re-check too and still
+// gets blocked exactly as before, one request later.
+let unauthorizedRecheckInFlight = false;
+async function confirmUnauthorizedThenBlock(){
+  if(deviceBlocked || unauthorizedRecheckInFlight) return;
+  unauthorizedRecheckInFlight = true;
+  try{
+    const sep = state.apiUrl.indexOf('?')!==-1 ? '&' : '?';
+    const url = state.apiUrl + sep + 'token=' + encodeURIComponent(getDeviceToken());
+    const res = await fetch(url,{method:'GET'});
+    const data = await res.json();
+    if(data && data.unauthorized) showDeviceBlockedScreen();
+  }catch(e){
+    // Couldn't even confirm — don't block on an inconclusive check.
+  }finally{
+    unauthorizedRecheckInFlight = false;
+  }
 }
 
 let refreshGeneration = 0; // guards against overlapping refresh() calls resolving out of order
@@ -4135,7 +4159,7 @@ updateToastPosition();
 render();
 refresh(false);
 setInterval(()=>{
-  if(document.hidden || dragReorder) return;
+  if(document.hidden || dragReorder || orderSaveLocked) return;
   // A recently-committed drag-reorder write and this poll's read are two
   // separate requests with no guaranteed instant consistency between them
   // — polling too soon after a commit could occasionally catch a stale
