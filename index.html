@@ -4160,6 +4160,19 @@ applyLanguage();
 updateToastPosition();
 render();
 refresh(false);
+// Every open device polls on its own timer, all hitting the same Apps
+// Script project — with several tablets open at once, a fixed interval
+// means they tend to drift into sync and all poll in the same moment,
+// piling requests up right when Apps Script's own concurrent-execution
+// limit is most likely to bite (which shows up as everything getting
+// slower right around the same time, not evenly). A longer base interval
+// plus a random per-device offset (picked once per session, not re-rolled
+// every tick) spreads that load out instead of concentrating it — actions
+// still trigger their own immediate refresh regardless, so this only
+// affects how fresh the passive background auto-refresh is.
+const AUTO_POLL_BASE_MS = 30000;
+const AUTO_POLL_JITTER_MS = 15000;
+const autoPollIntervalMs = AUTO_POLL_BASE_MS + Math.floor(Math.random() * AUTO_POLL_JITTER_MS);
 setInterval(()=>{
   if(document.hidden || dragReorder || orderSaveLocked) return;
   // A recently-committed drag-reorder write and this poll's read are two
@@ -4171,7 +4184,7 @@ setInterval(()=>{
   // grace period after any order commit avoids racing that window.
   if(Date.now() - lastOrderCommitTime < 5000) return;
   refresh(false);
-}, 20000);
+}, autoPollIntervalMs);
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{ navigator.serviceWorker.register('service-worker.js').catch(()=>{}); });
 }
