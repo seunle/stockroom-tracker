@@ -1489,6 +1489,14 @@ function render(){
                              return belowMin && displayWasChanged && !resupplyRequested && !onHold;
                            })
                            .sort((a,b)=>SIZES.indexOf(a.Size)-SIZES.indexOf(b.Size));
+    // Only show a size chip for a size that's actually present among the
+    // current Storage-eligible rows (before the size filter itself is
+    // applied — otherwise picking one size would hide every other chip).
+    // No rows at all means no chips at all, not even "All".
+    const presentSizes = SIZES.filter(s => storageRows.some(r=>r.Size===s));
+    if(storageSizeFilter!=='All' && !presentSizes.includes(storageSizeFilter)){
+      storageSizeFilter = 'All'; // the size we were filtering on no longer has any rows — fall back rather than showing an empty grid with no way back except the (now-hidden) chip
+    }
     if(storageSizeFilter!=='All'){
       storageRows = storageRows.filter(r=>r.Size===storageSizeFilter);
     }
@@ -1507,8 +1515,8 @@ function render(){
     main.innerHTML = `
       <div class="toolbar-top">
         <div class="chiprow">
-          <div class="chip ${storageSizeFilter==='All'?'on':''}" onclick="setStorageSizeFilter('All')">All</div>
-          ${SIZES.map(s=>`<div class="chip ${storageSizeFilter===s?'on':''}" onclick="setStorageSizeFilter('${s}')">${SIZE_SHORT_LABEL[s]}</div>`).join('')}
+          ${presentSizes.length>0 ? `<div class="chip ${storageSizeFilter==='All'?'on':''}" onclick="setStorageSizeFilter('All')">All</div>` : ''}
+          ${presentSizes.map(s=>`<div class="chip ${storageSizeFilter===s?'on':''}" onclick="setStorageSizeFilter('${s}')">${SIZE_SHORT_LABEL[s]}</div>`).join('')}
         </div>
         <div class="scale-ctrl">
           <button class="scale-btn" onclick="adjustScale(1)">−</button>
