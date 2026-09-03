@@ -232,22 +232,10 @@
   .photo-grid.order-saving .card{
     opacity:0.4; filter:grayscale(0.7); pointer-events:none; transition:opacity 0.15s, filter 0.15s;
   }
-  /* Storage/Resupply/On Hold single-item actions — same idea, but the ONE
-     card actually being submitted (see actionInProgressId/
-     setItemActionLocked) stays at the stronger dim, while every OTHER card
-     in the grid gets a lighter one — makes it clearer at a glance which
-     specific item is the one doing something, versus everything else that's
-     just along for the ride, disabled but not the focus. */
-  .photo-grid.action-saving .card{
-    opacity:0.65; filter:grayscale(0.35); pointer-events:none; transition:opacity 0.15s, filter 0.15s;
-  }
-  .photo-grid.action-saving .card.card-action-active{
-    opacity:0.4; filter:grayscale(0.7);
-  }
-  /* Spinning-arrow overlay for the ONE specific card actively being
-     submitted (see actionInProgressId/setItemActionLocked) — everything
-     else in the grid is just plain dimmed by the rule above; this marks
-     which single item is actually doing something right now. */
+  /* Spinning-arrow overlay for a card that's mid-submission (see
+     pendingSubmitIds/.card-pending) — each pending card tracks and
+     resolves independently, so several can show this at once while every
+     OTHER card in the grid stays completely normal and interactive. */
   .action-spinner{
     position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
     color:#fff; filter:drop-shadow(0 1px 3px rgba(0,0,0,0.6));
@@ -1598,7 +1586,7 @@ function render(){
       <div class="grid-toolbar">
         <div class="grid-title loc-title-big">${tabTitle()} <span class="loc-title-count">${storageRows.length}</span></div>
       </div>
-      <div class="photo-grid${itemActionLocked?' action-saving':''}" id="photoGrid" style="--cols:${state.gridColsByTab[currentTab]};"></div>
+      <div class="photo-grid" id="photoGrid" style="--cols:${state.gridColsByTab[currentTab]};"></div>
     `;
     const grid = document.getElementById('photoGrid');
     if(storageRows.length===0){ grid.outerHTML = emptyState(); return; }
@@ -1657,7 +1645,7 @@ function render(){
       <div class="grid-title${currentTab==='display'?' loc-title-big':''}">${tabTitle()} <span class="loc-title-count">${groups.length}</span></div>
     </div>
     ${currentTab==='edit' && locationFilter!=='All' ? `<div class="desc" style="margin:0 4px 8px;">${t(editReorderMode?'dragHintOn':'dragHintOff')} ${esc(LOC_NAME_BY_CODE[locationFilter])}</div>` : ''}
-    <div class="photo-grid${itemActionLocked?' action-saving':''}" id="photoGrid" style="--cols:${state.gridColsByTab[currentTab]};"></div>
+    <div class="photo-grid" id="photoGrid" style="--cols:${state.gridColsByTab[currentTab]};"></div>
   `;
   const grid = document.getElementById('photoGrid');
 
@@ -1834,7 +1822,7 @@ function renderRequestTab(main, list){
     <div class="grid-toolbar">
       <div class="grid-title loc-title-big">${tabTitle()} <span class="loc-title-count">${groups.length}</span></div>
     </div>
-    <div class="photo-grid${itemActionLocked?' action-saving':''}" id="photoGrid" style="--cols:${state.gridColsByTab.request};"></div>
+    <div class="photo-grid" id="photoGrid" style="--cols:${state.gridColsByTab.request};"></div>
   `;
   const grid = document.getElementById('photoGrid');
 
@@ -1949,7 +1937,7 @@ function storageCardHtml(row){
   const need = Math.max(0, Number(row[MIN_COUNT_FIELD_BY_CODE[locationFilter]]||0) - Number(row[displayField]||0) - Number(row[ON_HOLD_FIELD_BY_CODE[locationFilter]]||0));
   const pending = pendingSubmitIds.has(String(row.ID));
   return `
-    <div class="card storage-card${pending?' card-pending':''}${isActionCurrent(row.ID)?' card-action-active':''}" data-card-key="${esc(row.ID)}" style="border-color:${color}; box-shadow:0 0 0 3px ${color}55;" ${pending?'':`onclick="openStorageItem('${esc(row.ID)}')"`}>
+    <div class="card storage-card${pending?' card-pending':''}" data-card-key="${esc(row.ID)}" style="border-color:${color}; box-shadow:0 0 0 3px ${color}55;" ${pending?'':`onclick="openStorageItem('${esc(row.ID)}')"`}>
       <div class="photo" style="background:${color}33;">${photo}</div>
       <div class="size-badge" style="background:${color}CC;">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
       <div class="qty-badge">${need}</div>
@@ -2649,7 +2637,7 @@ function renderResupplyTab(main, list){
     </div>
     <div class="resupply-active-section${activeCode===ON_HOLD_CODE?' onhold-glow':''}">
       <div class="resupply-row-label active-label">${esc(activeName).toUpperCase()} <span class="resupply-row-count active-count">${activeItems.length}</span></div>
-      <div class="photo-grid${itemActionLocked?' action-saving':''}" id="resupplyGrid" style="--cols:${state.gridColsByTab.resupply};"></div>
+      <div class="photo-grid" id="resupplyGrid" style="--cols:${state.gridColsByTab.resupply};"></div>
     </div>
     <div id="resupplyCollapsedRows"></div>
   `;
@@ -2698,7 +2686,7 @@ function resupplyCardHtml(row, code, field){
   const color = SIZE_COLORS[row.Size] || '#DDD';
   const pending = pendingSubmitIds.has(String(row.ID));
   return `
-    <div class="card resupply-card${pending?' card-pending':''}${isActionCurrent(row.ID)?' card-action-active':''}" data-card-key="${esc(row.ID)}_${code}" style="border-color:${color}; box-shadow:0 0 0 3px ${color}55;" ${pending?'':`onclick="openResupplyItem('${esc(row.ID)}','${code}')"`}>
+    <div class="card resupply-card${pending?' card-pending':''}" data-card-key="${esc(row.ID)}_${code}" style="border-color:${color}; box-shadow:0 0 0 3px ${color}55;" ${pending?'':`onclick="openResupplyItem('${esc(row.ID)}','${code}')"`}>
       <div class="photo">${photo}</div>
       <div class="size-badge" style="background:${color}CC;">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
       <div class="qty-badge">${qty}</div>
@@ -2715,7 +2703,7 @@ function onHoldCardHtml(row){
   const color = SIZE_COLORS[row.Size] || '#DDD';
   const pending = pendingSubmitIds.has(String(row.ID));
   return `
-    <div class="card resupply-card${pending?' card-pending':''}${isActionCurrent(row.ID)?' card-action-active':''}" data-card-key="onhold_${esc(row.ID)}" style="border-color:${color}; box-shadow:0 0 0 3px ${color}55;" ${pending?'':`onclick="openOnHoldItem('${esc(row.ID)}')"`}>
+    <div class="card resupply-card${pending?' card-pending':''}" data-card-key="onhold_${esc(row.ID)}" style="border-color:${color}; box-shadow:0 0 0 3px ${color}55;" ${pending?'':`onclick="openOnHoldItem('${esc(row.ID)}')"`}>
       <div class="photo">${photo}</div>
       <div class="size-badge" style="background:${color}CC;">${esc(SIZE_SHORT_LABEL[row.Size]||row.Size)}</div>
       <div class="qty-badge">${onHold}</div>
@@ -2856,7 +2844,7 @@ function onHoldBadgeFontSize(sizeKey){
   return 'clamp(18px, 6.5cqw, 27px)'; // 3+ chars, e.g. 2XL / 3XL
 }
 function openOnHoldItem(id){
-  if(itemActionLocked) return; // a previous submission is still saving — see setItemActionLocked
+  if(pendingSubmitIds.has(String(id))) return; // this specific item is already mid-submission
   const row = rows.find(r=>sameId(r.ID,id));
   if(!row) return;
   const original = {
@@ -2921,9 +2909,8 @@ async function submitOnHoldResolve(){
   const isHoodieRow = isDirectSystem(row.Type);
   pushUndoSnapshot([id]);
   pendingSubmitIds.add(String(id));
-  setItemActionLocked(true, id); // whole grid dims/blocks (and this card gets a spinner) until this submission's write+resync fully finishes — see setItemActionLocked
   closeSheet();
-  render(); // immediately dims/disables the card on the now-visible On Hold row
+  render(); // dims/disables just THIS card — every other card stays fully interactive
   toast(t('saving'));
   try{
     for(const code of changedCodes){
@@ -2935,6 +2922,7 @@ async function submitOnHoldResolve(){
       // skip this — they never use Display at all.
       const stepperVal = original[code] - updates[code];
       row[ON_HOLD_FIELD_BY_CODE[code]] = updates[code];
+      row[RESUPPLY_FIELD_BY_CODE[code]] = 0; // setResupplyForLocation always zeros this on the backend, matched here for a fully accurate optimistic update
       let newDisplay;
       if(!isHoodieRow){
         const minCount = Number(row[MIN_COUNT_FIELD_BY_CODE[code]]||0);
@@ -2945,15 +2933,11 @@ async function submitOnHoldResolve(){
       await apiPost({action:'setResupplyForLocation', id, location:code, onHold:updates[code], displayValue:newDisplay});
     }
     toast(t('updated'));
-    pendingSubmitIds.delete(String(id));
-    render(); // clears this card's dimmed/pending look right away, independent of whatever refresh() below ends up doing
-    await refresh(false);
   }finally{
-    // Guaranteed to run even if something above throws — a stuck-true lock
-    // would grey out and disable the ENTIRE grid permanently until reload,
-    // which would be a far worse outcome than whatever the original error was.
+    // Guaranteed to run even if something above throws.
     pendingSubmitIds.delete(String(id));
-    setItemActionLocked(false);
+    render(); // clears this card's spinner/dim right away — since every field above is already set to match what the backend just did, this is also the exact moment it correctly leaves the On Hold list, no gap
+    refresh(false); // background reconciliation with the server — not awaited, so it never holds up the next tap
   }
 }
 // open, so the stepper can live-update the On Hold preview and Done can
@@ -2961,7 +2945,7 @@ async function submitOnHoldResolve(){
 let resupplyEditContext = null; // { id, code, requiredQty }
 
 function openResupplyItem(id, code){
-  if(itemActionLocked) return; // a previous submission is still saving — see setItemActionLocked
+  if(pendingSubmitIds.has(String(id))) return; // this specific item is already mid-submission
   const row = rows.find(r=>sameId(r.ID,id));
   if(!row) return;
 
@@ -3049,9 +3033,8 @@ async function submitResupplyEdit(){
 
   pushUndoSnapshot([id]);
   pendingSubmitIds.add(String(id));
-  setItemActionLocked(true, id); // whole grid dims/blocks (and this card gets a spinner) until this submission's write+resync fully finishes — see setItemActionLocked
   closeSheet();
-  render(); // immediately dims/disables the card on the now-visible grid, before the API round-trip even starts
+  render(); // dims/disables just THIS card — every other card stays fully interactive
   toast(t('saving'));
 
   try{
@@ -3059,6 +3042,7 @@ async function submitResupplyEdit(){
     // selected location's On Hold field when a shortfall actually applies,
     // and always credit the Display count for this location — except for
     // Hoodies, which never touch Display.
+    row[RESUPPLY_FIELD_BY_CODE[code]] = 0; // setResupplyForLocation always zeros this on the backend, matched here for a fully accurate optimistic update
     if(onHold > 0){
       row[ON_HOLD_FIELD_BY_CODE[code]] = onHold;
     }
@@ -3073,15 +3057,11 @@ async function submitResupplyEdit(){
       displayValue: isHoodieRow ? undefined : newDisplay
     });
     toast(res.ok ? t('saved') : t('saveFailed') + (res.error||t('unknownError')), !res.ok);
-    pendingSubmitIds.delete(String(id));
-    render(); // clears this card's dimmed/pending look right away, independent of whatever refresh() below ends up doing
-    await refresh(false);
   }finally{
-    // Guaranteed to run even if something above throws — a stuck-true lock
-    // would grey out and disable the ENTIRE grid permanently until reload,
-    // which would be a far worse outcome than whatever the original error was.
+    // Guaranteed to run even if something above throws.
     pendingSubmitIds.delete(String(id));
-    setItemActionLocked(false);
+    render(); // clears this card's spinner/dim right away — since every field above is already set to match what the backend just did, this is also the exact moment it correctly leaves the Resupply list, no gap
+    refresh(false); // background reconciliation with the server — not awaited, so it never holds up the next tap
   }
 }
 
@@ -3091,7 +3071,7 @@ const SIZE_FULL_NAMES = {
   XL: 'Extra Large', XXL: 'Double X Large', XXXL: 'Triple X Large'
 };
 function openStorageItem(id){
-  if(itemActionLocked) return; // a previous submission is still saving — see setItemActionLocked
+  if(pendingSubmitIds.has(String(id))) return; // this specific item is already mid-submission
   if(locationFilter==='All'){
     toast(t('selectLocationResupply'), true);
     return;
@@ -3136,7 +3116,7 @@ function stepRequest(delta){
   el.value = Math.max(0, Math.min(6, Number(el.value||0)+delta));
 }
 async function submitResupply(id){
-  if(itemActionLocked) return;
+  if(pendingSubmitIds.has(String(id))) return; // this specific item is already mid-submission
   if(locationFilter==='All'){
     toast(t('selectLocationResupply'), true);
     return;
@@ -3145,12 +3125,13 @@ async function submitResupply(id){
   if(!row) return;
   const requestQty = Number(document.getElementById('requestQty').value||0);
   const onHoldField = ON_HOLD_FIELD_BY_CODE[locationFilter];
+  const resupplyField = RESUPPLY_FIELD_BY_CODE[locationFilter];
+  const displayField = DISPLAY_FIELD_BY_CODE[locationFilter];
   const currentOnHold = Number(row[onHoldField]||0);
   pushUndoSnapshot([id]); // so a premature press can be undone (reverts Display/Resupply/On Hold)
   pendingSubmitIds.add(String(id));
-  setItemActionLocked(true, id); // whole grid dims/blocks (and this card gets a spinner) until this submission's write+resync fully finishes — see setItemActionLocked
   closeSheet();
-  render(); // immediately dims/disables the card on the now-visible grid, before the API round-trip even starts
+  render(); // dims/disables just THIS card — every other card stays fully interactive, so the next item can be tapped immediately without waiting
 
   try{
     if(currentOnHold > 0){
@@ -3164,34 +3145,32 @@ async function submitResupply(id){
       row[onHoldField] = newOnHold;
       const res = await apiPost({action:'setResupplyForLocation', id, location:locationFilter, onHold:newOnHold});
       toast(res.ok ? `${t('onHoldForNowIs')} ${LOC_NAME_BY_CODE[locationFilter]} ${t('isNow')} ${newOnHold}` : t('couldNotUpdateHold') + (res.error||t('unknownError')), !res.ok);
-      pendingSubmitIds.delete(String(id));
-      render(); // clears this card's dimmed/pending look right away, independent of whatever refresh() below ends up doing
-      await refresh(false);
       return;
     }
 
     toast(t('requesting'));
     const res = await apiPost({action:'requestResupply', id, requestQty, location:locationFilter});
-    pendingSubmitIds.delete(String(id));
     if(res.ok){
+      // Fully apply the backend's own computed result locally — using its
+      // real returned newDisplay/increase rather than guessing means this
+      // card can correctly leave Storage's list the instant ITS OWN write
+      // finishes, without needing to wait on (or depend on the timing of)
+      // any separate refresh() call to notice and reflect it.
+      row[resupplyField] = requestQty;
+      if(res.newDisplay !== undefined) row[displayField] = res.newDisplay;
       toast(`${t('resupplyRequestedFor')} ${LOC_NAME_BY_CODE[locationFilter]} ${t('displayPlus')}${res.increase}`);
     }else{
       toast(t('couldNotSubmit') + (res.error||t('unknownError')), true);
     }
-    render(); // clears this card's dimmed/pending look right away, independent of whatever refresh() below ends up doing
-    // Always resync after a submit attempt, success OR failure — a reported
-    // failure doesn't necessarily mean the write didn't actually go through
-    // on the server (see apiGet's retry comment above); refreshing either
-    // way means the screen corrects itself within a moment instead of
-    // possibly sitting on stale/wrong data until something else happens to
-    // trigger a refresh.
-    await refresh(false);
   }finally{
-    // Guaranteed to run even if something above throws — a stuck-true lock
-    // would grey out and disable the ENTIRE grid permanently until reload,
-    // which would be a far worse outcome than whatever the original error was.
+    // Guaranteed to run even if something above throws.
     pendingSubmitIds.delete(String(id));
-    setItemActionLocked(false);
+    render(); // clears this card's spinner/dim right away — since the row's fields above are already set to match what the backend just did, this is also the exact moment it correctly leaves Storage's list, no gap
+    // Background reconciliation with the server — not awaited, so it never
+    // holds up the next tap. A reported failure above doesn't necessarily
+    // mean the write didn't actually land server-side (see apiGet's retry
+    // comment); this still resyncs either way, it just doesn't block on it.
+    refresh(false);
   }
 }
 
@@ -3806,60 +3785,29 @@ function setOrderSaveLocked(locked){
 }
 
 // Storage/Resupply/On Hold single-item actions (submitResupply,
-// submitResupplyEdit, submitOnHoldResolve) each fire their own write
-// followed by their own refresh() — tapping through several items quickly
-// used to let multiple of these overlap, and refresh()'s own generation
-// guard (which exists to discard STALE responses arriving late) could end
-// up discarding a string of otherwise-valid ones in a row if each new tap
-// kept bumping the generation counter before the previous refresh's
-// response had a chance to land. Net effect: items that WERE correctly
-// resupplied server-side never actually showed as such on screen (looking
-// like they "disappeared"), and cards stuck on their dimmed/pending look
-// even after the write had genuinely finished — because a discarded
-// refresh() also skips the render() that would've cleared that look.
-// Locking the grid (same dim-and-block treatment as order saves) for the
-// full duration of a submission's write+resync means only one of these is
-// ever in flight at a time, which removes the race entirely instead of
-// just narrowing the window for it.
-let itemActionLocked = false;
-// The specific item currently being submitted, for the WHOLE duration of
-// the lock (unlike pendingSubmitIds, which clears partway through, right
-// after the write itself finishes but before the follow-up resync is
-// done) — used to show a spinner on that one card specifically, so it's
-// visually obvious something is actively happening, not just that the
-// grid is generically disabled.
-let actionInProgressId = null;
-function setItemActionLocked(locked, id){
-  itemActionLocked = locked;
-  actionInProgressId = locked ? String(id) : null;
-  // The Resupply tab's grid uses a different element id (resupplyGrid) from
-  // every other tab (photoGrid) — only one of the two exists at a time, so
-  // trying both here is safe and covers whichever tab is actually open.
-  // This direct DOM update is really just for the immediate moment the
-  // lock is first set (before the next render() runs) — the class is also
-  // baked into every one of these grids' own template string (see
-  // render()/renderRequestTab/renderResupplyTab), since render() replaces
-  // the whole grid element's HTML wholesale and would otherwise silently
-  // wipe out a class applied this way the very next time it runs.
-  ['photoGrid','resupplyGrid'].forEach(gridId=>{
-    const grid = document.getElementById(gridId);
-    if(grid) grid.classList.toggle('action-saving', locked);
-  });
-}
-// Whether the given row is the ONE card currently mid-submission (see
-// setItemActionLocked/actionInProgressId) — every other card in a locked
-// grid is just passively disabled, this is the one actually doing
-// something, so it gets its own distinct treatment (spinner + darker dim).
-function isActionCurrent(rowId){
-  return actionInProgressId !== null && String(rowId) === String(actionInProgressId);
-}
-// Small spinning-arrow overlay, shown ONLY on the specific card currently
-// being submitted — everything else in the grid is just plain dimmed,
-// this is the one card actively doing something. A simple open ring (not
-// a near-complete circle) so there's a clear, deliberate gap between its
-// two ends rather than them nearly touching.
+// submitResupplyEdit, submitOnHoldResolve) each track their own item
+// independently via pendingSubmitIds — several can be mid-flight at once,
+// each showing its own spinner (below), while every OTHER card in the
+// grid stays completely normal and interactive. Earlier, these were
+// serialized (a whole-grid lock, one at a time) specifically to avoid a
+// refresh()-timing race where an item that WAS correctly updated
+// server-side could still show as un-updated for a moment, or a card
+// could get stuck on its dimmed look even after finishing. The real fix
+// for that turned out to be applying each write's own confirmed result
+// directly to the local row the instant its response arrives (see each
+// submit function below) — that's what makes an item disappear from its
+// list at the exact moment ITS OWN request finishes, rather than
+// depending on some later refresh() to notice and reflect it. Once that's
+// true, there's no correctness reason left to force everything through
+// one at a time, so several items can now be submitted back-to-back
+// without waiting on each other.
+// Small spinning-arrow overlay, shown on any card currently being
+// submitted (see pendingSubmitIds) — several can be pending at once, each
+// gets its own. A simple open ring (not a near-complete circle) so
+// there's a clear, deliberate gap between its two ends rather than them
+// nearly touching.
 function actionSpinnerHtml(rowId){
-  if(!isActionCurrent(rowId)) return '';
+  if(!pendingSubmitIds.has(String(rowId))) return '';
   return `<div class="action-spinner"><svg viewBox="0 0 24 24" width="68" height="68" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="9" stroke-dasharray="26 32"/></svg></div>`;
 }
 
@@ -4315,7 +4263,7 @@ const AUTO_POLL_BASE_MS = 30000;
 const AUTO_POLL_JITTER_MS = 15000;
 const autoPollIntervalMs = AUTO_POLL_BASE_MS + Math.floor(Math.random() * AUTO_POLL_JITTER_MS);
 setInterval(()=>{
-  if(document.hidden || dragReorder || orderSaveLocked || itemActionLocked) return;
+  if(document.hidden || dragReorder || orderSaveLocked) return;
   // A recently-committed drag-reorder write and this poll's read are two
   // separate requests with no guaranteed instant consistency between them
   // — polling too soon after a commit could occasionally catch a stale
