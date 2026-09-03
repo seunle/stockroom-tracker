@@ -367,6 +367,17 @@
     background:rgba(174,66,57,0.13);
     box-shadow:0 0 0 3px rgba(174,66,57,0.55), 0 0 40px 10px rgba(174,66,57,0.45);
   }
+  /* Display/Request tabs only: whenever the current Type's Direct/Indirect
+     system has been toggled away from its own default (see
+     isSystemOverridden/systemToggleHtml), the whole grid gets this same
+     red glow treatment as the On Hold row above — a clear "you're looking
+     at a different mode than usual for this type" cue, on the icons
+     themselves rather than just the small toggle pill. */
+  .photo-grid.system-overridden-glow{
+    border-radius:18px; padding:14px 12px;
+    background:rgba(174,66,57,0.13);
+    box-shadow:0 0 0 3px rgba(174,66,57,0.55), 0 0 40px 10px rgba(174,66,57,0.45);
+  }
   .resupply-collapsed-row{cursor:pointer; margin-bottom:14px;}
   .resupply-row-label{
     font-family:'Oswald'; font-weight:600; font-size:26px; letter-spacing:0.6px; text-transform:uppercase;
@@ -1645,7 +1656,7 @@ function render(){
       <div class="grid-title${currentTab==='display'?' loc-title-big':''}">${tabTitle()} <span class="loc-title-count">${groups.length}</span></div>
     </div>
     ${currentTab==='edit' && locationFilter!=='All' ? `<div class="desc" style="margin:0 4px 8px;">${t(editReorderMode?'dragHintOn':'dragHintOff')} ${esc(LOC_NAME_BY_CODE[locationFilter])}</div>` : ''}
-    <div class="photo-grid" id="photoGrid" style="--cols:${state.gridColsByTab[currentTab]};"></div>
+    <div class="photo-grid${currentTab==='display' && isSystemOverridden(categoryFilter) ? ' system-overridden-glow' : ''}" id="photoGrid" style="--cols:${state.gridColsByTab[currentTab]};"></div>
   `;
   const grid = document.getElementById('photoGrid');
 
@@ -1822,7 +1833,7 @@ function renderRequestTab(main, list){
     <div class="grid-toolbar">
       <div class="grid-title loc-title-big">${tabTitle()} <span class="loc-title-count">${groups.length}</span></div>
     </div>
-    <div class="photo-grid" id="photoGrid" style="--cols:${state.gridColsByTab.request};"></div>
+    <div class="photo-grid${isSystemOverridden(categoryFilter) ? ' system-overridden-glow' : ''}" id="photoGrid" style="--cols:${state.gridColsByTab.request};"></div>
   `;
   const grid = document.getElementById('photoGrid');
 
@@ -1839,10 +1850,13 @@ function activeLocationTitleWord(){
 // CURRENT type's effective system; whether it renders blue (this type's
 // own default) or red-with-glow (overridden away from it) is purely a
 // function of whether that flip landed back on the default or not.
+function isSystemOverridden(type){
+  return HOODIE_TYPES.includes(type) !== isDirectSystem(type);
+}
 function systemToggleHtml(){
   const type = categoryFilter;
   const direct = isDirectSystem(type);
-  const isDefault = HOODIE_TYPES.includes(type) === direct;
+  const isDefault = !isSystemOverridden(type);
   const label = direct ? t('systemDirect') : t('systemIndirect');
   return `
     <div class="system-toggle${isDefault?'':' overridden'}" onclick="toggleTypeSystem()">
