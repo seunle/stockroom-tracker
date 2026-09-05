@@ -834,14 +834,21 @@
   .card.jewelry-glow-yellow{box-shadow:0 0 0 3px rgba(184,134,11,0.7), 0 0 18px 5px rgba(184,134,11,0.55);}
   .card.jewelry-glow-orange{box-shadow:0 0 0 3px rgba(210,105,30,0.7), 0 0 18px 5px rgba(210,105,30,0.55);}
   .card.jewelry-glow-red{box-shadow:0 0 0 3px rgba(174,66,57,0.7), 0 0 18px 5px rgba(174,66,57,0.55);}
+  /* Same three colors, applied to the redistribution popup's own T/P/B
+     number boxes — text color plus a matching glow, so the popup shows
+     WHY the item got flagged, not just the card in the grid. */
+  .onhold-value-box.jewelry-value-yellow{color:#B8860B; box-shadow:0 0 0 2px rgba(184,134,11,0.6), 0 0 14px 4px rgba(184,134,11,0.5);}
+  .onhold-value-box.jewelry-value-orange{color:#D2691E; box-shadow:0 0 0 2px rgba(210,105,30,0.6), 0 0 14px 4px rgba(210,105,30,0.5);}
+  .onhold-value-box.jewelry-value-red{color:var(--restock); box-shadow:0 0 0 2px rgba(174,66,57,0.6), 0 0 14px 4px rgba(174,66,57,0.5);}
   .size-plus:disabled, .size-minus:disabled{opacity:0.3; pointer-events:none;}
   .jewelry-dist-preview{
-    position:absolute; bottom:-8px; right:-8px; min-width:22px; height:22px; padding:0 5px;
-    border-radius:11px; font-family:'Inter'; font-weight:800; font-size:13px; color:#fff;
+    position:absolute; bottom:-14px; right:-14px; min-width:44px; height:44px; padding:0 10px;
+    border-radius:22px; font-family:'Inter'; font-weight:800; font-size:26px; color:#fff;
     align-items:center; justify-content:center; box-shadow:0 1px 4px rgba(0,0,0,0.3);
   }
   .jewelry-dist-preview.jewelry-preview-up{background:var(--ok);}
   .jewelry-dist-preview.jewelry-preview-down{background:var(--restock);}
+  .jewelry-dist-preview.jewelry-preview-neutral{background:var(--ink-soft);}
   /* As with the Display popup above: the photo column and info column
      can only shrink so far side by side before the stepper/Need numbers
      start overlapping. That's the one thing here that still needs a hard
@@ -3124,6 +3131,7 @@ function renderJewelryStorageGrid(main, list){
 // on one location frees up exactly that much "pool" for a '+' somewhere
 // else, and nothing can be added until something's been freed up first.
 let jewelryDistContext = null; // { id, original: {T,P,B} }
+let jewelryDistTouched = { T:false, P:false, B:false }; // once a column's been changed at all this session, its preview badge stays visible even if stepped back to equal the original — see updateJewelryDistUI
 function openJewelryDistItem(key){
   const groups = buildGroups(activeRows());
   const g = groups.find(x=>x.key===key);
@@ -3137,7 +3145,13 @@ function openJewelryDistItem(key){
     B: Number(row.DisplayBears||0)
   };
   jewelryDistContext = { id: row.ID, key, original };
+  jewelryDistTouched = { T:false, P:false, B:false };
   const photo = g.photo ? `<img src="${esc(g.photo)}">` : '';
+  // Same severity the card's own glow is based on (see jewelryImbalanceSeverity)
+  // — applied to each location's number here too, so the popup itself
+  // shows why this item got flagged, not just the card in the grid.
+  const severity = jewelryImbalanceSeverity(g);
+  const valueBoxCls = severity ? ` jewelry-value-${severity}` : '';
   openSheetHtml(`
     <h2 style="margin:0 0 2px;">${esc(g.name)}</h2>
     <div class="desc" style="margin:0 0 12px;">${esc(row.Size)}</div>
@@ -3146,7 +3160,7 @@ function openJewelryDistItem(key){
       ${['T','P','B'].map(code=>`
         <div class="onhold-col">
           <div class="onhold-col-label">${code}</div>
-          <div class="onhold-value-box" style="position:relative;">
+          <div class="onhold-value-box${valueBoxCls}" style="position:relative;">
             ${original[code]}
             <div class="jewelry-dist-preview" id="jwPreview-${code}" style="display:none;"></div>
           </div>
@@ -3178,11 +3192,15 @@ function stepJewelryDist(code, delta){
   if(delta > 0 && currentSum >= total) return; // no pool available to draw from — the total across all three can never exceed the original sum
   const el = document.getElementById('jwDist-'+code);
   if(el) el.textContent = next;
+  jewelryDistTouched[code] = true; // once touched, its preview badge stays showing for the rest of this popup session, even if stepped back to the original value
   updateJewelryDistUI();
 }
 // Refreshes the green/red "what this would become" preview badge on every
 // column, and disables/enables each +/- button based on the current pool
 // (total minus what's currently allocated) and that column's own value.
+// A column's badge shows as soon as it's been touched ONCE and never hides
+// again afterward for the rest of this popup session — going neutral grey
+// (rather than disappearing) if it's stepped back to its original value.
 function updateJewelryDistUI(){
   if(!jewelryDistContext) return;
   const original = jewelryDistContext.original;
@@ -3194,11 +3212,12 @@ function updateJewelryDistUI(){
     const preview = document.getElementById('jwPreview-'+code);
     const diff = draft[code] - original[code];
     if(preview){
-      if(diff !== 0){
+      if(jewelryDistTouched[code]){
         preview.style.display = 'flex';
         preview.textContent = draft[code];
         preview.classList.toggle('jewelry-preview-up', diff>0);
         preview.classList.toggle('jewelry-preview-down', diff<0);
+        preview.classList.toggle('jewelry-preview-neutral', diff===0);
       }else{
         preview.style.display = 'none';
       }
