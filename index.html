@@ -1839,7 +1839,7 @@ function requestCardHtml(g){
   // every-size group there, so this whole branch is simply unused then.
   const scopeSizes = g.__scopeSizes || null;
   const locBadge = (!scopeSizes && locationFilter==='All') ? `<div class="loc-tag">${esc(g.location)}</div>` : '';
-  const sizeBadge = scopeSizes ? `<div class="size-badge">${esc(scopeSizes.map(sz=>SIZE_SHORT_LABEL[sz]||sz).join('/'))}</div>` : '';
+  const sizeBadge = scopeSizes ? `<div class="size-badge" style="background:${(SIZE_COLORS[scopeSizes[0]]||'#DDD')}CC;">${esc(scopeSizes.map(sz=>SIZE_SHORT_LABEL[sz]||sz).join('/'))}</div>` : '';
   const photo = g.photo ? `<img src="${esc(g.photo)}" loading="lazy">` : '👕';
   const pending = Object.values(g.rows).some(r=>pendingSubmitIds.has(String(r.ID)));
   const priceVal = Object.values(g.rows).map(r=>Number(r.Price||0)).find(p=>p>0) || 0;
@@ -1860,21 +1860,25 @@ function requestCardHtml(g){
 // when a specific price is selected in the Request tab's Price filter, so
 // an upcharged XXL or XXXL shows as its own separate card under its own
 // (different) price instead of being lumped into the base-price item.
-// A group where every size already shares this exact price (the common
-// case) is returned completely unchanged — no upcharge sizes, or the
-// price selected just happens to be the shared base price.
+// The size badge only ever shows for that upcharge case, though — filtering
+// by the ordinary/base price still shows a plain (unbadged) card even if
+// XXL/XXXL themselves don't match it (they're priced differently and just
+// get left out), rather than badging it with everyday sizes like S/M/L/XL.
 function buildPriceScopedGroups(groups, targetPrice){
   const result = [];
   groups.forEach(g=>{
     const allSizes = Object.keys(g.rows);
     const matchingSizes = allSizes.filter(sz=>Number(g.rows[sz].Price||0)===targetPrice);
     if(matchingSizes.length===0) return;
+    const isUpchargeOnly = matchingSizes.every(sz=>sz==='XXL'||sz==='XXXL');
     if(matchingSizes.length===allSizes.length){
       result.push(g);
     }else{
       const scopedRows = {};
       matchingSizes.forEach(sz=>{ scopedRows[sz] = g.rows[sz]; });
-      result.push({ key:g.key, name:g.name, type:g.type, location:g.location, photo:g.photo, rows:scopedRows, __scopeSizes:matchingSizes });
+      const scoped = { key:g.key, name:g.name, type:g.type, location:g.location, photo:g.photo, rows:scopedRows };
+      if(isUpchargeOnly) scoped.__scopeSizes = matchingSizes; // only the upcharge case gets the badge
+      result.push(scoped);
     }
   });
   return result;
