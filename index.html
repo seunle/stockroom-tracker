@@ -1171,6 +1171,8 @@ const TRANSLATIONS = {
     deactivate:'Deactivate', reactivate:'Reactivate', reactivateTitle:'Reactivate', reactivateBody:'This brings it back into Display/Storage/Resupply.',
     deactivateTitle:'Deactivate', deactivateBody:'Hides it from Display/Storage/Resupply. Nothing is deleted from the sheet — you can reactivate it here anytime, or flip the Active column back to 1 directly in Sheets.',
     reactivating:'Reactivating…', deactivating:'Deactivating…', reactivated:'Reactivated', deactivatedToast:'Deactivated',
+    deleteItemBtn:'Delete', deleteItemTitle:'Delete', deleteItemBody:'This permanently removes every row for this item from the sheet — every size, for every location. This cannot be undone.',
+    deleting:'Deleting…', deletedToast:'Deleted',
     selectLocationDisplay:'Select a specific location (top bar) before checking Display counts',
     editingDisplay:'editing Display -', checkedBtn:'✓ Checked', doneBtn:'Update', markedChecked:'Marked checked', checkedToast:'Checked', minLabel:'min',
     noMinCountMsg:'Please Provide a Min Count in Edit',
@@ -1223,6 +1225,8 @@ const TRANSLATIONS = {
     deactivate:'비활성화', reactivate:'재활성화', reactivateTitle:'재활성화', reactivateBody:'진열/재고/보충 탭에 다시 표시됩니다.',
     deactivateTitle:'비활성화', deactivateBody:'진열/재고/보충 탭에서 숨겨집니다. 시트에서 삭제되지는 않으며, 언제든 여기서 재활성화하거나 시트의 Active 열을 직접 1로 바꿀 수 있습니다.',
     reactivating:'재활성화 중…', deactivating:'비활성화 중…', reactivated:'재활성화됨', deactivatedToast:'비활성화됨',
+    deleteItemBtn:'삭제', deleteItemTitle:'삭제', deleteItemBody:'이 품목의 모든 행(모든 사이즈, 모든 지점)이 시트에서 영구적으로 삭제됩니다. 되돌릴 수 없습니다.',
+    deleting:'삭제 중…', deletedToast:'삭제됨',
     selectLocationDisplay:'진열 수량을 확인하려면 상단에서 매장을 선택하세요',
     editingDisplay:'진열 수정 -', checkedBtn:'✓ 확인함', doneBtn:'업데이트', markedChecked:'확인 완료로 표시함', checkedToast:'확인함', minLabel:'최소',
     noMinCountMsg:'편집에서 최소 수량을 입력해주세요',
@@ -4559,6 +4563,9 @@ function openEditGroup(key){
         : `<button class="btn btn-ok" onclick="confirmSetActive('${esc(key)}',true)">${t('reactivate')}</button>`}
       <button class="btn btn-save" onclick="submitEditGroup()">${t('save')}</button>
     </div>
+    ${isActive?'':`<div class="sheet-actions" style="margin-top:10px;">
+      <button class="btn btn-danger" style="flex:1;" onclick="confirmDeleteGroup('${esc(key)}')">${t('deleteItemBtn')}</button>
+    </div>`}
   `, 'display');
 }
 async function submitEditGroup(){
@@ -4645,6 +4652,44 @@ async function submitSetActive(key, makeActive){
   toast(makeActive ? t('reactivated') : t('deactivatedToast'));
   ids.forEach(id=>pendingSubmitIds.delete(String(id)));
   refresh(false);
+}
+// Only reachable for an already-deactivated item (see the Delete button's
+// own isActive guard in openEditGroup) — permanently removes every row in
+// the group, every size, from the sheet. Deliberately NOT undo-able via
+// pushUndoSnapshot's normal revert-to-snapshot mechanism, since the rows
+// themselves are gone, not just changed; the confirmation step is the
+// safety net here instead.
+function confirmDeleteGroup(key){
+  const groups = allGroups();
+  const g = groups.find(x=>x.key===key);
+  if(!g) return;
+  openSheetHtml(`
+    <h2>${t('deleteItemTitle')} "${esc(g.name)}"?</h2>
+    <div class="desc">${t('deleteItemBody')}</div>
+    <div class="sheet-actions">
+      <button class="btn btn-ghost" onclick="closeSheet()">${t('cancel')}</button>
+      <button class="btn btn-danger" onclick="submitDeleteGroup('${esc(key)}')">${t('deleteItemBtn')}</button>
+    </div>`);
+}
+async function submitDeleteGroup(key){
+  const groups = allGroups();
+  const g = groups.find(x=>x.key===key);
+  closeSheet();
+  if(!g) return;
+  const ids = Object.values(g.rows).map(r=>r.ID);
+  ids.forEach(id=>pendingSubmitIds.add(String(id)));
+  render();
+  toast(t('deleting'));
+  const res = await apiPost({action:'deleteRows', ids});
+  if(res.ok){
+    rows = rows.filter(r=>!ids.some(id=>sameId(r.ID,id))); // remove locally right away — no need to wait on a refresh for the item to actually disappear
+    toast(t('deletedToast'));
+  }else{
+    toast(t('saveFailed') + (res.error||t('unknownError')), true);
+  }
+  ids.forEach(id=>pendingSubmitIds.delete(String(id)));
+  render();
+  refresh(false); // background reconciliation — not awaited, so it never holds up the next tap
 }
 
 /* ============================= PHOTO PICKER ============================= */
