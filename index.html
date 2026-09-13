@@ -584,7 +584,7 @@
      work with stepRequestDraft's existing .value-based DOM updates
      unchanged — same generic stepper every other Direct-system item uses. */
   .jewelry-big-count-input{
-    font-family:'Inter'; font-weight:800; font-size:clamp(30px, 11cqw, 54px); color:var(--ink); min-width:0.8em;
+    font-family:'Inter'; font-weight:800; font-size:clamp(30px, 11cqw, 54px); color:var(--ink); width:1em; min-width:1em;
     text-align:center; -moz-appearance:textfield; box-sizing:border-box;
     border:1.5px solid var(--line); border-radius:12px; background:var(--paper); padding:8px 2px;
   }
@@ -1939,6 +1939,7 @@ function requestCardHtml(g){
       ${locBadge}
       ${inactive?'<div class="loc-tag" style="left:auto;right:6px;top:auto;bottom:34px;background:rgba(174,66,57,0.85);">OFF</div>':''}
       <div class="cap">${esc(g.name)}</div>
+      ${pendingSpinnerHtml(pending)}
     </div>`;
 }
 // Splits each group into either its normal full-item form, or a scoped
@@ -2127,6 +2128,7 @@ function cardHtml(g){
       ${locBadge}
       ${inactive?'<div class="loc-tag" style="left:auto;right:6px;top:auto;bottom:34px;background:rgba(174,66,57,0.85);">OFF</div>':''}
       <div class="cap">${esc(g.name)}</div>
+      ${pendingSpinnerHtml(pending)}
     </div>`;
 }
 function storageCardHtml(row){
@@ -4624,9 +4626,17 @@ function setOrderSaveLocked(locked){
 // gets its own. A simple open ring (not a near-complete circle) so
 // there's a clear, deliberate gap between its two ends rather than them
 // nearly touching.
-function actionSpinnerHtml(rowId){
-  if(!pendingSubmitIds.has(String(rowId))) return '';
+// Small spinning-arrow overlay, shown on any card currently being
+// submitted (see pendingSubmitIds) — several can be pending at once, each
+// gets its own. A simple open ring (not a near-complete circle) so
+// there's a clear, deliberate gap between its two ends rather than them
+// nearly touching.
+function pendingSpinnerHtml(isPending){
+  if(!isPending) return '';
   return `<div class="action-spinner"><svg viewBox="0 0 24 24" width="68" height="68" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="9" stroke-dasharray="26 32"/></svg></div>`;
+}
+function actionSpinnerHtml(rowId){
+  return pendingSpinnerHtml(pendingSubmitIds.has(String(rowId)));
 }
 
 /* ============================= EDIT TAB ============================= */
