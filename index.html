@@ -246,6 +246,7 @@
     background:var(--paper-raised); border:1.5px solid var(--line); border-radius:12px;
     overflow:hidden; position:relative; aspect-ratio:1/1.12;
     display:flex; flex-direction:column;
+    transition:opacity 2.5s ease, filter 2.5s ease; /* lets the ephemeral "recently acted" grey (see markRecentlyActed) fade out smoothly instead of just vanishing */
   }
   .card .photo{
     flex:1; background:var(--line); display:flex;align-items:center;justify-content:center;
@@ -1289,6 +1290,37 @@ function applyLanguage(){
 // change out from under it. Cards for these IDs render disabled/dimmed
 // until refresh() clears them from this set.
 let pendingSubmitIds = new Set();
+// Direct-mode Request-tab items, Jewelry, and Souvenir don't use the
+// persistent, manually-toggled "Checked" grey highlight the regular
+// Display popup uses — instead, submitting an action there shows a
+// loading spinner (via pendingSubmitIds, same as Storage/Resupply) until
+// it finishes, then a temporary grey highlight for about a minute as
+// visual confirmation it went through, fading out on its own rather than
+// staying until someone manually unchecks it or presses Refresh Session.
+// The underlying Checked sheet column is still written for these (so the
+// checkmark FILTER chip that still exists for some Request-tab types
+// keeps working) — this only changes what drives the CARD's own visual.
+let recentlyActedKeys = new Map(); // groupKey -> expiry timestamp (Date.now() + RECENTLY_ACTED_MS)
+const RECENTLY_ACTED_MS = 60000;
+function markRecentlyActed(key){
+  const expiresAt = Date.now() + RECENTLY_ACTED_MS;
+  recentlyActedKeys.set(key, expiresAt);
+  setTimeout(()=>{
+    if(recentlyActedKeys.get(key) !== expiresAt) return; // a newer action on this same item already scheduled its own, later timer
+    recentlyActedKeys.delete(key);
+    // Targeted DOM update instead of a full render() — toggling the class
+    // on the EXISTING element is what lets the CSS opacity/filter
+    // transition actually animate a smooth fade, rather than the card
+    // just disappearing and reappearing plain via a full rebuild.
+    document.querySelectorAll('[data-group-key]').forEach(el=>{
+      if(el.dataset.groupKey===key) el.classList.remove('session-checked');
+    });
+  }, RECENTLY_ACTED_MS);
+}
+function isRecentlyActed(key){
+  const exp = recentlyActedKeys.get(key);
+  return exp !== undefined && Date.now() < exp;
+}
 let checkedFilter = 'all'; // 'all' | 'checked' | 'unchecked' — Display tab only
 let jewelryFilter = 'all'; // 'all' | 'earring' | 'necklace' — Jewelry's Display and Storage tabs only
 let storageSizeFilter = 'All'; // 'All' | 'XS' | ... — Storage tab only
@@ -1878,7 +1910,11 @@ function souvenirFilterChipsHtml(subtypeValues){
 }
 function requestCardHtml(g){
   const inactive = !groupIsActive(g);
-  const checked = locationFilter!=='All' && isGroupChecked(g, locationFilter);
+  // Direct-mode cards use the ephemeral "just submitted" grey (see
+  // markRecentlyActed) instead of the persistent, manually-toggled Checked
+  // grey the regular Display popup uses — it fades on its own after about
+  // a minute rather than staying until manually unchecked.
+  const checked = isRecentlyActed(g.key);
   // __scopeSizes marks a price-filter-only pseudo-card (see
   // buildPriceScopedGroups) — same item, but only showing the size(s) that
   // actually match the selected price (e.g. just XXL or XXXL, when their
@@ -2072,7 +2108,11 @@ function emptyState(compact){
 function cardHtml(g){
   const status = groupStatus(g);
   const inactive = !groupIsActive(g);
-  const checked = currentTab==='display' && locationFilter!=='All' && isGroupChecked(g, locationFilter);
+  // Jewelry uses the ephemeral "just submitted" grey (see
+  // markRecentlyActed) instead of the persistent, manually-toggled Checked
+  // grey every other Display-tab item uses — it fades on its own after
+  // about a minute rather than staying until manually unchecked.
+  const checked = currentTab==='display' && (g.type==='Jewelry' ? isRecentlyActed(g.key) : (locationFilter!=='All' && isGroupChecked(g, locationFilter)));
   const locBadge = locationFilter==='All' ? `<div class="loc-tag">${esc(g.location)}</div>` : '';
   const photo = g.photo ? `<img src="${esc(g.photo)}" loading="lazy">` : '👕';
   const pending = Object.values(g.rows).some(r=>pendingSubmitIds.has(String(r.ID)));
@@ -2378,7 +2418,6 @@ function openJewelryDisplayCheck(key){
       </div>
     </div>
     <div class="sheet-actions" style="margin-top:16px;">
-      <button class="btn-check-toggle${isGroupChecked(g,locationFilter)?' on':''}" onclick="toggleCheckedAndClose('${esc(key)}','${locationFilter}')"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 13 9.5 18.5 20 6"></polyline></svg></button>
       <button class="btn btn-confirm btn-wide3 btn-display-update" onclick="commitDisplayCheck()">${t('doneBtn')}</button>
     </div>
   `, 'display');
@@ -2544,6 +2583,11 @@ async function commitDisplayCheck(){
   });
 
   const affectedIds = Object.keys(draft);
+  // Jewelry uses the new loading-then-fade behavior (see
+  // markRecentlyActed/pendingSubmitIds) instead of showing the grey
+  // Checked look immediately — everything else on Display keeps the
+  // existing immediate behavior below unchanged.
+  const isJewelryGroup = affectedIds.length>0 && (rows.find(r=>sameId(r.ID, affectedIds[0]))||{}).Type === 'Jewelry';
   if(affectedIds.length>0){
     pushUndoSnapshot(affectedIds); // one batch undo covering Display, On Hold, Resupply, Storage, and Checked changes from this check
     // Optimistic local updates, matching what the server is about to do.
@@ -2557,6 +2601,25 @@ async function commitDisplayCheck(){
       row[CHECKED_FIELD_BY_CODE[locForDraft]] = 1;
     });
   }
+
+  if(isJewelryGroup){
+    affectedIds.forEach(id=>pendingSubmitIds.add(id)); // shows the loading spinner on this card until the update finishes
+    render();
+    toast(t('checkedToast'));
+    if(affectedIds.length>0){
+      const res = await apiPost({action:'commitDisplayReview', location:locForDraft, updates:reviewUpdates});
+      affectedIds.forEach(id=>pendingSubmitIds.delete(id));
+      if(res.ok){
+        markRecentlyActed(groupKeyForDraft); // spinner's done — now show the temporary grey, which fades on its own after about a minute
+      }else{
+        toast(t('saveFailed') + (res.error||t('unknownError')), true);
+        refresh(false);
+      }
+      render();
+    }
+    return;
+  }
+
   // Pressing Done always marks the item checked now — the separate
   // "force checked without changes" button doesn't exist anymore, that
   // role is covered by the standalone checkmark toggle instead. Sent as
@@ -2669,7 +2732,6 @@ function openRequestCheck(key, scopeSizesCsv){
     </div>
     </div>
     <div class="sheet-actions" style="margin-top:16px;">
-      <button class="btn-check-toggle${isGroupChecked(g,locationFilter)?' on':''}" onclick="toggleCheckedAndClose('${esc(key)}','${locationFilter}')"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 13 9.5 18.5 20 6"></polyline></svg></button>
       <button class="btn btn-confirm btn-wide3 btn-request-submit" onclick="commitRequestCheck()">${t('requestBtn')}</button>
     </div>
     </div>
@@ -2710,7 +2772,6 @@ function openSouvenirRequestCheck(key){
       </div>
     </div>
     <div class="sheet-actions" style="margin-top:16px;">
-      <button class="btn-check-toggle${isGroupChecked(g,locationFilter)?' on':''}" onclick="toggleCheckedAndClose('${esc(key)}','${locationFilter}')"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 13 9.5 18.5 20 6"></polyline></svg></button>
       <button class="btn btn-confirm btn-wide3 btn-request-submit" onclick="commitRequestCheck()">${t('requestBtn')}</button>
     </div>
   `, 'display');
@@ -2739,19 +2800,27 @@ async function commitRequestCheck(){
 
   // Pressing Request always marks the item checked, even if every size was
   // left at 0 — same "visual feedback that it was a success" idea as Done.
+  // Still written to the sheet (the checkmark FILTER some Request-tab
+  // types still show relies on it) even though the CARD's own grey now
+  // comes from markRecentlyActed below instead of this value.
   checkedIds.forEach(id=>{
     const row = rows.find(r=>sameId(r.ID,id));
     if(row) row[checkedField] = 1; // optimistic — matches what the server is about to do
   });
+  checkedIds.forEach(id=>pendingSubmitIds.add(id)); // shows the loading spinner on this card until the request finishes
 
   if(requests.length===0){
     render();
     toast(t('checkedToast'));
     const res = await apiPost({action:'requestHoodieSizes', location:locForDraft, requests:[], checkedIds});
-    if(!res.ok){
+    checkedIds.forEach(id=>pendingSubmitIds.delete(id));
+    if(res.ok){
+      markRecentlyActed(groupKeyForDraft);
+    }else{
       toast(t('saveFailed') + (res.error||t('unknownError')), true);
       refresh(false);
     }
+    render();
     return;
   }
 
@@ -2769,10 +2838,14 @@ async function commitRequestCheck(){
   render();
   toast(t('requestSentToast'));
   const res = await apiPost({action:'requestHoodieSizes', location:locForDraft, requests, checkedIds});
-  if(!res.ok){
+  checkedIds.forEach(id=>pendingSubmitIds.delete(id));
+  if(res.ok){
+    markRecentlyActed(groupKeyForDraft);
+  }else{
     toast(t('saveFailed') + (res.error||t('unknownError')), true);
     refresh(false);
   }
+  render();
 }
 
 /* ============================= WAREHOUSE MODE: ITEM POPUP ============================= */
