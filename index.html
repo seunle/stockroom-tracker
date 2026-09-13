@@ -3918,7 +3918,7 @@ function selectJewelryStyle(formPrefix, style){
   const hidden = document.getElementById(formPrefix+'JewelryStyle');
   if(hidden) hidden.value = style;
 }
-const SOUVENIR_SUBTYPES = ['Magnet','Keychain','Sticker','Snowglobe','Drinkware'];
+const SOUVENIR_SUBTYPES = ['Magnet','Keychain','Sticker','Snowglobe','Drinkware','Other'];
 function souvenirSubtypeFieldHtml(formPrefix, selectedSubtype){
   const subtype = SOUVENIR_SUBTYPES.includes(selectedSubtype) ? selectedSubtype : SOUVENIR_SUBTYPES[0];
   return `
