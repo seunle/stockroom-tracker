@@ -577,6 +577,16 @@
   .jewelry-big-count{
     font-family:'Inter'; font-weight:800; font-size:clamp(36px, 14cqw, 68px); color:var(--ink); min-width:1.4em; text-align:center;
   }
+  /* Souvenir's Request popup reuses this same big-number layout, but with
+     an actual <input> (readonly) instead of a plain div, since it needs to
+     work with stepRequestDraft's existing .value-based DOM updates
+     unchanged — same generic stepper every other Direct-system item uses. */
+  .jewelry-big-count-input{
+    font-family:'Inter'; font-weight:800; font-size:clamp(36px, 14cqw, 68px); color:var(--ink); min-width:1.4em;
+    text-align:center; border:none; background:transparent; -moz-appearance:textfield;
+  }
+  .jewelry-big-count-input.zero-val{color:#8C8C8C;}
+  .jewelry-big-count-input::-webkit-outer-spin-button, .jewelry-big-count-input::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
   /* clamp(min, preferred, max): the preferred value is in cqw (% of the
      .sheet container's own width), so the photo shrinks/grows continuously
      as the popup gets narrower or wider — a tablet or a resized desktop
@@ -1880,8 +1890,10 @@ function requestCardHtml(g){
   const priceVal = Object.values(g.rows).map(r=>Number(r.Price||0)).find(p=>p>0) || 0;
   const priceBadge = priceVal>0 ? `<div class="request-price-badge">$${priceVal.toFixed(2)}</div>` : '';
   const scopeArg = scopeSizes ? `,'${scopeSizes.join(',')}'` : '';
+  const isSouvenirCard = g.type === 'Souvenir';
+  const clickHandler = isSouvenirCard ? `openSouvenirRequestCheck('${esc(g.key)}')` : `openRequestCheck('${esc(g.key)}'${scopeArg})`;
   return `
-    <div class="card${inactive?' inactive-card':''}${checked?' session-checked':''}${pending?' card-pending':''}" data-group-key="${esc(g.key)}" ${pending?'':`onclick="openRequestCheck('${esc(g.key)}'${scopeArg})"`}>
+    <div class="card${inactive?' inactive-card':''}${checked?' session-checked':''}${pending?' card-pending':''}" data-group-key="${esc(g.key)}" ${pending?'':`onclick="${clickHandler}"`}>
       <div class="photo">${photo}</div>
       ${priceBadge}
       ${sizeBadge}
@@ -2657,6 +2669,46 @@ function openRequestCheck(key, scopeSizesCsv){
       <button class="btn-check-toggle${isGroupChecked(g,locationFilter)?' on':''}" onclick="toggleCheckedAndClose('${esc(key)}','${locationFilter}')"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 13 9.5 18.5 20 6"></polyline></svg></button>
       <button class="btn btn-confirm btn-wide3 btn-request-submit" onclick="commitRequestCheck()">${t('requestBtn')}</button>
     </div>
+    </div>
+  `, 'display');
+  scrollSheetToBottom();
+}
+// Souvenir's Request popup — same underlying Direct/Hoodie request logic
+// (requestDraft/stepRequestDraft/commitRequestCheck, unchanged) as every
+// other Direct-system item, just a different layout: Souvenir is always
+// exactly one row (no clothing sizes at all — HOODIE_SIZES never matches
+// its Size value, which is a subtype like "Magnet"), so instead of a size
+// grid this is one big number with +/- flanking it, same visual treatment
+// as Jewelry's Display popup.
+function openSouvenirRequestCheck(key){
+  if(locationFilter==='All'){
+    toast(t('selectLocationDisplay'), true);
+    return;
+  }
+  const groups = buildGroups(activeRows());
+  const g = groups.find(x=>x.key===key);
+  if(!g) return;
+  const row = Object.values(g.rows)[0];
+  if(!row) return;
+  requestDraftGroupKey = key;
+  requestDraftLocation = locationFilter;
+  requestDraft = { [row.ID]: { current: 0, size: row.Size } };
+  openSheetHtml(`
+    <div style="margin-bottom:4px; padding-right:50px;">
+      <h2 style="margin:0 0 1px 0;">${esc(g.name)}</h2>
+      <div class="desc" style="margin:0;">${esc(row.Size)} · ${esc(g.location)} · ${t('editingDisplay')} <b>${esc(LOC_NAME_BY_CODE[locationFilter])}</b></div>
+    </div>
+    <div class="detail-wrap">
+      <div class="detail-photo">${g.photo?`<img src="${esc(g.photo)}">`:''}</div>
+      <div class="jewelry-count-wrap">
+        <button type="button" class="jewelry-big-btn jewelry-big-minus" onclick="stepRequestDraft('${row.ID}',-1)">−</button>
+        <input type="number" class="jewelry-big-count-input zero-val" id="req-${row.ID}" value="0" readonly>
+        <button type="button" class="jewelry-big-btn jewelry-big-plus" onclick="stepRequestDraft('${row.ID}',1)">+</button>
+      </div>
+    </div>
+    <div class="sheet-actions" style="margin-top:16px;">
+      <button class="btn-check-toggle${isGroupChecked(g,locationFilter)?' on':''}" onclick="toggleCheckedAndClose('${esc(key)}','${locationFilter}')"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 13 9.5 18.5 20 6"></polyline></svg></button>
+      <button class="btn btn-confirm btn-wide3 btn-request-submit" onclick="commitRequestCheck()">${t('requestBtn')}</button>
     </div>
   `, 'display');
   scrollSheetToBottom();
