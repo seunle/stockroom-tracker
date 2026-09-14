@@ -584,9 +584,10 @@
      work with stepRequestDraft's existing .value-based DOM updates
      unchanged — same generic stepper every other Direct-system item uses. */
   .jewelry-big-count-input{
-    font-family:'Inter'; font-weight:800; font-size:clamp(60px, 22cqw, 108px); color:var(--ink); width:2em; min-width:2em;
-    text-align:center; -moz-appearance:textfield; box-sizing:border-box;
-    border:1.5px solid var(--line); border-radius:12px; background:var(--paper); padding:16px 4px;
+    font-family:'Inter'; font-weight:800; font-size:clamp(28px, 9cqw, 44px); color:var(--ink); width:2em; min-width:2em;
+    height:clamp(44px, 14cqw, 72px); box-sizing:border-box;
+    text-align:center; -moz-appearance:textfield;
+    border:1.5px solid var(--line); border-radius:12px; background:var(--paper); padding:0 4px;
   }
   .jewelry-big-count-input.zero-val{background:#C7C7C7; border-color:#B8B8B8; color:#7A7A7A;}
   .jewelry-big-count-input::-webkit-outer-spin-button, .jewelry-big-count-input::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
@@ -1290,6 +1291,19 @@ function applyLanguage(){
 // change out from under it. Cards for these IDs render disabled/dimmed
 // until refresh() clears them from this set.
 let pendingSubmitIds = new Set();
+// A fully-optimized request can now come back from Apps Script in well
+// under half a second — fast enough that the loading spinner (see
+// pendingSpinnerHtml) could get added and removed again before a frame
+// ever actually paints it, making it look like it "doesn't play" at all.
+// Wrapping an awaited request in this ensures at least a brief, genuinely
+// visible spin regardless of how fast the real response is.
+async function withMinSpinnerDelay(promise, ms=500){
+  const start = Date.now();
+  const result = await promise;
+  const remaining = ms - (Date.now() - start);
+  if(remaining > 0) await new Promise(r=>setTimeout(r, remaining));
+  return result;
+}
 // Direct-mode Request-tab items, Jewelry, and Souvenir don't use the
 // persistent, manually-toggled "Checked" grey highlight the regular
 // Display popup uses — instead, submitting an action there shows a
@@ -2609,7 +2623,7 @@ async function commitDisplayCheck(){
     render();
     toast(t('checkedToast'));
     if(affectedIds.length>0){
-      const res = await apiPost({action:'commitDisplayReview', location:locForDraft, updates:reviewUpdates});
+      const res = await withMinSpinnerDelay(apiPost({action:'commitDisplayReview', location:locForDraft, updates:reviewUpdates}));
       affectedIds.forEach(id=>pendingSubmitIds.delete(id));
       if(res.ok){
         markRecentlyActed(groupKeyForDraft); // spinner's done — now show the temporary grey, which fades on its own after about a minute
@@ -2814,7 +2828,7 @@ async function commitRequestCheck(){
   if(requests.length===0){
     render();
     toast(t('checkedToast'));
-    const res = await apiPost({action:'requestHoodieSizes', location:locForDraft, requests:[], checkedIds});
+    const res = await withMinSpinnerDelay(apiPost({action:'requestHoodieSizes', location:locForDraft, requests:[], checkedIds}));
     checkedIds.forEach(id=>pendingSubmitIds.delete(id));
     if(res.ok){
       markRecentlyActed(groupKeyForDraft);
@@ -2839,7 +2853,7 @@ async function commitRequestCheck(){
   });
   render();
   toast(t('requestSentToast'));
-  const res = await apiPost({action:'requestHoodieSizes', location:locForDraft, requests, checkedIds});
+  const res = await withMinSpinnerDelay(apiPost({action:'requestHoodieSizes', location:locForDraft, requests, checkedIds}));
   checkedIds.forEach(id=>pendingSubmitIds.delete(id));
   if(res.ok){
     markRecentlyActed(groupKeyForDraft);
