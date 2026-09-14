@@ -530,6 +530,7 @@
   .btn-save{background:var(--ok);color:#fff;}
   .sheet-actions{display:flex;gap:10px;margin-top:8px;}
   .btn{font-family:'Inter';font-weight:600;font-size:13px;border:none;border-radius:9px;padding:11px 14px;flex:1;}
+  .souvenir-request-btn{padding-top:16.5px; padding-bottom:16.5px;} /* 1.5x the base .btn's 11px vertical padding — Souvenir's Request button specifically, not Hoodie's */
   .btn-primary{background:var(--thread);color:#fff;}
   .btn-ghost{background:transparent;color:var(--thread);border:1.5px solid var(--thread);}
   .btn-danger{background:var(--restock);color:#fff;}
@@ -2788,7 +2789,7 @@ function openSouvenirRequestCheck(key){
       </div>
     </div>
     <div class="sheet-actions" style="margin-top:16px;">
-      <button class="btn btn-confirm btn-wide3 btn-request-submit" onclick="commitRequestCheck()">${t('requestBtn')}</button>
+      <button class="btn btn-confirm btn-wide3 btn-request-submit souvenir-request-btn" onclick="commitRequestCheck()">${t('requestBtn')}</button>
     </div>
   `, 'display');
   scrollSheetToBottom();
