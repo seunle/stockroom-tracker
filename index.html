@@ -567,7 +567,7 @@
      instead of the usual size grid (a Jewelry item is always exactly one
      row, never multi-size). Fills the same flex:1 area next to the photo
      that the size-grid-wrap normally occupies. */
-  .jewelry-count-wrap{flex:1; min-width:0; display:flex; align-items:center; justify-content:center; gap:2px;}
+  .jewelry-count-wrap{flex:1; min-width:0; display:flex; align-items:center; justify-content:center; gap:clamp(22px, 7cqw, 36px);} /* half the +/- buttons' own width (clamp(44px,14cqw,72px)/2), so they sit visibly further from the number box without any box changing size */
   .jewelry-big-btn{
     width:clamp(44px, 14cqw, 72px); height:clamp(44px, 14cqw, 72px); border-radius:14px;
     border:1.5px solid var(--line); background:var(--paper); font-weight:800;
