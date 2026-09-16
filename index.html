@@ -1205,6 +1205,7 @@ const TRANSLATIONS = {
     next:'Change',
     settingsTitle:'Settings', settingsDesc:'Adjust the overall web UI size for smaller or larger screens. This scales the entire interface, including the photo-card grid, independently of the per-tab grid controls.',
     apiUrlLabel:'Apps Script URL', uiScaleLabel:'UI Scale', hapticsLabel:'Haptic feedback (buzz on tap)',
+    showUrlBtn:'Show URL', enterPinPlaceholder:'Enter 4-digit code', unlockBtn:'Unlock', wrongPinError:'Incorrect code',
     hapticsOn:'On', hapticsOff:'Off',
     hapticsDescSupported:'Vibrates briefly on button/card taps. Android only — iPhones don\'t support this.',
     hapticsDescUnsupported:'This device/browser doesn\'t support vibration, so this setting won\'t do anything here.',
@@ -1259,6 +1260,7 @@ const TRANSLATIONS = {
     next:'변경',
     settingsTitle:'설정', settingsDesc:'화면 크기에 맞게 전체 UI 크기를 조정합니다. 탭별 그리드 크기와는 별도로 사진 그리드를 포함한 전체 화면 크기가 조정됩니다.',
     apiUrlLabel:'Apps Script URL', uiScaleLabel:'UI 크기', hapticsLabel:'진동 피드백 (탭 시 진동)',
+    showUrlBtn:'URL 보기', enterPinPlaceholder:'4자리 코드 입력', unlockBtn:'잠금 해제', wrongPinError:'코드가 올바르지 않습니다',
     hapticsOn:'켜짐', hapticsOff:'꺼짐',
     hapticsDescSupported:'버튼/카드를 탭하면 짧게 진동합니다. Android 전용 — iPhone은 지원하지 않습니다.',
     hapticsDescUnsupported:'이 기기/브라우저는 진동을 지원하지 않아 이 설정은 효과가 없습니다.',
@@ -5123,7 +5125,47 @@ function openGroup(key){
 }
 
 document.getElementById('btnSettings').addEventListener('click', openSettings);
+// The Apps Script URL is hidden behind a small PIN gate — not real
+// security (the code is sitting right here in the page's own source), just
+// a deterrent against someone casually opening Settings and grabbing/
+// changing it. Always starts locked again every time Settings is opened
+// fresh (see openSettings) — unlocking doesn't persist across sessions.
+let urlFieldUnlocked = false;
+const URL_FIELD_PIN = '9090';
+function promptUrlUnlock(){
+  const container = document.getElementById('urlFieldContainer');
+  if(!container) return;
+  container.innerHTML = `
+    <label>${t('apiUrlLabel')}</label>
+    <div style="display:flex; gap:8px; align-items:center;">
+      <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" id="urlPinInput" placeholder="${t('enterPinPlaceholder')}" style="flex:1;">
+      <button type="button" class="btn btn-primary" onclick="checkUrlPin()">${t('unlockBtn')}</button>
+    </div>
+    <div class="desc" id="urlPinError" style="display:none; color:var(--restock); margin-top:6px; margin-bottom:0;">${t('wrongPinError')}</div>
+  `;
+  const input = document.getElementById('urlPinInput');
+  if(input){
+    input.focus();
+    input.addEventListener('keydown', e=>{ if(e.key==='Enter') checkUrlPin(); });
+  }
+}
+function checkUrlPin(){
+  const input = document.getElementById('urlPinInput');
+  const val = input ? input.value.trim() : '';
+  if(val === URL_FIELD_PIN){
+    urlFieldUnlocked = true;
+    const container = document.getElementById('urlFieldContainer');
+    if(container){
+      container.innerHTML = `<label>${t('apiUrlLabel')}</label><input type="text" id="setUrl" value="${esc(state.apiUrl)}" placeholder="https://script.google.com/macros/s/.../exec">`;
+    }
+  }else{
+    const err = document.getElementById('urlPinError');
+    if(err) err.style.display = 'block';
+    if(input){ input.value=''; input.focus(); }
+  }
+}
 function openSettings(){
+  urlFieldUnlocked = false; // always starts locked again on a fresh open — see promptUrlUnlock/checkUrlPin
   const pct = Math.round((state.uiScale || 1) * 100);
   const lang = state.language || 'en';
   const body = `
@@ -5161,7 +5203,12 @@ function openSettings(){
       </div>
       <div class="desc" style="margin-top:6px;margin-bottom:0;">${t('defaultTabDesc')}</div>
     </div>
-    <div class="field"><label>${t('apiUrlLabel')}</label><input type="text" id="setUrl" value="${esc(state.apiUrl)}" placeholder="https://script.google.com/macros/s/.../exec"></div>
+    <div class="field" id="urlFieldContainer">
+      <label>${t('apiUrlLabel')}</label>
+      ${urlFieldUnlocked
+        ? `<input type="text" id="setUrl" value="${esc(state.apiUrl)}" placeholder="https://script.google.com/macros/s/.../exec">`
+        : `<button type="button" class="btn btn-ghost" onclick="promptUrlUnlock()">${t('showUrlBtn')}</button>`}
+    </div>
   `;
   const footer = `
     <div class="sheet-actions">
@@ -5203,7 +5250,11 @@ function adjustUiScale(delta){
   previewUiScale(v);
 }
 function submitSettings(){
-  state.apiUrl = document.getElementById('setUrl').value.trim();
+  // The URL field only exists in the DOM once it's been unlocked with the
+  // PIN (see promptUrlUnlock/checkUrlPin) — if it was never unlocked this
+  // session, leave state.apiUrl exactly as it was, rather than touching it.
+  const urlEl = document.getElementById('setUrl');
+  if(urlEl) state.apiUrl = urlEl.value.trim();
   const range = document.getElementById('uiScaleRange');
   if(range) state.uiScale = Math.max(0.3, Math.min(1.2, Number(range.value)||1));
   if(pendingHapticsEnabled!==null) state.hapticsEnabled = pendingHapticsEnabled;
