@@ -1104,7 +1104,7 @@ let locationFilter = (state.deviceLocation && state.deviceLocation !== 'All') ? 
 let categoryFilter = 'Men'; // sidebar's "All" tab is gone — app always opens on Men now
 let sidebarEditMode = false;
 let editFilter = 'all'; // 'all' | 'active' | 'inactive' — Edit tab only
-const FIXED_TYPES = ['Men','Women','Youth','Kids','Baby','TankTop','Long Sleeve','Hoodie','Crewneck','Y Hoodie Crewneck','K Hoodie Crewneck','Hat','Jewelry','Souvenir'];
+const FIXED_TYPES = ['Men','Women','Youth','Kids','Baby','TankTop','Long Sleeve','Hoodie','Crewneck','Y Hoodie Crewneck','K Hoodie Crewneck','Cap','Jewelry','Souvenir'];
 // New items only — the entered name gets this Type's prefix stuck on the
 // front automatically (space included, so it doesn't run into the rest of
 // the name), before it's ever sent to the sheet. E.g. "White Bear" under
@@ -1114,7 +1114,7 @@ const FIXED_TYPES = ['Men','Women','Youth','Kids','Baby','TankTop','Long Sleeve'
 const TYPE_NAME_PREFIX = {
   'Men':'M. ', 'Women':'W. ', 'Youth':'Y. ', 'Kids':'K. ', 'Baby':'B. ',
   'TankTop':'TT. ', 'Long Sleeve':'LS. ', 'Hoodie':'H. ', 'Crewneck':'CN. ',
-  'Y Hoodie Crewneck':'YHCN. ', 'K Hoodie Crewneck':'KHCN. ', 'Hat':'HAT. ',
+  'Y Hoodie Crewneck':'YHCN. ', 'K Hoodie Crewneck':'KHCN. ', 'Cap':'CAP. ',
   'Souvenir':'S. '
 };
 function prefixedItemName(name, type){
@@ -1134,7 +1134,6 @@ const HOODIE_TYPES = ['Hoodie', 'Crewneck', 'Y Hoodie Crewneck', 'K Hoodie Crewn
 let typeSystemOverrides = {};
 function isDirectSystem(type){
   if(type==='Souvenir') return true; // always Direct — no toggle exists for this type at all
-  if(type==='Hat') return true; // always Direct — no toggle exists for this type at all, same as Souvenir
   const override = typeSystemOverrides[type];
   if(override) return override==='direct';
   return HOODIE_TYPES.includes(type);
@@ -1155,7 +1154,7 @@ let pendingDefaultTab = null; // draft value while Settings sheet is open; null 
 /* ============================= LANGUAGE / TRANSLATIONS ============================= */
 // Only app CHROME text is translated here — buttons, labels, headings,
 // toasts, filter chips, tab titles. Actual sheet DATA is deliberately
-// NEVER translated: item Names, Types (Men/Women/Youth/Kids/.../Hat),
+// NEVER translated: item Names, Types (Men/Women/Youth/Kids/.../Cap),
 // Sizes (XS...XXXL), the sidebar's category "All", and location names
 // (Tangle/Parkway/Bears) always display exactly as entered/coded,
 // regardless of language.
@@ -1947,8 +1946,7 @@ function requestCardHtml(g){
   const priceBadge = priceVal>0 ? `<div class="request-price-badge">$${priceVal.toFixed(2)}</div>` : '';
   const scopeArg = scopeSizes ? `,'${scopeSizes.join(',')}'` : '';
   const isSouvenirCard = g.type === 'Souvenir';
-  const isHatCard = g.type === 'Hat';
-  const clickHandler = isSouvenirCard ? `openSouvenirRequestCheck('${esc(g.key)}')` : isHatCard ? `openHatRequestCheck('${esc(g.key)}')` : `openRequestCheck('${esc(g.key)}'${scopeArg})`;
+  const clickHandler = isSouvenirCard ? `openSouvenirRequestCheck('${esc(g.key)}')` : `openRequestCheck('${esc(g.key)}'${scopeArg})`;
   return `
     <div class="card${inactive?' inactive-card':''}${checked?' session-checked':''}${pending?' card-pending':''}" data-group-key="${esc(g.key)}" ${pending?'':`onclick="${clickHandler}"`}>
       <div class="photo">${photo}</div>
@@ -1996,14 +1994,9 @@ function renderRequestTab(main, list){
   // type — same grouping mechanism as every other tab). Which FILTER
   // shows (Price vs checkmark vs Subtype) is still based on the Type's
   // DEFAULT/identity though — e.g. a Men item currently toggled to Direct
-  // still filters by checked/unchecked here, not Price. Souvenir and Hat
-  // are always Direct (no toggle exists for either) and both always use
-  // their own dedicated Subtype filter instead of Price — the filter chip
-  // markup (souvenirFilterChipsHtml) and the underlying requestFilter/
-  // requestSubtypeFilter state are already fully generic (built from
-  // whatever Size values are actually present for the current category),
-  // so Hat reuses the exact same mechanism with its own subtype values
-  // (Adult/Y&Ks/Toque) rather than needing its own copy.
+  // still filters by checked/unchecked here, not Price. Souvenir is
+  // always Direct (no toggle exists for it at all) and always uses its
+  // own dedicated Subtype filter instead of Price.
   const catLocFiltered = list.filter(r=>matchesFilters({type:r.Type, location:r.Location}));
   const priceValues = Array.from(new Set(
     catLocFiltered.map(r=>Number(r.Price||0)).filter(p=>p>0)
@@ -2014,10 +2007,8 @@ function renderRequestTab(main, list){
 
   let groups = buildGroups(list).filter(g=>matchesFilters(g));
   const isSouvenir = categoryFilter === 'Souvenir';
-  const isHat = categoryFilter === 'Hat';
-  const usesSubtypeFilterUI = isSouvenir || isHat;
-  const priceFilterActive = !usesSubtypeFilterUI && usesPriceFilter(categoryFilter);
-  if(usesSubtypeFilterUI){
+  const priceFilterActive = !isSouvenir && usesPriceFilter(categoryFilter);
+  if(isSouvenir){
     if(requestFilter==='subtype' && requestSubtypeFilter){
       groups = groups.filter(g=>Object.values(g.rows).some(r=>r.Size===requestSubtypeFilter));
     }
@@ -2032,14 +2023,14 @@ function renderRequestTab(main, list){
 
   main.innerHTML = `
     <div class="toolbar-top">
-      ${usesSubtypeFilterUI ? souvenirFilterChipsHtml(subtypeValues) : (priceFilterActive ? requestFilterChipsHtml(priceValues) : checkedFilterChipsHtml())}
-      ${usesSubtypeFilterUI ? '' : systemToggleHtml()}
+      ${isSouvenir ? souvenirFilterChipsHtml(subtypeValues) : (priceFilterActive ? requestFilterChipsHtml(priceValues) : checkedFilterChipsHtml())}
+      ${isSouvenir ? '' : systemToggleHtml()}
       <div class="scale-ctrl"><button class="scale-btn" onclick="adjustScale(1)">−</button><button class="scale-btn" onclick="adjustScale(-1)">+</button></div>
     </div>
     <div class="grid-toolbar">
       <div class="grid-title loc-title-big">${tabTitle()} <span class="loc-title-count">${groups.length}</span></div>
     </div>
-    <div class="photo-grid${!usesSubtypeFilterUI && isSystemOverridden(categoryFilter) ? ' system-overridden-glow' : ''}" id="photoGrid" style="--cols:${state.gridColsByTab.request};"></div>
+    <div class="photo-grid${!isSouvenir && isSystemOverridden(categoryFilter) ? ' system-overridden-glow' : ''}" id="photoGrid" style="--cols:${state.gridColsByTab.request};"></div>
   `;
   const grid = document.getElementById('photoGrid');
 
@@ -2187,7 +2178,7 @@ function sidebarCategoryLabel(c){
   const parts = SIDEBAR_LABEL_BREAKS[c];
   return parts ? parts.map(esc).join('<br>') : esc(c);
 }
-// Bigger font for short labels (so "Men"/"Hat" actually fill the taller
+// Bigger font for short labels (so "Men"/"Cap" actually fill the taller
 // box instead of floating in empty space), smaller for long ones (so
 // "Crewneck" or a stacked "Y Hoodie"/"Crewneck" line still fits the
 // sidebar's ~118px content width). Based on the longest individual line
@@ -2773,42 +2764,6 @@ function openRequestCheck(key, scopeSizesCsv){
 // grid this is one big number with +/- flanking it, same visual treatment
 // as Jewelry's Display popup.
 function openSouvenirRequestCheck(key){
-  if(locationFilter==='All'){
-    toast(t('selectLocationDisplay'), true);
-    return;
-  }
-  const groups = buildGroups(activeRows());
-  const g = groups.find(x=>x.key===key);
-  if(!g) return;
-  const row = Object.values(g.rows)[0];
-  if(!row) return;
-  requestDraftGroupKey = key;
-  requestDraftLocation = locationFilter;
-  requestDraft = { [row.ID]: { current: 0, size: row.Size } };
-  openSheetHtml(`
-    <div style="margin-bottom:4px; padding-right:50px;">
-      <h2 style="margin:0 0 1px 0;">${esc(g.name)}</h2>
-      <div class="desc" style="margin:0;">${esc(row.Size)} · ${esc(g.location)} · ${t('requestingLabel')} <b>${esc(LOC_NAME_BY_CODE[locationFilter])}</b></div>
-    </div>
-    <div class="detail-wrap">
-      <div class="detail-photo">${g.photo?`<img src="${esc(g.photo)}">`:''}</div>
-      <div class="jewelry-count-wrap">
-        <button type="button" class="jewelry-big-btn jewelry-big-minus" onclick="stepRequestDraft('${row.ID}',-1)">−</button>
-        <input type="number" class="jewelry-big-count-input zero-val" id="req-${row.ID}" value="0" readonly>
-        <button type="button" class="jewelry-big-btn jewelry-big-plus" onclick="stepRequestDraft('${row.ID}',1)">+</button>
-      </div>
-    </div>
-    <div class="sheet-actions" style="margin-top:16px;">
-      <button class="btn btn-confirm btn-wide3 btn-request-submit souvenir-request-btn" onclick="commitRequestCheck()">${t('requestBtn')}</button>
-    </div>
-  `, 'display');
-  scrollSheetToBottom();
-}
-// Hat's Request popup — identical mechanism/layout to Souvenir's above
-// (same requestDraft/stepRequestDraft/commitRequestCheck, same one-big-
-// number-with-+/- visual), since Hat uses the exact same one-row-per-item
-// shape (no clothing sizes — its Size value is a subtype like "Adult").
-function openHatRequestCheck(key){
   if(locationFilter==='All'){
     toast(t('selectLocationDisplay'), true);
     return;
@@ -4077,42 +4032,11 @@ function selectSouvenirSubtype(formPrefix, subtype){
   const hidden = document.getElementById(formPrefix+'SouvenirSubtype');
   if(hidden) hidden.value = subtype;
 }
-// Hat: same one-row-per-item, single-toggle-subtype pattern as Souvenir —
-// just 3 options (Adult / Y&Ks / Toque) instead of Souvenir's 6, and its
-// own dedicated data attribute/hidden-input names so the two never collide
-// if a New/Edit form somehow rendered both (it never does — only one
-// sizes-section is ever mounted at a time — but keeping them namespaced
-// separately matches how Jewelry/Souvenir are kept independent of each other).
-const HAT_SUBTYPES = ['Adult', 'Y&Ks', 'Toque'];
-function hatSubtypeFieldHtml(formPrefix, selectedSubtype){
-  const subtype = HAT_SUBTYPES.includes(selectedSubtype) ? selectedSubtype : HAT_SUBTYPES[0];
-  return `
-    <label>${t('fieldSouvenirSubtype')}</label>
-    <div class="chiprow" style="flex-wrap:wrap;">
-      ${HAT_SUBTYPES.map(s=>`<div class="chip ${subtype===s?'on':''}" data-hat-subtype="${esc(s)}" onclick="selectHatSubtype('${formPrefix}','${esc(s)}')">${esc(s)}</div>`).join('')}
-    </div>
-    <input type="hidden" id="${formPrefix}HatSubtype" value="${esc(subtype)}">
-  `;
-}
-function selectHatSubtype(formPrefix, subtype){
-  const container = document.getElementById(formPrefix+'SizesSection');
-  if(!container) return;
-  container.querySelectorAll('[data-hat-subtype]').forEach(el=>{
-    el.classList.toggle('on', el.dataset.hatSubtype===subtype);
-  });
-  const hidden = document.getElementById(formPrefix+'HatSubtype');
-  if(hidden) hidden.value = subtype;
-}
 // Swaps the sizes section between the regular per-location Min Count UI,
-// the Hoodie Price+size-toggle UI, Jewelry's Earring/Necklace toggle,
-// Souvenir's 6-way subtype toggle, and Hat's 3-way subtype toggle — live,
-// as soon as the Type dropdown changes — reads whatever locations are
-// currently checked so the regular path still works correctly if the user
-// switches back. Hat is checked explicitly, BEFORE the generic
-// isDirectSystem(typeVal) branch below — Hat is also Direct-system (see
-// isDirectSystem), so without this explicit check first it would
-// incorrectly fall into the Hoodie Price+size UI instead of its own
-// subtype toggle, the same reason Jewelry/Souvenir are checked first too.
+// the Hoodie Price+size-toggle UI, Jewelry's Earring/Necklace toggle, and
+// Souvenir's 5-way subtype toggle — live, as soon as the Type dropdown
+// changes — reads whatever locations are currently checked so the regular
+// path still works correctly if the user switches back.
 function onItemTypeChange(formPrefix){
   const typeVal = document.getElementById(formPrefix+'Type').value;
   const container = document.getElementById(formPrefix+'SizesSection');
@@ -4121,8 +4045,6 @@ function onItemTypeChange(formPrefix){
     container.innerHTML = jewelryStyleFieldHtml(formPrefix, 'Earring');
   }else if(typeVal==='Souvenir'){
     container.innerHTML = souvenirSubtypeFieldHtml(formPrefix, SOUVENIR_SUBTYPES[0]);
-  }else if(typeVal==='Hat'){
-    container.innerHTML = hatSubtypeFieldHtml(formPrefix, HAT_SUBTYPES[0]);
   }else if(isDirectSystem(typeVal)){
     container.innerHTML = hoodieSizesFieldHtml(formPrefix+'Hoodie', 0, []);
   }else{
@@ -4270,12 +4192,6 @@ async function submitNewItem(){
   }else if(type==='Souvenir'){
     const subtypeEl = document.getElementById('newSouvenirSubtype');
     body.souvenirSubtype = subtypeEl ? subtypeEl.value : SOUVENIR_SUBTYPES[0];
-  }else if(type==='Hat'){
-    // Checked explicitly, before isDirectSystem(type) below — Hat is also
-    // Direct-system (see isDirectSystem), so it would otherwise fall into
-    // the Hoodie Price+size branch instead of sending its own subtype.
-    const subtypeEl = document.getElementById('newHatSubtype');
-    body.hatSubtype = subtypeEl ? subtypeEl.value : HAT_SUBTYPES[0];
   }else if(isDirectSystem(type)){
     const priceEl = document.getElementById('newHoodiePrice');
     const hoodiePrice = priceEl ? Number(priceEl.value||0) : 0;
@@ -4747,14 +4663,9 @@ function openEditGroup(key){
   editingGroupKey = key;
   const isActive = groupIsActive(g);
   const locCodesOn = LOCS.filter(l=>g.location.indexOf(l.code)!==-1).map(l=>l.code);
+  const isHoodieItem = isDirectSystem(g.type);
   const isJewelryItem = g.type === 'Jewelry';
   const isSouvenirItem = g.type === 'Souvenir';
-  const isHatItem = g.type === 'Hat';
-  // isHoodieItem covers every OTHER Direct-system type (the Hoodie-family
-  // defaults, or anything toggled to Direct) — Jewelry/Souvenir/Hat are
-  // excluded here since they each have their own dedicated one-row shape
-  // and must never fall into the Hoodie Price+size-grid extraction below.
-  const isHoodieItem = !isJewelryItem && !isSouvenirItem && !isHatItem && isDirectSystem(g.type);
   let hoodiePrice = 0, hoodieSelectedSizes = [];
   const valuesByCode = {};
   LOCS.forEach(l=>{
@@ -4774,13 +4685,10 @@ function openEditGroup(key){
   }
   const currentJewelryStyle = isJewelryItem ? (Object.values(g.rows)[0] ? Object.values(g.rows)[0].Size : 'Earring') : 'Earring';
   const currentSouvenirSubtype = isSouvenirItem ? (Object.values(g.rows)[0] ? Object.values(g.rows)[0].Size : SOUVENIR_SUBTYPES[0]) : SOUVENIR_SUBTYPES[0];
-  const currentHatSubtype = isHatItem ? (Object.values(g.rows)[0] ? Object.values(g.rows)[0].Size : HAT_SUBTYPES[0]) : HAT_SUBTYPES[0];
   const sizesSectionHtml = isJewelryItem
     ? jewelryStyleFieldHtml('edit', currentJewelryStyle)
     : isSouvenirItem
     ? souvenirSubtypeFieldHtml('edit', currentSouvenirSubtype)
-    : isHatItem
-    ? hatSubtypeFieldHtml('edit', currentHatSubtype)
     : isHoodieItem
     ? hoodieSizesFieldHtml('editHoodie', hoodiePrice, hoodieSelectedSizes)
     : `<label>${t('fieldSizesCheck')}</label>${locationTabbedSizeGridHtml('editSize', locCodesOn, valuesByCode, locationFilter, g.type)}`;
@@ -4845,11 +4753,6 @@ async function submitEditGroup(){
   }else if(type==='Souvenir'){
     const subtypeEl = document.getElementById('editSouvenirSubtype');
     body.souvenirSubtype = subtypeEl ? subtypeEl.value : SOUVENIR_SUBTYPES[0];
-  }else if(type==='Hat'){
-    // Checked explicitly, before isDirectSystem(type) below — same reason
-    // as submitNewItem's Hat branch.
-    const subtypeEl = document.getElementById('editHatSubtype');
-    body.hatSubtype = subtypeEl ? subtypeEl.value : HAT_SUBTYPES[0];
   }else if(isDirectSystem(type)){
     const priceEl = document.getElementById('editHoodiePrice');
     const hoodiePrice = priceEl ? Number(priceEl.value||0) : 0;
