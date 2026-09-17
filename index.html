@@ -246,7 +246,7 @@
     background:var(--paper-raised); border:1.5px solid var(--line); border-radius:12px;
     overflow:hidden; position:relative; aspect-ratio:1/1.12;
     display:flex; flex-direction:column;
-    transition:opacity 2.5s ease, filter 2.5s ease; /* lets the ephemeral "recently acted" grey (see markRecentlyActed) fade out smoothly instead of just vanishing */
+    transition:opacity 2.5s ease, filter 2.5s ease; /* lets the persistent "session checked" grey (see setChecked/isGroupChecked) fade out smoothly instead of just vanishing */
   }
   .card .photo{
     flex:1; background:var(--line); display:flex;align-items:center;justify-content:center;
@@ -322,6 +322,23 @@
     content:'✓ Checked'; position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
     background:rgba(37,36,31,0.35); color:#fff; font-family:'Oswald'; font-weight:700; font-size:12px;
     letter-spacing:0.5px; text-transform:uppercase;
+  }
+  /* Local-only "just requested" flag (see markRequested) — deliberately
+     distinct from session-checked above: no grayscale (photo stays in
+     full color), a green tint instead of the dark overlay, and "Requested"
+     instead of "✓ Checked". This never reflects or sets the sheet's real
+     Checked column — it's a per-device, in-memory confirmation that fades
+     on its own after a minute. The slight opacity dip on the card itself
+     (not the ::after) is what lets the shared .card transition rule above
+     fade this out smoothly when the class is removed, the same way
+     session-checked does — the ::after content itself still disappears the
+     instant the class is gone, but that's masked by the card's own fade
+     happening at the same time, exactly as it already is for session-checked. */
+  .card.requested-tint{opacity:0.92;}
+  .card.requested-tint::after{
+    content:'Requested'; position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    background:rgba(46,160,67,0.32); color:#fff; font-family:'Oswald'; font-weight:700; font-size:12px;
+    letter-spacing:0.5px; text-transform:uppercase; text-shadow:0 1px 2px rgba(0,0,0,0.35);
   }
   .status-dot.ok{background:var(--ok);} .status-dot.low{background:var(--low);} .status-dot.restock{background:var(--restock);}
   .card .loc-tag{
@@ -1312,32 +1329,33 @@ async function withMinSpinnerDelay(promise, ms=500){
 // Direct-mode Request-tab items, Jewelry, and Souvenir don't use the
 // persistent, manually-toggled "Checked" grey highlight the regular
 // Display popup uses — instead, submitting an action there shows a
-// loading spinner (via pendingSubmitIds, same as Storage/Resupply) until
-// it finishes, then a temporary grey highlight for about a minute as
-// visual confirmation it went through, fading out on its own rather than
-// staying until someone manually unchecks it or presses Refresh Session.
-// The underlying Checked sheet column is still written for these (so the
-// checkmark FILTER chip that still exists for some Request-tab types
-// keeps working) — this only changes what drives the CARD's own visual.
-let recentlyActedKeys = new Map(); // groupKey -> expiry timestamp (Date.now() + RECENTLY_ACTED_MS)
-const RECENTLY_ACTED_MS = 60000;
-function markRecentlyActed(key){
-  const expiresAt = Date.now() + RECENTLY_ACTED_MS;
-  recentlyActedKeys.set(key, expiresAt);
+// Direct-mode Request popups (Hoodie/Souvenir/Hat) and Jewelry's Item
+// Count popup never touch the sheet's real Checked column at all — pressing
+// Request/Update shows a loading spinner (via pendingSubmitIds, same as
+// Storage/Resupply) until it finishes, then a purely local "requested" flag
+// for about a minute as visual confirmation it went through, fading out on
+// its own. This flag lives only in this device's memory — it is never sent
+// to or read from the backend, and is unrelated to the real Checked column
+// (which regular Display/On Hold/Warehouse still use as before).
+let requestedKeys = new Map(); // groupKey -> expiry timestamp (Date.now() + REQUESTED_MS)
+const REQUESTED_MS = 60000;
+function markRequested(key){
+  const expiresAt = Date.now() + REQUESTED_MS;
+  requestedKeys.set(key, expiresAt);
   setTimeout(()=>{
-    if(recentlyActedKeys.get(key) !== expiresAt) return; // a newer action on this same item already scheduled its own, later timer
-    recentlyActedKeys.delete(key);
+    if(requestedKeys.get(key) !== expiresAt) return; // a newer action on this same item already scheduled its own, later timer
+    requestedKeys.delete(key);
     // Targeted DOM update instead of a full render() — toggling the class
     // on the EXISTING element is what lets the CSS opacity/filter
     // transition actually animate a smooth fade, rather than the card
     // just disappearing and reappearing plain via a full rebuild.
     document.querySelectorAll('[data-group-key]').forEach(el=>{
-      if(el.dataset.groupKey===key) el.classList.remove('session-checked');
+      if(el.dataset.groupKey===key) el.classList.remove('requested-tint');
     });
-  }, RECENTLY_ACTED_MS);
+  }, REQUESTED_MS);
 }
-function isRecentlyActed(key){
-  const exp = recentlyActedKeys.get(key);
+function isRequested(key){
+  const exp = requestedKeys.get(key);
   return exp !== undefined && Date.now() < exp;
 }
 let checkedFilter = 'all'; // 'all' | 'checked' | 'unchecked' — Display tab only
@@ -1929,11 +1947,9 @@ function souvenirFilterChipsHtml(subtypeValues){
 }
 function requestCardHtml(g){
   const inactive = !groupIsActive(g);
-  // Direct-mode cards use the ephemeral "just submitted" grey (see
-  // markRecentlyActed) instead of the persistent, manually-toggled Checked
-  // grey the regular Display popup uses — it fades on its own after about
-  // a minute rather than staying until manually unchecked.
-  const checked = isRecentlyActed(g.key);
+  // Direct-mode cards show the local-only "just requested" tint (see
+  // markRequested) — this never reflects the sheet's real Checked column.
+  const requested = isRequested(g.key);
   // __scopeSizes marks a price-filter-only pseudo-card (see
   // buildPriceScopedGroups) — same item, but only showing the size(s) that
   // actually match the selected price (e.g. just XXL or XXXL, when their
@@ -1952,7 +1968,7 @@ function requestCardHtml(g){
   const isHatCard = g.type === 'Hat';
   const clickHandler = isSouvenirCard ? `openSouvenirRequestCheck('${esc(g.key)}')` : isHatCard ? `openHatRequestCheck('${esc(g.key)}')` : `openRequestCheck('${esc(g.key)}'${scopeArg})`;
   return `
-    <div class="card${inactive?' inactive-card':''}${checked?' session-checked':''}${pending?' card-pending':''}" data-group-key="${esc(g.key)}" ${pending?'':`onclick="${clickHandler}"`}>
+    <div class="card${inactive?' inactive-card':''}${requested?' requested-tint':''}${pending?' card-pending':''}" data-group-key="${esc(g.key)}" ${pending?'':`onclick="${clickHandler}"`}>
       <div class="photo">${photo}</div>
       ${priceBadge}
       ${sizeBadge}
@@ -2136,11 +2152,13 @@ function emptyState(compact){
 function cardHtml(g){
   const status = groupStatus(g);
   const inactive = !groupIsActive(g);
-  // Jewelry uses the ephemeral "just submitted" grey (see
-  // markRecentlyActed) instead of the persistent, manually-toggled Checked
-  // grey every other Display-tab item uses — it fades on its own after
-  // about a minute rather than staying until manually unchecked.
-  const checked = currentTab==='display' && (g.type==='Jewelry' ? isRecentlyActed(g.key) : (locationFilter!=='All' && isGroupChecked(g, locationFilter)));
+  // Jewelry shows the local-only "just requested" tint (see markRequested)
+  // instead of the persistent, sheet-backed Checked grey every other
+  // Display-tab item uses — these are two genuinely different states now,
+  // not just two different looks for the same one.
+  const isJewelryCardType = g.type==='Jewelry';
+  const requested = currentTab==='display' && isJewelryCardType && isRequested(g.key);
+  const checked = currentTab==='display' && !isJewelryCardType && locationFilter!=='All' && isGroupChecked(g, locationFilter);
   const locBadge = locationFilter==='All' ? `<div class="loc-tag">${esc(g.location)}</div>` : '';
   const photo = g.photo ? `<img src="${esc(g.photo)}" loading="lazy">` : '👕';
   const pending = Object.values(g.rows).some(r=>pendingSubmitIds.has(String(r.ID)));
@@ -2149,7 +2167,7 @@ function cardHtml(g){
   // synchronized — closer to the organic look of iOS's home screen wobble.
   const jiggleStyle = inReorderMode ? ` style="animation-delay:-${(Math.random()*0.26).toFixed(2)}s;"` : '';
   return `
-    <div class="card${inactive?' inactive-card':''}${checked?' session-checked':''}${pending?' card-pending':''}" data-group-key="${esc(g.key)}"${jiggleStyle} ${(pending||inReorderMode)?'':`onclick="openGroup('${esc(g.key)}')"`}>
+    <div class="card${inactive?' inactive-card':''}${checked?' session-checked':''}${requested?' requested-tint':''}${pending?' card-pending':''}" data-group-key="${esc(g.key)}"${jiggleStyle} ${(pending||inReorderMode)?'':`onclick="openGroup('${esc(g.key)}')"`}>
       <div class="photo">${photo}</div>
       <div class="status-dot ${status}"></div>
       ${locBadge}
@@ -2590,14 +2608,14 @@ async function commitDisplayCheck(){
     if(decrease > 0) resupplyIncrements[id] = decrease;
   });
 
-  // Build ONE combined update per reviewed size, covering everything —
-  // Display value, Storage eligibility, On Hold redirect, Resupply
-  // redirect — and send it as a SINGLE request. This used to be up to one
-  // network round trip PER size PER concern (a 7-size item could mean
-  // 8-10+ sequential calls before the UI settled); now it's exactly one,
-  // regardless of how many sizes were reviewed.
+  const affectedIds = Object.keys(draft);
+  // Jewelry never touches the sheet's real Checked column at all — see
+  // markRequested. Every other Display-tab Type keeps setting checked:1
+  // exactly as before.
+  const isJewelryGroup = affectedIds.length>0 && (rows.find(r=>sameId(r.ID, affectedIds[0]))||{}).Type === 'Jewelry';
   const reviewUpdates = Object.keys(draft).map(id=>{
-    const u = { id, checked: 1 };
+    const u = { id };
+    if(!isJewelryGroup) u.checked = 1;
     if(changedIds.includes(id)) u.displayValue = draft[id].current;
     if(onHoldUpdates[id] !== undefined){
       u.onHold = onHoldUpdates[id];
@@ -2611,12 +2629,6 @@ async function commitDisplayCheck(){
     return u;
   });
 
-  const affectedIds = Object.keys(draft);
-  // Jewelry uses the new loading-then-fade behavior (see
-  // markRecentlyActed/pendingSubmitIds) instead of showing the grey
-  // Checked look immediately — everything else on Display keeps the
-  // existing immediate behavior below unchanged.
-  const isJewelryGroup = affectedIds.length>0 && (rows.find(r=>sameId(r.ID, affectedIds[0]))||{}).Type === 'Jewelry';
   if(affectedIds.length>0){
     pushUndoSnapshot(affectedIds); // one batch undo covering Display, On Hold, Resupply, Storage, and Checked changes from this check
     // Optimistic local updates, matching what the server is about to do.
@@ -2627,7 +2639,7 @@ async function commitDisplayCheck(){
       if(u.storageActive!==undefined) row[storageField] = u.storageActive;
       if(u.onHold!==undefined) row[onHoldField] = u.onHold;
       if(u.resupplyIncrement) row[resupplyField] = Math.min(6, Number(row[resupplyField]||0) + u.resupplyIncrement); // backend caps Resupply at 6
-      row[CHECKED_FIELD_BY_CODE[locForDraft]] = 1;
+      if(!isJewelryGroup) row[CHECKED_FIELD_BY_CODE[locForDraft]] = 1;
     });
   }
 
@@ -2639,7 +2651,7 @@ async function commitDisplayCheck(){
       const res = await withMinSpinnerDelay(apiPost({action:'commitDisplayReview', location:locForDraft, updates:reviewUpdates}));
       affectedIds.forEach(id=>pendingSubmitIds.delete(id));
       if(res.ok){
-        markRecentlyActed(groupKeyForDraft); // spinner's done — now show the temporary grey, which fades on its own after about a minute
+        markRequested(groupKeyForDraft); // spinner's done — now show the local-only "requested" tint, which fades on its own after about a minute
       }else{
         toast(t('saveFailed') + (res.error||t('unknownError')), true);
         refresh(false);
@@ -2859,28 +2871,22 @@ async function commitRequestCheck(){
   if(!draft) return;
   const resupplyField = RESUPPLY_FIELD_BY_CODE[locForDraft];
   const onHoldField = ON_HOLD_FIELD_BY_CODE[locForDraft];
-  const checkedField = CHECKED_FIELD_BY_CODE[locForDraft];
   const requests = Object.keys(draft).filter(id=>draft[id].current>0).map(id=>({id, qty:draft[id].current}));
-  const checkedIds = Object.keys(draft); // every size in the popup, not just the ones actually requested
+  const affectedIds = Object.keys(draft); // every size in the popup, not just the ones actually requested — used only for the spinner/local "requested" tint below
 
-  // Pressing Request always marks the item checked, even if every size was
-  // left at 0 — same "visual feedback that it was a success" idea as Done.
-  // Still written to the sheet (the checkmark FILTER some Request-tab
-  // types still show relies on it) even though the CARD's own grey now
-  // comes from markRecentlyActed below instead of this value.
-  checkedIds.forEach(id=>{
-    const row = rows.find(r=>sameId(r.ID,id));
-    if(row) row[checkedField] = 1; // optimistic — matches what the server is about to do
-  });
-  checkedIds.forEach(id=>pendingSubmitIds.add(id)); // shows the loading spinner on this card until the request finishes
+  // Pressing Request no longer touches the sheet's real Checked column at
+  // all for these Direct-mode types — the card's visual confirmation comes
+  // entirely from the local-only markRequested flag once the request
+  // succeeds, further down.
+  affectedIds.forEach(id=>pendingSubmitIds.add(id)); // shows the loading spinner on this card until the request finishes
 
   if(requests.length===0){
     render();
     toast(t('checkedToast'));
-    const res = await withMinSpinnerDelay(apiPost({action:'requestHoodieSizes', location:locForDraft, requests:[], checkedIds}));
-    checkedIds.forEach(id=>pendingSubmitIds.delete(id));
+    const res = await withMinSpinnerDelay(apiPost({action:'requestHoodieSizes', location:locForDraft, requests:[]}));
+    affectedIds.forEach(id=>pendingSubmitIds.delete(id));
     if(res.ok){
-      markRecentlyActed(groupKeyForDraft);
+      markRequested(groupKeyForDraft);
     }else{
       toast(t('saveFailed') + (res.error||t('unknownError')), true);
       refresh(false);
@@ -2902,10 +2908,10 @@ async function commitRequestCheck(){
   });
   render();
   toast(t('requestSentToast'));
-  const res = await withMinSpinnerDelay(apiPost({action:'requestHoodieSizes', location:locForDraft, requests, checkedIds}));
-  checkedIds.forEach(id=>pendingSubmitIds.delete(id));
+  const res = await withMinSpinnerDelay(apiPost({action:'requestHoodieSizes', location:locForDraft, requests}));
+  affectedIds.forEach(id=>pendingSubmitIds.delete(id));
   if(res.ok){
-    markRecentlyActed(groupKeyForDraft);
+    markRequested(groupKeyForDraft);
   }else{
     toast(t('saveFailed') + (res.error||t('unknownError')), true);
     refresh(false);
@@ -3072,14 +3078,32 @@ function toggleWarehouseMode(){
   render();
 }
 
+// Resupply/On Hold "Done" actions keep an item visibly pending (dimmed,
+// non-interactive) for a few extra seconds AFTER the write has actually
+// finished and would otherwise have made it vanish from this tab — a
+// deliberate safety margin in case of any lingering network/render delay,
+// so there is never a window where the item looks normal and clickable
+// again before it's truly gone. Purely a display override: it does not
+// change when the underlying data itself updates, only when this tab
+// stops showing the item and stops blocking taps on it.
+let resupplyGraceIds = new Map(); // id -> expiry timestamp
+const RESUPPLY_GRACE_MS = 5000;
+function holdInResupplyGrace(id){
+  resupplyGraceIds.set(String(id), Date.now() + RESUPPLY_GRACE_MS);
+}
+function isInResupplyGrace(id){
+  const exp = resupplyGraceIds.get(String(id));
+  return exp !== undefined && Date.now() < exp;
+}
 function resupplyItemsForCode(code){
   const field = RESUPPLY_FIELD_BY_CODE[code];
   const catFiltered = activeRows().filter(r=>categoryFilter==='All' || r.Type===categoryFilter);
-  return catFiltered.filter(r=>Number(r[field]||0)>0 && r.Location.indexOf(code)!==-1);
+  return catFiltered.filter(r=>(Number(r[field]||0)>0 || isInResupplyGrace(r.ID)) && r.Location.indexOf(code)!==-1);
 }
 function onHoldItems(){
-  // Show items that have On Hold units at any location.
-  return activeRows().filter(r=>(categoryFilter==='All' || r.Type===categoryFilter) && ['T','P','B'].some(c=>Number(r[ON_HOLD_FIELD_BY_CODE[c]]||0)>0));
+  // Show items that have On Hold units at any location, or are still
+  // within their post-Done grace window (see resupplyGraceIds above).
+  return activeRows().filter(r=>(categoryFilter==='All' || r.Type===categoryFilter) && (['T','P','B'].some(c=>Number(r[ON_HOLD_FIELD_BY_CODE[c]]||0)>0) || isInResupplyGrace(r.ID)));
 }
 // All four codes (T/P/B/On Hold) now behave identically, so callers that
 // need "how many items does this one have" (Rotate's ordering, the
@@ -3754,10 +3778,17 @@ async function submitOnHoldResolve(){
     }
     toast(t('updated'));
   }finally{
-    // Guaranteed to run even if something above throws.
-    pendingSubmitIds.delete(String(id));
-    render(); // clears this card's spinner/dim right away — since every field above is already set to match what the backend just did, this is also the exact moment it correctly leaves the On Hold list, no gap
+    // Guaranteed to run even if something above throws. Same post-Done
+    // grace window as the regular Resupply popup — see holdInResupplyGrace/
+    // RESUPPLY_GRACE_MS above.
+    holdInResupplyGrace(id);
+    render();
     refresh(false); // background reconciliation with the server — not awaited, so it never holds up the next tap
+    setTimeout(()=>{
+      pendingSubmitIds.delete(String(id));
+      resupplyGraceIds.delete(String(id));
+      render(); // only now does it actually leave the list and become interactive again
+    }, RESUPPLY_GRACE_MS);
   }
 }
 // open, so the stepper can live-update the On Hold preview and Done can
@@ -3880,10 +3911,18 @@ async function submitResupplyEdit(){
     });
     toast(res.ok ? t('saved') : t('saveFailed') + (res.error||t('unknownError')), !res.ok);
   }finally{
-    // Guaranteed to run even if something above throws.
-    pendingSubmitIds.delete(String(id));
-    render(); // clears this card's spinner/dim right away — since every field above is already set to match what the backend just did, this is also the exact moment it correctly leaves the Resupply list, no gap
+    // Guaranteed to run even if something above throws. The item stays
+    // pending/dimmed and visible in this tab for a few extra seconds past
+    // this point — see holdInResupplyGrace/RESUPPLY_GRACE_MS above — rather
+    // than clearing pendingSubmitIds and disappearing right away.
+    holdInResupplyGrace(id);
+    render();
     refresh(false); // background reconciliation with the server — not awaited, so it never holds up the next tap
+    setTimeout(()=>{
+      pendingSubmitIds.delete(String(id));
+      resupplyGraceIds.delete(String(id));
+      render(); // only now does it actually leave the list and become interactive again
+    }, RESUPPLY_GRACE_MS);
   }
 }
 
