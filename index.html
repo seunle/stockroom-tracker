@@ -1560,7 +1560,7 @@ function findDuplicateItemGroup(name, type, excludeKey){
   const normName = name.trim().toLowerCase();
   return allGroups().find(g =>
     g.key !== excludeKey &&
-    g.name.trim().toLowerCase() === normName &&
+    String(g.name).trim().toLowerCase() === normName &&
     g.type === type
   ) || null;
 }
