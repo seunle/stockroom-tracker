@@ -1522,7 +1522,7 @@ function toast(msg, isError){
   setTimeout(()=>t.classList.remove('show'), isError?4200:1700);
 }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-function sameId(a,b){ return String(a)===String(b); } // IDs from onclick attrs arrive as strings; sheet IDs are numbers
+function sameId(a,b){ return String(a)===String(b); } // IDs are opaque strings now (base number + letter suffix, e.g. "25a") — always compared as text, never as numbers
 
 /* ============================= GROUPING ============================= */
 // One "item" on screen = all rows sharing Name + Type + Location.
