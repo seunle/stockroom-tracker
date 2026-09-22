@@ -2225,9 +2225,15 @@ function sidebarFontSize(c){
 // Resupply-tab sidebar alert: does this Type have at least one active item
 // needing resupply at some real location right now? On Hold deliberately
 // doesn't count — matches resupplyItemsForCode's own definition of "needs
-// resupply", just checked across T/P/B instead of one specific code.
+// resupply". Checks the SAME Location-membership condition
+// resupplyItemsForCode itself checks (r.Location.indexOf(c)!==-1) — a
+// stray nonzero value sitting in a location's Resupply column that isn't
+// actually one of this item's own active locations (see the Location-edit
+// note on saveItem) must NOT light up this alert, since no card for it
+// will ever actually appear in that location's Resupply list to explain
+// why the sidebar is red.
 function typeHasResupplyItems(type){
-  return activeRows().some(r => r.Type===type && ['T','P','B'].some(c => Number(r[RESUPPLY_FIELD_BY_CODE[c]]||0) > 0));
+  return activeRows().some(r => r.Type===type && ['T','P','B'].some(c => Number(r[RESUPPLY_FIELD_BY_CODE[c]]||0) > 0 && r.Location.indexOf(c)!==-1));
 }
 // Storage-tab sidebar alert: does this Type have at least one active item
 // that's a genuine Storage-tab trigger for the currently-selected location
